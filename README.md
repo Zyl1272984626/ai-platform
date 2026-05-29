@@ -1,6 +1,6 @@
 # AI Engineering Platform
 
-基于 Claude Code 的 AI 辅助工程平台，为风速科技主系统提供智能化开发、测试、部署能力。
+基于 Claude Code 的 AI 辅助工程平台，为主系统提供智能化开发、测试、部署能力。
 
 ## 项目简介
 
