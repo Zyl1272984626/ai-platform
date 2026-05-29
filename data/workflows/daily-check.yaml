@@ -1,0 +1,30 @@
+name: 日常巡检
+description: 检查所有学校服务健康状态，生成日报
+
+trigger:
+  command: /daily-check
+  params: []
+
+steps:
+  - id: load-schools
+    skill: daily-check
+    action: load-schools
+    input: {}
+
+  - id: check-health
+    skill: daily-check
+    action: check-all
+    input:
+      schools: "${load-schools.output}"
+
+  - id: generate-report
+    skill: daily-check
+    action: report
+    input:
+      results: "${check-health.output}"
+
+  - id: notify
+    skill: notifier
+    action: notify-daily-report
+    input:
+      report: "${generate-report.output}"

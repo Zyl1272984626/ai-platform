@@ -1,0 +1,59 @@
+name: 新功能全流程开发
+description: 从需求理解到代码实现的完整开发流程
+
+trigger:
+  command: /new-feature
+  params:
+    - name: description
+      required: true
+      description: 需求描述（自然语言）
+
+steps:
+  - id: analyze-requirement
+    skill: code-analyzer
+    action: impact
+    input:
+      description: "${trigger.description}"
+    output:
+      modules: "${result.modules}"
+      questions: "${result.questions}"
+    gate:
+      requireConfirmation: true
+
+  - id: design
+    skill: new-feature
+    action: design
+    input:
+      description: "${trigger.description}"
+      modules: "${analyze-requirement.output.modules}"
+
+  - id: implement
+    skill: new-feature
+    action: implement
+    input:
+      description: "${trigger.description}"
+      design: "${design.output}"
+    gate:
+      maxFiles: 10
+
+  - id: verify
+    skill: code-analyzer
+    action: compile-check
+    input:
+      target: "all"
+    retry:
+      maxAttempts: 2
+      onFailure: rollback
+
+  - id: self-review
+    skill: code-analyzer
+    action: scan
+    input:
+      files: "${implement.output.changedFiles}"
+
+  - id: commit
+    skill: git-helper
+    action: create-feature-branch
+    input:
+      description: "${trigger.description}"
+      files: "${implement.output.changedFiles}"

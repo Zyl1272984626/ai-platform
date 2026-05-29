@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3100:3100"
+    environment:
+      - PORT=3100
+      - PROJECT_ROOT=/app/agent
+    env_file:
+      - .env
+    volumes:
+      # 挂载主系统源码（只读）
+      - ../agent:/app/agent:ro
+      # 挂载数据目录（读写）
+      - ./data:/app/data
+      # 挂载 Skills
+      - ./skills:/app/skills:ro
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3200:80"
+    depends_on:
+      - server
+    restart: unless-stopped

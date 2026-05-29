@@ -1,0 +1,11 @@
+schools:
+  - code: guizhou_shuili
+    name: 贵州水利
+    type: dameng
+    port: 9996
+    database: AGENT_PORTAL
+    deploy:
+      host: 172.18.102.107
+      user: root
+    status: deployed
+    lastDeploy: '2026-05-25'

@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(tsc:*)",
+      "Bash(tsx:*)",
+      "Bash(vite:*)",
+      "Bash(git:*)",
+      "Bash(mvn:*)",
+      "Bash(curl:*)",
+      "Bash(curl.exe:*)",
+      "Bash(powershell:*)",
+      "Bash(docker:*)",
+      "Bash(ssh:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(copy:*)",
+      "Bash(echo:*)",
+      "mcp__mcp_server_mysql__mysql_query",
+      "mcp__web_reader__webReader",
+      "mcp__4_5v_mcp__analyze_image"
+    ]
+  }
+}

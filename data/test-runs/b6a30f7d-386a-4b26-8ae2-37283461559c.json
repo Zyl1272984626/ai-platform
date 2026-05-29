@@ -1,0 +1,50 @@
+{
+  "id": "b6a30f7d-386a-4b26-8ae2-37283461559c",
+  "name": "API接口测试",
+  "type": "api",
+  "status": "error",
+  "cases": [
+    {
+      "id": "3f661b7c-069a-4700-b97b-23bbc406fc45",
+      "name": "Health API",
+      "type": "api",
+      "status": "error",
+      "duration": 10008,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "5d04a411-0d21-47aa-8ff0-039ed698eb68",
+      "name": "Skills 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10019,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "94d71975-c1fb-4706-b886-7a526dca2b07",
+      "name": "Schools 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10020,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "99fbf220-9c08-480e-9114-75f619c11e9c",
+      "name": "Workflows 列表",
+      "type": "api",
+      "status": "error",
+      "error": "服务器重启，测试中断"
+    },
+    {
+      "id": "4ddcd65c-9344-42ea-b528-5c97750c73f6",
+      "name": "Sessions 列表",
+      "type": "api",
+      "status": "error",
+      "error": "服务器重启，测试中断"
+    }
+  ],
+  "startedAt": "2026-05-28T10:51:58.683Z",
+  "config": {},
+  "finishedAt": "2026-05-28T11:00:01.405Z",
+  "duration": 0
+}

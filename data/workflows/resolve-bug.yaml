@@ -1,0 +1,73 @@
+name: Bug 修复全流程
+description: 一句话触发从 Bug 拉取到修复验证的完整流程
+
+trigger:
+  command: /resolve-bug
+  params:
+    - name: bugId
+      required: true
+      description: 禅道 Bug ID
+
+steps:
+  - id: fetch
+    skill: zentao-client
+    action: fetch-bug
+    input:
+      bugId: "${trigger.bugId}"
+    output:
+      bugTitle: "${result.title}"
+      bugDesc: "${result.description}"
+      bugFiles: "${result.affectedFiles}"
+
+  - id: analyze
+    skill: code-analyzer
+    action: locate
+    input:
+      description: "${fetch.output.bugDesc}"
+      hintFiles: "${fetch.output.bugFiles}"
+    output:
+      rootCause: "${result.analysis}"
+      fixPlan: "${result.fixPlan}"
+      affectedFiles: "${result.files}"
+
+  - id: fix
+    skill: resolve-bug
+    action: implement-fix
+    input:
+      rootCause: "${analyze.output.rootCause}"
+      fixPlan: "${analyze.output.fixPlan}"
+    gate:
+      maxFiles: 3
+      requireConfirmation: false
+    retry:
+      maxAttempts: 2
+      onFailure: rollback
+
+  - id: verify
+    skill: code-analyzer
+    action: compile-check
+    input:
+      files: "${fix.output.changedFiles}"
+
+  - id: commit
+    skill: git-helper
+    action: create-fix-branch
+    input:
+      bugId: "${trigger.bugId}"
+      bugTitle: "${fetch.output.bugTitle}"
+      files: "${fix.output.changedFiles}"
+
+  - id: sync
+    skill: zentao-client
+    action: resolve-bug
+    input:
+      bugId: "${trigger.bugId}"
+      commitUrl: "${commit.output.prUrl}"
+
+  - id: notify
+    skill: notifier
+    action: notify-bug-fixed
+    input:
+      bugId: "${trigger.bugId}"
+      bugTitle: "${fetch.output.bugTitle}"
+      prUrl: "${commit.output.prUrl}"

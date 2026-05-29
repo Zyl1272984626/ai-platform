@@ -1,0 +1,50 @@
+name: 数据库迁移全流程
+description: 扫描不兼容 SQL → 自动修复 → 编译验证 → 提交
+
+trigger:
+  command: /migrate-db
+  params:
+    - name: targetType
+      required: true
+      description: 目标数据库类型（dameng）
+
+steps:
+  - id: scan
+    skill: db-compat
+    action: scan
+    input:
+      targetType: "${trigger.targetType}"
+    output:
+      totalIssues: "${result.totalIssues}"
+      files: "${result.files}"
+
+  - id: fix
+    skill: migrate-db
+    action: auto-fix
+    input:
+      targetType: "${trigger.targetType}"
+      issues: "${scan.output.files}"
+
+  - id: verify
+    skill: code-analyzer
+    action: compile-check
+    input:
+      target: "backend"
+    retry:
+      maxAttempts: 2
+      onFailure: abort
+
+  - id: report
+    skill: migrate-db
+    action: generate-report
+    input:
+      targetType: "${trigger.targetType}"
+      issues: "${scan.output.files}"
+      fixedFiles: "${fix.output.changedFiles}"
+
+  - id: commit
+    skill: git-helper
+    action: create-fix-branch
+    input:
+      branchName: "migrate/${trigger.targetType}"
+      message: "fix: ${trigger.targetType} 数据库兼容性适配"

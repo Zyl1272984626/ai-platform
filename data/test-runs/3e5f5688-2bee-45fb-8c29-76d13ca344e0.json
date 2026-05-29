@@ -1,0 +1,52 @@
+{
+  "id": "3e5f5688-2bee-45fb-8c29-76d13ca344e0",
+  "name": "API接口测试",
+  "type": "api",
+  "status": "passed",
+  "cases": [
+    {
+      "id": "60c985eb-b613-4439-af78-6ac344e11dcb",
+      "name": "Health API",
+      "type": "api",
+      "status": "passed",
+      "duration": 5,
+      "output": "GET /api/health -> HTTP 200"
+    },
+    {
+      "id": "180ab804-3b8a-4abd-a1a4-eb131b07087d",
+      "name": "Skills 列表",
+      "type": "api",
+      "status": "passed",
+      "duration": 8,
+      "output": "GET /api/skills -> HTTP 200"
+    },
+    {
+      "id": "e5b27be9-cb86-4039-a07d-3664d8beddc7",
+      "name": "Schools 列表",
+      "type": "api",
+      "status": "passed",
+      "duration": 5,
+      "output": "GET /api/schools -> HTTP 200"
+    },
+    {
+      "id": "341b0079-5abc-42d3-aa62-a957de1f0708",
+      "name": "Workflows 列表",
+      "type": "api",
+      "status": "passed",
+      "duration": 8,
+      "output": "GET /api/workflows -> HTTP 200"
+    },
+    {
+      "id": "da25d1b3-de0b-4054-bebc-069987366fd8",
+      "name": "Sessions 列表",
+      "type": "api",
+      "status": "passed",
+      "duration": 2,
+      "output": "GET /api/sessions -> HTTP 200"
+    }
+  ],
+  "startedAt": "2026-05-28T10:58:07.971Z",
+  "config": {},
+  "finishedAt": "2026-05-28T10:58:08.065Z",
+  "duration": 94
+}

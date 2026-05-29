@@ -1,0 +1,101 @@
+{
+  "admin-sys-code": {
+    "pageName": "代码管理",
+    "url": "/admin/index.html#/sys/code",
+    "description": "系统代码/字典管理页面，支持代码的增删改查，用于维护系统中使用的各类枚举值和字典数据",
+    "expectedElements": ["搜索框", "新增按钮", "数据表格", "操作按钮(编辑/删除)", "分页组件"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/sys/code/page", "description": "分页查询代码列表" },
+      { "method": "POST", "path": "/api/sys/code/save", "description": "新增或编辑代码" },
+      { "method": "POST", "path": "/api/sys/code/delete", "description": "删除代码" }
+    ],
+    "interactions": [
+      { "action": "点击新增按钮", "expected": "弹窗打开，表单字段为空" },
+      { "action": "点击编辑按钮(某行)", "expected": "弹窗打开，表单数据回填" },
+      { "action": "点击删除按钮(某行)", "expected": "出现确认弹窗" },
+      { "action": "在搜索框输入关键词", "expected": "列表按关键词过滤" },
+      { "action": "点击分页按钮", "expected": "列表显示下一页数据" }
+    ],
+    "commonIssues": ["编辑数据不回填", "删除后列表不刷新", "搜索结果不正确"]
+  },
+  "admin-sys-config": {
+    "pageName": "配置管理",
+    "url": "/admin/index.html#/sys/config",
+    "description": "系统参数配置页面，管理系统运行时的各类配置项（键值对形式）",
+    "expectedElements": ["搜索框", "新增按钮", "数据表格(配置键/值/说明)", "操作按钮", "分页"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/sys/config/page", "description": "分页查询配置列表" },
+      { "method": "POST", "path": "/api/sys/config/save", "description": "新增或编辑配置" },
+      { "method": "POST", "path": "/api/sys/config/delete", "description": "删除配置" }
+    ],
+    "interactions": [
+      { "action": "点击新增按钮", "expected": "弹窗打开" },
+      { "action": "在搜索框输入关键词", "expected": "列表过滤" },
+      { "action": "点击编辑按钮", "expected": "弹窗打开+数据回填" }
+    ],
+    "commonIssues": ["配置值格式校验不完善", "重复配置键未限制"]
+  },
+  "admin-sys-database": {
+    "pageName": "数据源管理",
+    "url": "/admin/index.html#/sys/database",
+    "description": "数据库连接管理页面，支持配置MySQL、达梦等多种数据库连接，可测试连接是否可用",
+    "expectedElements": ["搜索框", "新增按钮", "数据表格(数据源名称/类型/地址)", "测试连接按钮", "操作按钮", "分页"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/sys/database/page", "description": "分页查询数据源列表" },
+      { "method": "POST", "path": "/api/sys/database/save", "description": "新增或编辑数据源" },
+      { "method": "POST", "path": "/api/sys/database/test", "description": "测试数据库连接" }
+    ],
+    "interactions": [
+      { "action": "点击新增按钮", "expected": "弹窗打开，包含数据库类型选择、地址端口等字段" },
+      { "action": "点击测试连接按钮", "expected": "显示连接成功或失败的提示" },
+      { "action": "在搜索框输入关键词", "expected": "列表过滤" }
+    ],
+    "commonIssues": ["测试连接响应慢", "达梦数据库连接配置格式错误"]
+  },
+  "admin-sys-storage": {
+    "pageName": "仓库管理",
+    "url": "/admin/index.html#/sys/storage",
+    "description": "文件仓库列表页面，管理系统中用于存储文件的仓库配置",
+    "expectedElements": ["搜索框", "新增按钮", "数据表格(仓库名/类型/路径)", "操作按钮", "分页"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/sys/storage/page", "description": "分页查询仓库列表" },
+      { "method": "POST", "path": "/api/sys/storage/save", "description": "新增或编辑仓库" }
+    ],
+    "interactions": [
+      { "action": "点击新增按钮", "expected": "弹窗打开" },
+      { "action": "在搜索框输入关键词", "expected": "列表过滤" }
+    ],
+    "commonIssues": ["仓库路径配置错误", "文件上传后列表不刷新"]
+  },
+  "admin-sys-storage-file": {
+    "pageName": "文件管理",
+    "url": "/admin/index.html#/sys/storage/file",
+    "description": "仓库内文件浏览页面，可以查看和上传文件到指定仓库",
+    "expectedElements": ["文件列表", "上传按钮", "面包屑导航(目录层级)", "文件预览"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/sys/storage/file/list", "description": "查询文件列表" },
+      { "method": "POST", "path": "/api/sys/storage/file/upload", "description": "上传文件" }
+    ],
+    "interactions": [
+      { "action": "点击上传按钮", "expected": "文件选择对话框出现" },
+      { "action": "点击文件夹", "expected": "进入文件夹显示子文件" },
+      { "action": "点击面包屑导航", "expected": "返回上级目录" }
+    ],
+    "commonIssues": ["大文件上传超时", "中文文件名乱码"]
+  },
+  "admin-sys-mention": {
+    "pageName": "注入配置",
+    "url": "/admin/index.html#/sys/mention",
+    "description": "Prompt注入/提及配置页面，管理AI对话中的系统提示词注入规则",
+    "expectedElements": ["搜索框", "数据表格(注入名称/触发词/内容)", "操作按钮", "分页"],
+    "apiEndpoints": [
+      { "method": "GET", "path": "/api/ai/mention/query/list", "description": "查询注入配置列表" },
+      { "method": "POST", "path": "/api/ai/mention/save", "description": "保存注入配置" }
+    ],
+    "interactions": [
+      { "action": "在搜索框输入关键词", "expected": "列表过滤" },
+      { "action": "点击新增按钮", "expected": "弹窗打开(如果功能可用)" }
+    ],
+    "commonIssues": ["API接口ai/mention/query/list可能不存在(HTTP 400)", "admin下接口路径与setting-app不同"]
+  }
+}

@@ -1,0 +1,76 @@
+name: 学校部署全流程
+description: 从注册学校到生成配置、编译验证、Git 提交的全流程
+
+trigger:
+  command: /deploy-school
+  params:
+    - name: name
+      required: true
+      description: 学校名称
+    - name: code
+      required: true
+      description: 学校编码
+    - name: type
+      required: true
+      description: 数据库类型 mysql/dameng
+    - name: port
+      required: true
+      description: 服务端口
+    - name: dbHost
+      required: true
+      description: 数据库地址
+    - name: deployHost
+      required: false
+      description: 部署服务器地址
+
+steps:
+  - id: register
+    skill: deploy-school
+    action: register
+    input:
+      name: "${trigger.name}"
+      code: "${trigger.code}"
+      type: "${trigger.type}"
+      port: "${trigger.port}"
+    output:
+      schoolCode: "${result.code}"
+
+  - id: compat-check
+    skill: db-compat
+    action: scan
+    input:
+      targetType: "${trigger.type}"
+    gate:
+      requireConfirmation: false
+
+  - id: generate-config
+    skill: deploy-school
+    action: generate-yml
+    input:
+      schoolCode: "${register.output.schoolCode}"
+      type: "${trigger.type}"
+      port: "${trigger.port}"
+      dbHost: "${trigger.dbHost}"
+
+  - id: verify
+    skill: code-analyzer
+    action: compile-check
+    input:
+      target: "backend"
+    retry:
+      maxAttempts: 2
+      onFailure: abort
+
+  - id: commit
+    skill: git-helper
+    action: create-fix-branch
+    input:
+      branchName: "deploy/${trigger.code}"
+      message: "config: ${trigger.name} 部署配置"
+
+  - id: notify
+    skill: notifier
+    action: notify-deploy-done
+    input:
+      schoolName: "${trigger.name}"
+      status: "success"

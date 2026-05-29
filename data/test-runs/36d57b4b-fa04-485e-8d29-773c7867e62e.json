@@ -1,0 +1,52 @@
+{
+  "id": "36d57b4b-fa04-485e-8d29-773c7867e62e",
+  "name": "API接口测试",
+  "type": "api",
+  "status": "failed",
+  "cases": [
+    {
+      "id": "c86041a4-7a79-4006-84b7-750c06a9bbf5",
+      "name": "Health API",
+      "type": "api",
+      "status": "error",
+      "duration": 10102,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "5093b1f3-ef97-4eb1-95b8-f043e4f47840",
+      "name": "Skills 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10013,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "77863882-0701-4b2f-a34b-056b26f6bd79",
+      "name": "Schools 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10014,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "04efed0d-1817-4a03-81c7-989dffad0458",
+      "name": "Workflows 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10010,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    },
+    {
+      "id": "40d6a6da-ab7b-40ba-ba2d-56525b64ea17",
+      "name": "Sessions 列表",
+      "type": "api",
+      "status": "error",
+      "duration": 10006,
+      "error": "spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT"
+    }
+  ],
+  "startedAt": "2026-05-28T10:49:25.230Z",
+  "config": {},
+  "finishedAt": "2026-05-28T10:50:15.425Z",
+  "duration": 50195
+}

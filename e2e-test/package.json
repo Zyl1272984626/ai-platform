@@ -1,0 +1,16 @@
+{
+  "name": "e2e-page-test",
+  "version": "3.0.0",
+  "description": "AI Agent 驱动的E2E页面测试 - AI像真人一样操作浏览器发现问题和漏洞",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test:quick": "node src/index.js --mode quick",
+    "test:standard": "node src/index.js --mode standard",
+    "test:deep": "node src/index.js --mode deep"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "playwright": "^1.52.0"
+  }
+}

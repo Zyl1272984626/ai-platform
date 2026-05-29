@@ -1,0 +1,55 @@
+{
+  "storage": {
+    "basePath": "F:\\e2e-test-data",
+    "screenshots": {
+      "format": "png",
+      "fullPage": true
+    },
+    "cleanup": {
+      "keepLatestRuns": 20,
+      "autoCleanup": true
+    }
+  },
+  "target": {
+    "baseUrl": "http://localhost:5173",
+    "apiBaseUrl": "http://localhost:9998",
+    "loginPage": "/index/index.html#/login",
+    "apps": [
+      { "appId": "base_app", "name": "基础应用" },
+      { "appId": "AI_COUNSELOR", "name": "AI辅导员" }
+    ]
+  },
+  "auth": {
+    "username": "fskjadmin",
+    "password": "fskj_dst_2023",
+    "autoLogin": true
+  },
+  "browser": {
+    "type": "chromium",
+    "headless": false,
+    "viewport": { "width": 1920, "height": 1080 },
+    "timeout": 30000
+  },
+  "ai": {
+    "provider": "claude",
+    "model": "claude-sonnet-4-20250514",
+    "apiKeyEnv": "ANTHROPIC_API_KEY",
+    "maxTokens": 4096,
+    "maxTurns": {
+      "quick": 1,
+      "standard": 5,
+      "deep": 12
+    },
+    "observeOnly": false
+  },
+  "knowledge": {
+    "enabled": true,
+    "path": "knowledge",
+    "pageContextFile": "page-context.json"
+  },
+  "defaults": {
+    "mode": "standard",
+    "saveBaseline": false,
+    "compareBaseline": true
+  }
+}
