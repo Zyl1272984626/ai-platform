@@ -10,6 +10,7 @@ const SchoolView = () => import('./views/SchoolView.vue')
 const WorkflowView = () => import('./views/WorkflowView.vue')
 const SkillView = () => import('./views/SkillView.vue')
 const TestView = () => import('./views/TestView.vue')
+const SettingsView = () => import('./views/SettingsView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,6 +21,7 @@ const router = createRouter({
     { path: '/workflows', component: WorkflowView },
     { path: '/skills', component: SkillView },
     { path: '/tests', component: TestView },
+    { path: '/settings', component: SettingsView },
   ],
 })
 

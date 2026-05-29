@@ -8,9 +8,10 @@ import { schoolRouter } from './routes/school.js';
 import { workflowRouter } from './routes/workflow.js';
 import { skillRouter } from './routes/skill.js';
 import { testRouter } from './routes/test.js';
+import { settingsRouter } from './routes/settings.js';
 import { startWorkflow } from './services/workflow-engine.js';
 import { initScheduler } from './services/scheduler.js';
-import { PROJECT_ROOT } from './services/config.js';
+import { getConfig } from './services/config.js';
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -27,15 +28,17 @@ app.use('/api/schools', schoolRouter);
 app.use('/api/workflows', workflowRouter);
 app.use('/api/skills', skillRouter);
 app.use('/api/tests', testRouter);
+app.use('/api/settings', settingsRouter);
 
 // 健康检查
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', projectRoot: PROJECT_ROOT, version: '0.1.0' });
+  res.json({ status: 'ok', projectRoot: getConfig().projectRoot, version: '0.1.0' });
 });
 
 app.listen(PORT, () => {
+  const config = getConfig();
   console.log(`[AI Platform] Server running on http://localhost:${PORT}`);
-  console.log(`[AI Platform] Project root: ${PROJECT_ROOT}`);
+  console.log(`[AI Platform] Project root: ${config.projectRoot}`);
 
   // 初始化定时任务调度器
   initScheduler((workflowName, params, emitter) => {

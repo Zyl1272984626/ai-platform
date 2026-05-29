@@ -11,7 +11,7 @@ import { v4 as uuid } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import net from 'net';
-import { AI_PLATFORM_ROOT } from './config.js';
+import { AI_PLATFORM_ROOT, getConfig } from './config.js';
 import { testBus } from './test-events.js';
 
 // ========== 类型 ==========
@@ -91,9 +91,10 @@ function checkPort(port: number, host = 'localhost'): Promise<boolean> {
 
 async function preflightCheck(type: TestType): Promise<string | null> {
   if (type !== 'e2e') return null;
+  const cfg = getConfig();
   const checks = [
-    { port: 5173, name: '主系统前端 (localhost:5173)' },
-    { port: 9998, name: '主系统后端 (localhost:9998)' },
+    { port: cfg.mainFrontendPort, name: `主系统前端 (localhost:${cfg.mainFrontendPort})` },
+    { port: cfg.mainBackendPort, name: `主系统后端 (localhost:${cfg.mainBackendPort})` },
   ];
   for (const c of checks) {
     const ok = await checkPort(c.port);
@@ -210,7 +211,7 @@ async function runAgentTest(
     const response = query({
       prompt,
       options: {
-        cwd: process.env.PROJECT_ROOT || 'C:/FengSuKeJi/agent',
+        cwd: getConfig().projectRoot,
         allowedTools: [
           'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'Bash',
           'WebSearch', 'WebFetch', 'NotebookEdit',
@@ -322,7 +323,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   console.log('[E2E] SDK 加载成功');
 
   // 加载 e2e-page-test Skill
-  const skillPath = path.resolve('C:/FengSuKeJi/agent', '.claude', 'skills', 'e2e-page-test', 'SKILL.md');
+  const skillPath = path.resolve(getConfig().projectRoot, '.claude', 'skills', 'e2e-page-test', 'SKILL.md');
   let skillContent = '';
   try {
     skillContent = fs.readFileSync(skillPath, 'utf-8');
@@ -363,7 +364,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
     const response = query({
       prompt,
       options: {
-        cwd: process.env.PROJECT_ROOT || 'C:/FengSuKeJi/agent',
+        cwd: getConfig().projectRoot,
         allowedTools: [
           'Read', 'Write', 'Bash', 'Glob', 'Grep',
           'mcp__playwright__browser_navigate',
@@ -455,7 +456,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 
     // 尝试读取 e2e-test 生成的报告路径
     try {
-      const e2eRunsDir = 'F:\\e2e-test-data\\runs';
+      const e2eRunsDir = path.join(getConfig().e2eDataDir, 'runs');
       if (fs.existsSync(e2eRunsDir)) {
         const runDirs = fs.readdirSync(e2eRunsDir)
           .filter(d => { try { return fs.statSync(path.join(e2eRunsDir, d)).isDirectory(); } catch { return false; } })
@@ -542,7 +543,7 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
 // ========== API 接口测试 ==========
 
 async function runApiTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
-  const baseUrl = (config.baseUrl as string) || 'http://localhost:3100';
+  const baseUrl = (config.baseUrl as string) || getConfig().apiTestBaseUrl;
 
   const apiTests = [
     { name: 'Health API', method: 'GET', url: '/api/health', expect: 200 },
