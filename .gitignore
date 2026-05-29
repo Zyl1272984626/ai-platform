@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# Test screenshots (local only)
+test-screenshot-*.png
+test-final-*.png
+test-fix-*.png
+
+# Test run data (local only)
+data/test-runs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
