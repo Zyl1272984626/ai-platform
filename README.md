@@ -15,6 +15,8 @@
 
 ## 快速开始
 
+> 首次使用？请阅读 **[新同事上手指南](doc/ONBOARDING.md)**，包含完整的从零搭建步骤。
+
 ```bash
 # 1. 安装依赖
 cd server && npm install
@@ -30,6 +32,8 @@ cd server && npm run dev
 # 4. 启动 Web UI（端口 3200）
 cd web && npm run dev
 ```
+
+启动后打开浏览器访问 http://localhost:3200/settings 完成路径和端口配置。
 
 访问 http://localhost:3200
 
