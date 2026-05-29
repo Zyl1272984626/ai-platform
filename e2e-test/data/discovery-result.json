@@ -1,0 +1,1071 @@
+{
+  "target": "https://www.topspeeder.net.cn/agent_audio",
+  "discoveredAt": "2026-05-29T10:07:34.924Z",
+  "sourceAnalysis": {
+    "entries": [
+      "setting-system",
+      "chat",
+      "setting-app",
+      "index"
+    ],
+    "routes": {
+      "index": [
+        {
+          "path": "/"
+        },
+        {
+          "path": "/login"
+        },
+        {
+          "path": "/user"
+        },
+        {
+          "path": "chat"
+        },
+        {
+          "path": "agents"
+        },
+        {
+          "path": "data-tables"
+        },
+        {
+          "path": "components"
+        },
+        {
+          "path": "/chat"
+        },
+        {
+          "path": "/test"
+        },
+        {
+          "path": "/test/:name"
+        },
+        {
+          "path": "/mobile"
+        }
+      ],
+      "setting-app": [
+        {
+          "path": "/"
+        },
+        {
+          "path": "/login"
+        },
+        {
+          "path": "/meeting/audio-read"
+        },
+        {
+          "path": "/comp-preview"
+        },
+        {
+          "path": "/app-list"
+        },
+        {
+          "path": "/app/:appId"
+        },
+        {
+          "path": "agent"
+        },
+        {
+          "path": "agent/user"
+        },
+        {
+          "path": "agent/edit-conversation"
+        },
+        {
+          "path": "agent/edit-llm"
+        },
+        {
+          "path": "workflow"
+        },
+        {
+          "path": "workflow/design"
+        },
+        {
+          "path": "plugin"
+        },
+        {
+          "path": "skill"
+        },
+        {
+          "path": "skill/detail"
+        },
+        {
+          "path": "analytics"
+        },
+        {
+          "path": "analytics-detail"
+        },
+        {
+          "path": "dataTable/detail/:id"
+        },
+        {
+          "path": "knowledgeBase"
+        },
+        {
+          "path": "knowledgeBase/detail/:id"
+        },
+        {
+          "path": "comp"
+        },
+        {
+          "path": "comp/design"
+        },
+        {
+          "path": "setting"
+        },
+        {
+          "path": "permission/user"
+        },
+        {
+          "path": "permission/role"
+        },
+        {
+          "path": "permission/resource"
+        },
+        {
+          "path": "permission/ug"
+        },
+        {
+          "path": "permission/qwapp"
+        },
+        {
+          "path": "sys/page"
+        },
+        {
+          "path": "sys/nav"
+        },
+        {
+          "path": "sys/table"
+        },
+        {
+          "path": "sys/table/column-metadata"
+        },
+        {
+          "path": "sys/table/data/:id"
+        },
+        {
+          "path": "sys/data-object"
+        },
+        {
+          "path": "sys/data-object/tables"
+        },
+        {
+          "path": "sys/knowledge"
+        },
+        {
+          "path": "sys/plugin"
+        },
+        {
+          "path": "sys/mention"
+        },
+        {
+          "path": "sys/api-config"
+        }
+      ],
+      "setting-system": [
+        {
+          "path": "/"
+        },
+        {
+          "path": "/app"
+        },
+        {
+          "path": "/code"
+        },
+        {
+          "path": "/model"
+        },
+        {
+          "path": "/config"
+        },
+        {
+          "path": "/datasource"
+        },
+        {
+          "path": "/storage"
+        },
+        {
+          "path": "/storage/file"
+        },
+        {
+          "path": "/knowledge/source"
+        },
+        {
+          "path": "/datause"
+        },
+        {
+          "path": "/third-party-system"
+        },
+        {
+          "path": "/openclaw"
+        },
+        {
+          "path": "/wxbot"
+        },
+        {
+          "path": "/monitor"
+        },
+        {
+          "path": "/memory"
+        },
+        {
+          "path": "/memory/detail"
+        },
+        {
+          "path": "/msg"
+        },
+        {
+          "path": "/msg/template"
+        },
+        {
+          "path": "/task/list"
+        },
+        {
+          "path": "/task/execute"
+        },
+        {
+          "path": "/task/data-sync-config"
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "web": {
+      "title": "智能应用开发与管理平台",
+      "url": "https://www.topspeeder.net.cn/agent_audio/web/index.html",
+      "routeCount": 20,
+      "paramValues": {
+        ":businessSystemId": "assistant"
+      },
+      "routes": [
+        {
+          "path": "/index/wss/test",
+          "name": "wss/test",
+          "title": "test",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/index/wss/test",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/agent-list/list",
+          "name": "agent-list-list",
+          "title": "智能体列表页面",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/agent-list/list",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/chat/before",
+          "name": "chat-before",
+          "title": "智能体会话前置页面",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/chat/before",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/chat/analytics",
+          "name": "chat-analytics",
+          "title": "统计分析页面",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/chat/analytics",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/test/markdown",
+          "name": "TestMarkdown",
+          "title": "Markdown Vue3 测试",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/test/markdown",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/meeting/audio-read",
+          "name": "meetingAudioRead",
+          "title": "音频解析",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/meeting/audio-read",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/",
+          "name": "agentAdmin",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/agent-list",
+          "name": "agentList",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/agent-list",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/login",
+          "name": "login",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/login",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/chat",
+          "name": "chat",
+          "title": "智能体会话页面",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/chat",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/preview",
+          "name": "preview",
+          "title": "配置预览页面",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/preview",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/index",
+          "name": "index",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/web/index.html#/index",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/agent/edit-conversation",
+          "name": "agent-edit-conversation",
+          "title": "编辑智能体-对话流模式",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/agent/edit-conversation",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/agent/edit-llm",
+          "name": "agent-edit-llm",
+          "title": "编辑智能体-工作流模式",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/agent/edit-llm",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/workflow/design",
+          "name": "workflow-design",
+          "title": "流程设计",
+          "layout": "full",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/workflow/design",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/agent",
+          "name": "agent",
+          "title": "智能体列表",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/agent",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/userAgent",
+          "name": "userAgent",
+          "title": "智能体列表",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/userAgent",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/plugin",
+          "name": "plugin",
+          "title": "插件管理",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/plugin",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/workflow",
+          "name": "workflow",
+          "title": "前端测试页面",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/workflow",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        },
+        {
+          "path": "/:businessSystemId/analytics",
+          "name": "analytics",
+          "title": "会话监控分析",
+          "layout": "",
+          "hasParams": true,
+          "concreteUrl": "/web/index.html#/assistant/analytics",
+          "paramValues": {
+            ":businessSystemId": "assistant"
+          }
+        }
+      ]
+    },
+    "admin": {
+      "title": "智能应用开发与管理平台-管理端",
+      "url": "https://www.topspeeder.net.cn/agent_audio/admin/index.html",
+      "routeCount": 27,
+      "paramValues": {},
+      "routes": [
+        {
+          "path": "/permission/",
+          "name": "permission",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/permission/",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/",
+          "name": "sys",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/",
+          "paramValues": {}
+        },
+        {
+          "path": "/base/plugin/",
+          "name": "base-plugin",
+          "title": "流程插件管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/base/plugin/",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/storage/file",
+          "name": "sys-storage-file",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/storage/file",
+          "paramValues": {}
+        },
+        {
+          "path": "/permission/user",
+          "name": "permission-user",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/permission/user",
+          "paramValues": {}
+        },
+        {
+          "path": "/permission/role",
+          "name": "permission-role",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/permission/role",
+          "paramValues": {}
+        },
+        {
+          "path": "/permission/resource",
+          "name": "base-resource",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/permission/resource",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/code",
+          "name": "sys-code",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/code",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/config",
+          "name": "sys-config",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/config",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/database",
+          "name": "sys-database",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/database",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/storage",
+          "name": "sys-storage",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/storage",
+          "paramValues": {}
+        },
+        {
+          "path": "/sys/mention",
+          "name": "sys-mention",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/sys/mention",
+          "paramValues": {}
+        },
+        {
+          "path": "/base/model-source",
+          "name": "base-model-source",
+          "title": "模型来源管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/base/model-source",
+          "paramValues": {}
+        },
+        {
+          "path": "/base/model",
+          "name": "base-model",
+          "title": "模型管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/base/model",
+          "paramValues": {}
+        },
+        {
+          "path": "/base/business-system",
+          "name": "base-business-system",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/base/business-system",
+          "paramValues": {}
+        },
+        {
+          "path": "/task/list",
+          "name": "task-list",
+          "title": "任务管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/task/list",
+          "paramValues": {}
+        },
+        {
+          "path": "/task/execute",
+          "name": "task-execute",
+          "title": "任务执行日志",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/task/execute",
+          "paramValues": {}
+        },
+        {
+          "path": "/task/data-sync-config",
+          "name": "task-data-sync-config",
+          "title": "数据同步任务设置",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/task/data-sync-config",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/hardcode",
+          "name": "pageFactory-hardcode",
+          "title": "硬编码配置",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/hardcode",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/globalview",
+          "name": "pageFactory-globalview",
+          "title": "全局视图",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/globalview",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/common-query",
+          "name": "pageFactory-common-query",
+          "title": "通用查询管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/common-query",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/page",
+          "name": "pageFactory-page",
+          "title": "页面配置管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/page",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/pageContent",
+          "name": "pageFactory-pageContent",
+          "title": "页面HTML代码检索管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/pageContent",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/template",
+          "name": "pageFactory-template",
+          "title": "页面模板配置管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/template",
+          "paramValues": {}
+        },
+        {
+          "path": "/pageFactory/dept",
+          "name": "pageFactory-dept",
+          "title": "页面部门管理",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/pageFactory/dept",
+          "paramValues": {}
+        },
+        {
+          "path": "/code",
+          "name": "sys1-code",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/code",
+          "paramValues": {}
+        },
+        {
+          "path": "/",
+          "name": "App",
+          "title": "",
+          "layout": "",
+          "hasParams": false,
+          "concreteUrl": "/admin/index.html#/",
+          "paramValues": {}
+        }
+      ]
+    }
+  },
+  "pageSets": {
+    "web": [
+      {
+        "id": "web-index",
+        "name": "index (web)",
+        "pages": [
+          {
+            "id": "web-wss/test-0",
+            "name": "test",
+            "url": "/web/index.html#/index/wss/test",
+            "path": "/index/wss/test"
+          },
+          {
+            "id": "web-index-1",
+            "name": "index",
+            "url": "/web/index.html#/index",
+            "path": "/index"
+          }
+        ]
+      },
+      {
+        "id": "web-agent-list",
+        "name": "agent-list (web)",
+        "pages": [
+          {
+            "id": "web-agent-list-list-0",
+            "name": "智能体列表页面",
+            "url": "/web/index.html#/agent-list/list",
+            "path": "/agent-list/list"
+          },
+          {
+            "id": "web-agentList-1",
+            "name": "agentList",
+            "url": "/web/index.html#/agent-list",
+            "path": "/agent-list"
+          }
+        ]
+      },
+      {
+        "id": "web-chat",
+        "name": "chat (web)",
+        "pages": [
+          {
+            "id": "web-chat-before-0",
+            "name": "智能体会话前置页面",
+            "url": "/web/index.html#/chat/before",
+            "path": "/chat/before"
+          },
+          {
+            "id": "web-chat-analytics-1",
+            "name": "统计分析页面",
+            "url": "/web/index.html#/chat/analytics",
+            "path": "/chat/analytics"
+          },
+          {
+            "id": "web-chat-2",
+            "name": "智能体会话页面",
+            "url": "/web/index.html#/chat",
+            "path": "/chat"
+          }
+        ]
+      },
+      {
+        "id": "web-test",
+        "name": "test (web)",
+        "pages": [
+          {
+            "id": "web-TestMarkdown-0",
+            "name": "Markdown Vue3 测试",
+            "url": "/web/index.html#/test/markdown",
+            "path": "/test/markdown"
+          }
+        ]
+      },
+      {
+        "id": "web-meeting",
+        "name": "meeting (web)",
+        "pages": [
+          {
+            "id": "web-meetingAudioRead-0",
+            "name": "音频解析",
+            "url": "/web/index.html#/meeting/audio-read",
+            "path": "/meeting/audio-read"
+          }
+        ]
+      },
+      {
+        "id": "web-preview",
+        "name": "preview (web)",
+        "pages": [
+          {
+            "id": "web-preview-0",
+            "name": "配置预览页面",
+            "url": "/web/index.html#/preview",
+            "path": "/preview"
+          }
+        ]
+      },
+      {
+        "id": "web-agent",
+        "name": "agent (web)",
+        "pages": [
+          {
+            "id": "web-agent-edit-conversation-0",
+            "name": "编辑智能体-对话流模式",
+            "url": "/web/index.html#/assistant/agent/edit-conversation",
+            "path": "/:businessSystemId/agent/edit-conversation"
+          },
+          {
+            "id": "web-agent-edit-llm-1",
+            "name": "编辑智能体-工作流模式",
+            "url": "/web/index.html#/assistant/agent/edit-llm",
+            "path": "/:businessSystemId/agent/edit-llm"
+          },
+          {
+            "id": "web-agent-2",
+            "name": "智能体列表",
+            "url": "/web/index.html#/assistant/agent",
+            "path": "/:businessSystemId/agent"
+          }
+        ]
+      },
+      {
+        "id": "web-workflow",
+        "name": "workflow (web)",
+        "pages": [
+          {
+            "id": "web-workflow-design-0",
+            "name": "流程设计",
+            "url": "/web/index.html#/assistant/workflow/design",
+            "path": "/:businessSystemId/workflow/design"
+          },
+          {
+            "id": "web-workflow-1",
+            "name": "前端测试页面",
+            "url": "/web/index.html#/assistant/workflow",
+            "path": "/:businessSystemId/workflow"
+          }
+        ]
+      },
+      {
+        "id": "web-userAgent",
+        "name": "userAgent (web)",
+        "pages": [
+          {
+            "id": "web-userAgent-0",
+            "name": "智能体列表",
+            "url": "/web/index.html#/assistant/userAgent",
+            "path": "/:businessSystemId/userAgent"
+          }
+        ]
+      },
+      {
+        "id": "web-plugin",
+        "name": "plugin (web)",
+        "pages": [
+          {
+            "id": "web-plugin-0",
+            "name": "插件管理",
+            "url": "/web/index.html#/assistant/plugin",
+            "path": "/:businessSystemId/plugin"
+          }
+        ]
+      },
+      {
+        "id": "web-analytics",
+        "name": "analytics (web)",
+        "pages": [
+          {
+            "id": "web-analytics-0",
+            "name": "会话监控分析",
+            "url": "/web/index.html#/assistant/analytics",
+            "path": "/:businessSystemId/analytics"
+          }
+        ]
+      }
+    ],
+    "admin": [
+      {
+        "id": "admin-sys",
+        "name": "sys (admin)",
+        "pages": [
+          {
+            "id": "admin-sys-storage-file-0",
+            "name": "sys-storage-file",
+            "url": "/admin/index.html#/sys/storage/file",
+            "path": "/sys/storage/file"
+          },
+          {
+            "id": "admin-sys-code-1",
+            "name": "sys-code",
+            "url": "/admin/index.html#/sys/code",
+            "path": "/sys/code"
+          },
+          {
+            "id": "admin-sys-config-2",
+            "name": "sys-config",
+            "url": "/admin/index.html#/sys/config",
+            "path": "/sys/config"
+          },
+          {
+            "id": "admin-sys-database-3",
+            "name": "sys-database",
+            "url": "/admin/index.html#/sys/database",
+            "path": "/sys/database"
+          },
+          {
+            "id": "admin-sys-storage-4",
+            "name": "sys-storage",
+            "url": "/admin/index.html#/sys/storage",
+            "path": "/sys/storage"
+          },
+          {
+            "id": "admin-sys-mention-5",
+            "name": "sys-mention",
+            "url": "/admin/index.html#/sys/mention",
+            "path": "/sys/mention"
+          }
+        ]
+      },
+      {
+        "id": "admin-permission",
+        "name": "permission (admin)",
+        "pages": [
+          {
+            "id": "admin-permission-user-0",
+            "name": "permission-user",
+            "url": "/admin/index.html#/permission/user",
+            "path": "/permission/user"
+          },
+          {
+            "id": "admin-permission-role-1",
+            "name": "permission-role",
+            "url": "/admin/index.html#/permission/role",
+            "path": "/permission/role"
+          },
+          {
+            "id": "admin-base-resource-2",
+            "name": "base-resource",
+            "url": "/admin/index.html#/permission/resource",
+            "path": "/permission/resource"
+          }
+        ]
+      },
+      {
+        "id": "admin-base",
+        "name": "base (admin)",
+        "pages": [
+          {
+            "id": "admin-base-model-source-0",
+            "name": "模型来源管理",
+            "url": "/admin/index.html#/base/model-source",
+            "path": "/base/model-source"
+          },
+          {
+            "id": "admin-base-model-1",
+            "name": "模型管理",
+            "url": "/admin/index.html#/base/model",
+            "path": "/base/model"
+          },
+          {
+            "id": "admin-base-business-system-2",
+            "name": "base-business-system",
+            "url": "/admin/index.html#/base/business-system",
+            "path": "/base/business-system"
+          }
+        ]
+      },
+      {
+        "id": "admin-task",
+        "name": "task (admin)",
+        "pages": [
+          {
+            "id": "admin-task-list-0",
+            "name": "任务管理",
+            "url": "/admin/index.html#/task/list",
+            "path": "/task/list"
+          },
+          {
+            "id": "admin-task-execute-1",
+            "name": "任务执行日志",
+            "url": "/admin/index.html#/task/execute",
+            "path": "/task/execute"
+          },
+          {
+            "id": "admin-task-data-sync-config-2",
+            "name": "数据同步任务设置",
+            "url": "/admin/index.html#/task/data-sync-config",
+            "path": "/task/data-sync-config"
+          }
+        ]
+      },
+      {
+        "id": "admin-pageFactory",
+        "name": "pageFactory (admin)",
+        "pages": [
+          {
+            "id": "admin-pageFactory-hardcode-0",
+            "name": "硬编码配置",
+            "url": "/admin/index.html#/pageFactory/hardcode",
+            "path": "/pageFactory/hardcode"
+          },
+          {
+            "id": "admin-pageFactory-globalview-1",
+            "name": "全局视图",
+            "url": "/admin/index.html#/pageFactory/globalview",
+            "path": "/pageFactory/globalview"
+          },
+          {
+            "id": "admin-pageFactory-common-query-2",
+            "name": "通用查询管理",
+            "url": "/admin/index.html#/pageFactory/common-query",
+            "path": "/pageFactory/common-query"
+          },
+          {
+            "id": "admin-pageFactory-page-3",
+            "name": "页面配置管理",
+            "url": "/admin/index.html#/pageFactory/page",
+            "path": "/pageFactory/page"
+          },
+          {
+            "id": "admin-pageFactory-pageContent-4",
+            "name": "页面HTML代码检索管理",
+            "url": "/admin/index.html#/pageFactory/pageContent",
+            "path": "/pageFactory/pageContent"
+          },
+          {
+            "id": "admin-pageFactory-template-5",
+            "name": "页面模板配置管理",
+            "url": "/admin/index.html#/pageFactory/template",
+            "path": "/pageFactory/template"
+          },
+          {
+            "id": "admin-pageFactory-dept-6",
+            "name": "页面部门管理",
+            "url": "/admin/index.html#/pageFactory/dept",
+            "path": "/pageFactory/dept"
+          }
+        ]
+      },
+      {
+        "id": "admin-code",
+        "name": "code (admin)",
+        "pages": [
+          {
+            "id": "admin-sys1-code-0",
+            "name": "sys1-code",
+            "url": "/admin/index.html#/code",
+            "path": "/code"
+          }
+        ]
+      }
+    ]
+  },
+  "totalPages": 41
+}

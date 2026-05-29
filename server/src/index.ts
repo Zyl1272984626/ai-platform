@@ -9,6 +9,7 @@ import { workflowRouter } from './routes/workflow.js';
 import { skillRouter } from './routes/skill.js';
 import { testRouter } from './routes/test.js';
 import { settingsRouter } from './routes/settings.js';
+import { projectsRouter } from './routes/projects.js';
 import { startWorkflow } from './services/workflow-engine.js';
 import { initScheduler } from './services/scheduler.js';
 import { getConfig } from './services/config.js';
@@ -29,6 +30,7 @@ app.use('/api/workflows', workflowRouter);
 app.use('/api/skills', skillRouter);
 app.use('/api/tests', testRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/projects', projectsRouter);
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

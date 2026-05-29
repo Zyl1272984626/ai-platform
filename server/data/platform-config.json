@@ -1,0 +1,23 @@
+{
+  "projectRoot": "C:/FengSuKeJi/agent",
+  "aiPlatformRoot": "C:/FengSuKeJi/ai-platform",
+  "e2eDataDir": "F:/e2e-test-data",
+  "mainFrontendPort": 5173,
+  "mainBackendPort": 9998,
+  "apiTestBaseUrl": "http://localhost:3100",
+  "projects": [
+    {
+      "id": "agent-main",
+      "name": "主系统(Agent)",
+      "baseUrl": "http://localhost:5173",
+      "apiBaseUrl": "http://localhost:9998",
+      "loginUrl": "/web/index.html#/login",
+      "username": "fskjadmin",
+      "password": "fskj_dst_2023",
+      "sourcePath": "C:/FengSuKeJi/agent",
+      "pageSets": [],
+      "status": "active"
+    }
+  ],
+  "defaultProjectId": "agent-main"
+}
