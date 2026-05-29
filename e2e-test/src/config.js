@@ -8,6 +8,11 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const configPath = join(__dirname, '..', 'test-config.json')
 const config = JSON.parse(readFileSync(configPath, 'utf-8'))
 
+// 环境变量覆盖 basePath（由 AI Platform 设置页面管理）
+if (process.env.E2E_DATA_DIR) {
+  config.storage.basePath = process.env.E2E_DATA_DIR
+}
+
 // 确保存储目录存在
 const storagePath = resolve(config.storage.basePath)
 for (const sub of ['reports', 'baselines', 'runs']) {

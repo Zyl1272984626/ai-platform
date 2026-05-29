@@ -96,6 +96,35 @@
         </div>
       </section>
 
+      <!-- 环境检测 -->
+      <section class="setting-section">
+        <h2 class="section-title">环境检测</h2>
+        <p class="field-desc">检测运行环境是否就绪（点击下方"检测配置"触发）</p>
+        <div class="env-check-list">
+          <div class="env-check-item">
+            <span class="env-label">Claude Code CLI</span>
+            <span v-if="checks.claudeCode" class="check-badge" :class="checks.claudeCode.ok ? 'ok' : 'err'">
+              {{ checks.claudeCode.msg }}
+            </span>
+            <span v-else class="check-badge pending">待检测</span>
+          </div>
+          <div class="env-check-item">
+            <span class="env-label">ANTHROPIC_API_KEY</span>
+            <span v-if="checks.anthropicApiKey" class="check-badge" :class="checks.anthropicApiKey.ok ? 'ok' : 'err'">
+              {{ checks.anthropicApiKey.msg }}
+            </span>
+            <span v-else class="check-badge pending">待检测</span>
+          </div>
+          <div class="env-check-item">
+            <span class="env-label">Playwright 浏览器</span>
+            <span v-if="checks.playwright" class="check-badge" :class="checks.playwright.ok ? 'ok' : 'err'">
+              {{ checks.playwright.msg }}
+            </span>
+            <span v-else class="check-badge pending">待检测</span>
+          </div>
+        </div>
+      </section>
+
       <!-- 操作按钮 -->
       <div class="actions">
         <button class="btn btn-check" @click="doCheck" :disabled="checking">
@@ -264,6 +293,24 @@ async function doCheck() {
 .check-badge.pending {
   color: #999;
   background: #f5f5f5;
+}
+.env-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.env-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+.env-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
 }
 .actions {
   display: flex;

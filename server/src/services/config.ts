@@ -67,6 +67,10 @@ export function updateConfig(partial: Partial<PlatformConfig>): PlatformConfig {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+    // 同步到 process.env，让 E2E 子进程也能读到
+    if (config.e2eDataDir) {
+      process.env.E2E_DATA_DIR = config.e2eDataDir;
+    }
     console.log('[Config] 配置已保存');
   } catch (e: any) {
     console.error('[Config] 配置保存失败:', e.message);
@@ -123,6 +127,34 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
     results['apiTestBaseUrl'] = { ok: res.ok, msg: `API 正常响应 (${res.status})` };
   } catch {
     results['apiTestBaseUrl'] = { ok: false, msg: `API 不可达: ${config.apiTestBaseUrl}` };
+  }
+
+  // ---- 环境检测 ----
+
+  // Claude Code CLI
+  try {
+    const { execSync } = await import('child_process');
+    const version = execSync('claude --version 2>&1', { timeout: 5000, encoding: 'utf-8' }).trim();
+    results['claudeCode'] = { ok: true, msg: `已安装: ${version}` };
+  } catch {
+    results['claudeCode'] = { ok: false, msg: '未安装 Claude Code CLI，请运行: npm install -g @anthropic-ai/claude-code' };
+  }
+
+  // ANTHROPIC_API_KEY
+  results['anthropicApiKey'] = {
+    ok: !!process.env.ANTHROPIC_API_KEY,
+    msg: process.env.ANTHROPIC_API_KEY ? 'API Key 已配置' : '未配置 ANTHROPIC_API_KEY 环境变量',
+  };
+
+  // Playwright 浏览器
+  try {
+    const { execSync } = await import('child_process');
+    const pwPath = path.resolve(config.aiPlatformRoot, 'e2e-test', 'node_modules', '.bin', 'playwright');
+    const cmd = process.platform === 'win32' ? `"${pwPath}.cmd"` : pwPath;
+    execSync(`${cmd} --version 2>&1`, { timeout: 10000, encoding: 'utf-8' });
+    results['playwright'] = { ok: true, msg: 'Playwright 已安装' };
+  } catch {
+    results['playwright'] = { ok: false, msg: '未安装，请运行: cd e2e-test && npx playwright install chromium' };
   }
 
   return results;
