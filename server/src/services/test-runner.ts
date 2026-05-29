@@ -19,6 +19,15 @@ import { testBus } from './test-events.js';
 export type TestType = 'agent' | 'e2e' | 'frontend' | 'api';
 export type TestStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error';
 
+export interface StreamBlock {
+  type: 'text' | 'tool_use'
+  content?: string          // 文本内容
+  name?: string             // 工具名
+  input?: any               // 工具输入参数
+  result?: string           // 工具返回结果（截断到 5000 字符）
+  toolUseId?: string        // 工具调用 ID，用于匹配 result
+}
+
 export interface TestCase {
   id: string;
   name: string;
@@ -27,6 +36,7 @@ export interface TestCase {
   duration?: number; // ms
   error?: string;
   output?: string;
+  blocks?: StreamBlock[];   // 结构化事件记录，用于历史回放
 }
 
 export interface TestSuite {
@@ -206,6 +216,7 @@ async function runAgentTest(
 
   const startTime = Date.now();
   let fullOutput = '';
+  const blocks: StreamBlock[] = [];
 
   try {
     const response = query({
@@ -235,14 +246,19 @@ async function runAgentTest(
             for (const block of (msg as any).message.content) {
               if (block.type === 'text') {
                 fullOutput += block.text;
-                // 实时推送文本到前端
+                blocks.push({ type: 'text', content: block.text });
                 testBus.emit('agent:stream', {
                   suiteId: suite.id,
                   type: 'text',
                   content: block.text,
                 });
               } else if (block.type === 'tool_use') {
-                // 推送工具调用到前端
+                blocks.push({
+                  type: 'tool_use',
+                  name: block.name,
+                  input: block.input,
+                  toolUseId: block.id,
+                });
                 testBus.emit('agent:stream', {
                   suiteId: suite.id,
                   type: 'tool_use',
@@ -262,7 +278,13 @@ async function runAgentTest(
                 const resultContent = typeof block.content === 'string'
                   ? block.content
                   : JSON.stringify(block.content);
-                // 推送工具结果到前端
+                // 回填 blocks 中对应工具调用的结果
+                const existingBlock = blocks.find(
+                  b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id
+                );
+                if (existingBlock) {
+                  existingBlock.result = resultContent?.slice(0, 5000);
+                }
                 testBus.emit('agent:stream', {
                   suiteId: suite.id,
                   type: 'tool_result',
@@ -289,7 +311,8 @@ async function runAgentTest(
     // 测试完成
     if (mainCase) {
       mainCase.duration = Date.now() - startTime;
-      mainCase.output = fullOutput.slice(0, 10000);
+      mainCase.output = fullOutput;
+      mainCase.blocks = blocks;
       mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
       if (mainCase.status === 'failed') mainCase.error = '输出内容不足';
     }
@@ -358,6 +381,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 
   const startTime = Date.now();
   let fullOutput = '';
+  const blocks: StreamBlock[] = [];
 
   try {
     console.log('[E2E] 调用 query()...');
@@ -413,8 +437,15 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
             for (const block of (msg as any).message.content) {
               if (block.type === 'text') {
                 fullOutput += block.text;
+                blocks.push({ type: 'text', content: block.text });
                 testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
               } else if (block.type === 'tool_use') {
+                blocks.push({
+                  type: 'tool_use',
+                  name: block.name,
+                  input: block.input,
+                  toolUseId: block.id,
+                });
                 testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
               }
             }
@@ -427,6 +458,13 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
               if (block.type === 'tool_result') {
                 const resultContent = typeof block.content === 'string'
                   ? block.content : JSON.stringify(block.content);
+                // 回填 blocks 中对应工具调用的结果
+                const existingBlock = blocks.find(
+                  b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id
+                );
+                if (existingBlock) {
+                  existingBlock.result = resultContent?.slice(0, 5000);
+                }
                 testBus.emit('agent:stream', {
                   suiteId: suite.id, type: 'tool_result',
                   toolUseId: block.tool_use_id,
@@ -450,7 +488,8 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
     clearTimeout(timer);
 
     mainCase.duration = Date.now() - startTime;
-    mainCase.output = fullOutput.slice(0, 10000);
+    mainCase.output = fullOutput;
+    mainCase.blocks = blocks;
     mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
     if (mainCase.status === 'failed') mainCase.error = '输出内容不足';
 

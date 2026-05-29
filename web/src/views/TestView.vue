@@ -151,8 +151,24 @@
               <span>{{ statusIcon(tc.status) }} {{ tc.name }}</span>
               <span v-if="tc.duration" class="case-dur">{{ (tc.duration / 1000).toFixed(1) }}s</span>
             </div>
-            <div v-if="tc.output" class="detail-output">
-              <pre>{{ tc.output.slice(0, 500) }}</pre>
+            <!-- 有 blocks 时用结构化渲染 -->
+            <div v-if="getCaseBlocks(tc).length" class="history-stream">
+              <template v-for="(block, idx) in getCaseBlocks(tc)" :key="idx">
+                <div v-if="block.type === 'text'" class="stream-text">
+                  <div class="stream-text-html" v-html="renderMarkdown(block.content || '')"></div>
+                </div>
+                <ToolCallBlock
+                  v-else-if="block.type === 'tool_use'"
+                  :name="block.name || 'unknown'"
+                  :input="block.input"
+                  :result="block.result || ''"
+                  :done="!!block.result"
+                />
+              </template>
+            </div>
+            <!-- 无 blocks 时回退到纯文本 -->
+            <div v-else-if="tc.output" class="detail-output">
+              <pre>{{ tc.output.slice(0, 2000) }}</pre>
             </div>
             <div v-if="tc.error" class="detail-error">{{ tc.error }}</div>
           </div>
@@ -251,6 +267,10 @@ function renderMarkdown(text: string): string {
   } catch {
     return text.replace(/\n/g, '<br>')
   }
+}
+
+function getCaseBlocks(tc: any): StreamBlock[] {
+  return tc.blocks || []
 }
 
 function setStreamRef(suiteId: string, el: any) {
@@ -872,6 +892,16 @@ select.param-input { cursor: pointer; appearance: auto; }
   border-top: 1px solid #f0f0f0;
 }
 .detail-case { margin-bottom: 10px; }
+
+/* 历史记录结构化 blocks 渲染 */
+.history-stream {
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  background: #fafbfc;
+  border-radius: 6px;
+  margin-top: 6px;
+}
 .detail-case-header {
   display: flex;
   justify-content: space-between;
