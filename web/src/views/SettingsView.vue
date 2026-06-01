@@ -409,7 +409,18 @@
             <label>路由路径</label>
             <code>{{ detailPage.path }}</code>
           </div>
-          <div class="page-detail-row">
+          <!-- 有动态参数时展示展开后的实际 URL -->
+          <div v-if="detailPageResolvedUrls.length > 0" class="page-detail-row">
+            <label>可访问地址</label>
+            <div class="resolved-url-list">
+              <div v-for="item in detailPageResolvedUrls" :key="item.url" class="resolved-url-item">
+                <a :href="item.url" target="_blank" class="resolved-url-link">{{ item.url }}</a>
+                <span v-if="item.label" class="resolved-url-label">{{ item.label }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- 无动态参数时直接展示原始 URL -->
+          <div v-else class="page-detail-row">
             <label>访问 URL</label>
             <code>{{ detailPageBaseUrl }}{{ detailPage.url }}</code>
           </div>
@@ -417,21 +428,13 @@
             <label>描述</label>
             <span>{{ detailPage.description }}</span>
           </div>
-          <div v-if="detailPage.hasDynamicParams && detailPage.params" class="page-detail-row">
-            <label>动态参数</label>
-            <div class="param-detail-list">
-              <div v-for="(values, paramName) in detailPage.params" :key="paramName" class="param-detail-item">
-                <code>{{ paramName }}</code> =
-                <span v-if="values.length">{{ values.join(', ') }}</span>
-                <span v-else class="text-muted">未配置</span>
-              </div>
-            </div>
-          </div>
           <div class="page-detail-row">
             <label>页面 ID</label>
             <code>{{ detailPage.id }}</code>
           </div>
-          <button class="btn btn-sm btn-open" @click="openPageUrl(detailPage)" style="margin-top: 8px;">在新标签页打开此页面</button>
+          <div class="page-detail-actions">
+            <button v-if="detailPageResolvedUrls.length === 0" class="btn btn-sm btn-open" @click="openPageUrl(detailPage)">在新标签页打开</button>
+          </div>
         </div>
 
         <div class="modal-actions">
@@ -526,6 +529,55 @@ const expandedParamRefs = ref(new Set<string>())
 // 页面详情
 const detailPage = ref<PageConfig | null>(null)
 const detailPageBaseUrl = ref('')
+
+/** 详情页面的展开后实际 URL 列表 */
+const detailPageResolvedUrls = computed(() => {
+  if (!detailPage.value) return []
+  const page = detailPage.value
+  const pathParams = page.path?.match(/:\w+/g) || []
+  if (pathParams.length === 0) return []
+
+  // 合并公共参数和页面级参数
+  const merged: Record<string, string[]> = {}
+  for (const p of pathParams) {
+    const pageValues = page.params?.[p]
+    merged[p] = (pageValues && pageValues.length > 0) ? pageValues : (globalParams.value[p] || [])
+  }
+
+  // 检查是否所有参数都有值
+  if (Object.values(merged).every(v => v.length === 0)) return []
+
+  // 生成笛卡尔积
+  const combos = generateCombinations(merged)
+  return combos.map(combo => {
+    let resolvedUrl = page.url
+    let resolvedPath = page.path
+    const labels: string[] = []
+    for (const [param, value] of Object.entries(combo)) {
+      resolvedUrl = resolvedUrl.replace(param, value)
+      resolvedPath = resolvedPath.replace(param, value)
+      labels.push(value)
+    }
+    return {
+      url: detailPageBaseUrl.value + resolvedUrl,
+      label: labels.join(' / '),
+    }
+  })
+})
+
+function generateCombinations(params: Record<string, string[]>): Record<string, string>[] {
+  const entries = Object.entries(params).filter(([, v]) => v.length > 0)
+  if (entries.length === 0) return [{}]
+  const [key, values] = entries[0]
+  const rest = generateCombinations(Object.fromEntries(entries.slice(1)))
+  const result: Record<string, string>[] = []
+  for (const value of values) {
+    for (const combo of rest) {
+      result.push({ [key]: value, ...combo })
+    }
+  }
+  return result
+}
 
 const projectForm = reactive({
   name: '',
@@ -767,12 +819,20 @@ const pageManagerTotalPages = computed(() => {
 })
 
 /** 所有页面中出现的动态参数名（去重） */
+/** 辅助：从路径中提取动态参数名 */
+function extractParamsFromPath(path: string): string[] {
+  return path.match(/:\w+/g) || []
+}
+
 const allDynamicParamNames = computed(() => {
   const names = new Set<string>()
   for (const ps of pageManagerSets.value) {
     for (const p of ps.pages) {
-      if (p.params) {
+      // 优先从 params 字段，兼容从路径扫描（旧数据可能没有 params 字段）
+      if (p.params && Object.keys(p.params).length > 0) {
         for (const k of Object.keys(p.params)) names.add(k)
+      } else {
+        for (const m of extractParamsFromPath(p.path)) names.add(m)
       }
     }
   }
@@ -784,10 +844,16 @@ function paramUsageCount(paramName: string): number {
   let count = 0
   for (const ps of pageManagerSets.value) {
     for (const p of ps.pages) {
-      if (p.params && paramName in p.params) count++
+      if (pageHasParam(p, paramName)) count++
     }
   }
   return count
+}
+
+/** 页面是否使用了某个动态参数 */
+function pageHasParam(page: PageConfig, paramName: string): boolean {
+  if (page.params && paramName in page.params) return true
+  return page.path.includes(paramName)
 }
 
 /** 获取使用某参数的所有页面 */
@@ -795,7 +861,7 @@ function pagesUsingParam(paramName: string): PageConfig[] {
   const result: PageConfig[] = []
   for (const ps of pageManagerSets.value) {
     for (const p of ps.pages) {
-      if (p.params && paramName in p.params) result.push(p)
+      if (pageHasParam(p, paramName)) result.push(p)
     }
   }
   return result
@@ -1370,7 +1436,7 @@ function showPageDetail(page: PageConfig) {
   margin-top: 20px;
 }
 .modal-wide {
-  width: 860px;
+  width: 1080px;
   max-height: 90vh;
 }
 
@@ -1620,6 +1686,36 @@ function showPageDetail(page: PageConfig) {
 .param-ref-path {
   font-size: 11px;
   color: #888;
+}
+.resolved-url-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.resolved-url-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resolved-url-link {
+  font-size: 12px;
+  color: #3b82f6;
+  text-decoration: none;
+  word-break: break-all;
+}
+.resolved-url-link:hover {
+  text-decoration: underline;
+}
+.resolved-url-label {
+  font-size: 10px;
+  color: #888;
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.page-detail-actions {
+  margin-top: 8px;
 }
 .param-detail-list {
   display: flex;

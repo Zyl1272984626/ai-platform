@@ -379,6 +379,10 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   if (project) {
     const pages = resolvePages(project, scope);
     const baseUrl = project.baseUrl;
+    const gp = project.globalParams || {};
+    const paramsInfo = Object.keys(gp).length > 0
+      ? `\n## 动态参数映射\n${Object.entries(gp).map(([k, v]) => `- ${k} → ${v.join(', ')}`).join('\n')}\n`
+      : '';
     pageListPrompt = `
 ## 当前项目信息
 - 项目名称: ${project.name}
@@ -386,7 +390,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 - 后端 API: ${project.apiBaseUrl}
 - 登录页: ${baseUrl}${project.loginUrl}
 - 登录凭据: ${project.username} / ${project.password}
-
+${paramsInfo}
 ## 待测试页面 (${pages.length}页)
 ${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
 `;
@@ -574,15 +578,26 @@ function resolvePages(project: TestProject, scope: string): PageConfig[] {
   const expanded: PageConfig[] = [];
 
   for (const page of rawPages) {
+    // 从路径提取动态参数名（兼容旧数据没有 params 字段的情况）
+    const pathParams = page.path?.match(/:\w+/g) || [];
+    const pageParams = page.params || {};
+
+    // 如果 params 为空但有路径参数，自动构造 params
+    if (pathParams.length > 0 && Object.keys(pageParams).length === 0) {
+      for (const p of pathParams) {
+        if (!(p in pageParams)) pageParams[p] = [];
+      }
+    }
+
     // 无动态参数，直接使用
-    if (!page.hasDynamicParams || !page.params) {
+    if (Object.keys(pageParams).length === 0) {
       expanded.push(page);
       continue;
     }
 
     // 合并参数：页面级别覆盖公共级别（页面有值用页面的，否则用公共的）
     const mergedParams: Record<string, string[]> = {};
-    for (const [param, pageValues] of Object.entries(page.params)) {
+    for (const [param, pageValues] of Object.entries(pageParams)) {
       mergedParams[param] = pageValues.length > 0 ? pageValues : (globalParams[param] || []);
     }
 

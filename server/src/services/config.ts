@@ -287,6 +287,7 @@ export function getProjectById(id: string): TestProject | undefined {
     ...p,
     pageSets: pageData.pageSets,
     discoveredAt: pageData.discoveredAt || p.discoveredAt,
+    globalParams: pageData.globalParams,
   };
 }
 

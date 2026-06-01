@@ -295,7 +295,10 @@ projectsRouter.post('/:id/pages/batch-set-param', (req: Request, res: Response) 
 
   for (const set of targetSets) {
     for (const page of set.pages) {
-      if (page.params && paramName in page.params) {
+      // 匹配有 params 字段且包含该参数的，或者路径中包含该参数的（兼容旧数据）
+      const hasParam = (page.params && paramName in page.params) || page.path?.includes(paramName);
+      if (hasParam) {
+        if (!page.params) page.params = {};
         page.params[paramName] = values;
         updatedCount++;
       }
