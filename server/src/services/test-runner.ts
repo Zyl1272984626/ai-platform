@@ -102,11 +102,11 @@ function checkPort(port: number, host = 'localhost'): Promise<boolean> {
 async function preflightCheck(type: TestType, config?: Record<string, unknown>): Promise<string | null> {
   if (type !== 'e2e') return null;
 
-  // 如果有项目配置，检测项目的前端/后端可达性
   const projectId = config?.projectId as string | undefined;
   const project = projectId ? getProjectById(projectId) : undefined;
 
   if (project) {
+    // 检测项目前端可达性
     try {
       const resp = await fetch(project.baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
       if (!resp.ok && resp.status !== 200) {
@@ -114,17 +114,6 @@ async function preflightCheck(type: TestType, config?: Record<string, unknown>):
       }
     } catch {
       return `项目 ${project.name} 前端不可达 (${project.baseUrl})`;
-    }
-  } else {
-    // 兼容旧逻辑
-    const cfg = getConfig();
-    const checks = [
-      { port: cfg.mainFrontendPort, name: `主系统前端 (localhost:${cfg.mainFrontendPort})` },
-      { port: cfg.mainBackendPort, name: `主系统后端 (localhost:${cfg.mainBackendPort})` },
-    ];
-    for (const c of checks) {
-      const ok = await checkPort(c.port);
-      if (!ok) return `${c.name} 未启动，请先启动主系统后再执行 E2E 测试`;
     }
   }
   return null;
@@ -239,7 +228,7 @@ async function runAgentTest(
     const response = query({
       prompt,
       options: {
-        cwd: getConfig().projectRoot,
+        cwd: getConfig().aiPlatformRoot,
         allowedTools: [
           'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'Bash',
           'WebSearch', 'WebFetch', 'NotebookEdit',
@@ -369,7 +358,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   // 解析 Skill 路径
   const skillBasePath = project?.skillPath
     ? path.dirname(project.skillPath)
-    : path.resolve(getConfig().projectRoot, '.claude', 'skills', 'e2e-page-test');
+    : path.resolve(getConfig().aiPlatformRoot, 'skills', 'tests', 'e2e-page-test');
   const skillPath = path.resolve(skillBasePath, 'SKILL.md');
 
   let skillContent = '';
@@ -429,7 +418,7 @@ ${pageListPrompt}
 
   try {
     console.log('[E2E] 调用 query()...');
-    const e2eCwd = project?.sourcePath || getConfig().projectRoot;
+    const e2eCwd = project?.sourcePath || getConfig().aiPlatformRoot;
     const response = query({
       prompt,
       options: {

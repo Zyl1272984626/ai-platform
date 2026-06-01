@@ -252,7 +252,6 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
 
   // 检查路径是否存在
   for (const [key, dirPath] of [
-    ['projectRoot', config.projectRoot],
     ['aiPlatformRoot', config.aiPlatformRoot],
     ['e2eDataDir', config.e2eDataDir],
   ] as [string, string][]) {
@@ -264,29 +263,6 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
     } catch {
       results[key] = { ok: false, msg: `无法访问: ${dirPath}` };
     }
-  }
-
-  // 检查 Skill 文件
-  const skillPath = path.resolve(config.projectRoot, '.claude', 'skills', 'e2e-page-test', 'SKILL.md');
-  results['e2eSkill'] = {
-    ok: fs.existsSync(skillPath),
-    msg: fs.existsSync(skillPath) ? 'Skill 文件存在' : `未找到: ${skillPath}`,
-  };
-
-  // 检查端口（异步）
-  const { default: net } = await import('net');
-  for (const [key, port] of [
-    ['mainFrontendPort', config.mainFrontendPort],
-    ['mainBackendPort', config.mainBackendPort],
-  ] as [string, number][]) {
-    results[key] = await new Promise(resolve => {
-      const socket = new net.Socket();
-      socket.setTimeout(2000);
-      socket.on('connect', () => { socket.destroy(); resolve({ ok: true, msg: `端口 ${port} 可达` }); });
-      socket.on('error', () => resolve({ ok: false, msg: `端口 ${port} 未响应` }));
-      socket.on('timeout', () => { socket.destroy(); resolve({ ok: false, msg: `端口 ${port} 超时` }); });
-      socket.connect(port, 'localhost');
-    });
   }
 
   // 检查 API 地址

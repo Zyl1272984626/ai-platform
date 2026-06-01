@@ -34,13 +34,13 @@ app.use('/api/projects', projectsRouter);
 
 // 健康检查
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', projectRoot: getConfig().projectRoot, version: '0.1.0' });
+  res.json({ status: 'ok', projects: getConfig().projects.length, version: '0.1.0' });
 });
 
 app.listen(PORT, () => {
   const config = getConfig();
   console.log(`[AI Platform] Server running on http://localhost:${PORT}`);
-  console.log(`[AI Platform] Project root: ${config.projectRoot}`);
+  console.log(`[AI Platform] Projects: ${config.projects.length}`);
 
   // 初始化定时任务调度器
   initScheduler((workflowName, params, emitter) => {

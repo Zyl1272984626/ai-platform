@@ -1,11 +1,8 @@
 import api from './client'
 
 export interface PlatformConfig {
-  projectRoot: string
   aiPlatformRoot: string
   e2eDataDir: string
-  mainFrontendPort: number
-  mainBackendPort: number
   apiTestBaseUrl: string
 }
 

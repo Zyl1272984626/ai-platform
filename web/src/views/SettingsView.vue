@@ -78,17 +78,6 @@
       <section class="setting-section">
         <h2 class="section-title">路径配置</h2>
         <div class="form-group">
-          <label>项目根目录 (PROJECT_ROOT)</label>
-          <p class="field-desc">主系统代码路径，用于 Agent/E2E 测试定位 Skill 文件</p>
-          <div class="input-row">
-            <input v-model="form.projectRoot" placeholder="例如: C:/FengSuKeJi/agent" />
-            <span v-if="checks.projectRoot" class="check-badge" :class="checks.projectRoot.ok ? 'ok' : 'err'">
-              {{ checks.projectRoot.msg }}
-            </span>
-          </div>
-        </div>
-
-        <div class="form-group">
           <label>AI Platform 根目录</label>
           <p class="field-desc">ai-platform 自身路径，定位数据目录和 Skills 库</p>
           <div class="input-row">
@@ -106,40 +95,6 @@
             <input v-model="form.e2eDataDir" placeholder="例如: F:/e2e-test-data" />
             <span v-if="checks.e2eDataDir" class="check-badge" :class="checks.e2eDataDir.ok ? 'ok' : 'err'">
               {{ checks.e2eDataDir.msg }}
-            </span>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>E2E Skill 状态</label>
-          <span v-if="checks.e2eSkill" class="check-badge" :class="checks.e2eSkill.ok ? 'ok' : 'err'">
-            {{ checks.e2eSkill.msg }}
-          </span>
-          <span v-else class="check-badge pending">点击下方"检测配置"查看</span>
-        </div>
-      </section>
-
-      <!-- 端口配置 -->
-      <section class="setting-section">
-        <h2 class="section-title">端口配置</h2>
-        <div class="form-group">
-          <label>主系统前端端口</label>
-          <p class="field-desc">E2E 预检时检查主系统前端是否启动</p>
-          <div class="input-row">
-            <input v-model.number="form.mainFrontendPort" type="number" :min="1" :max="65535" />
-            <span v-if="checks.mainFrontendPort" class="check-badge" :class="checks.mainFrontendPort.ok ? 'ok' : 'err'">
-              {{ checks.mainFrontendPort.msg }}
-            </span>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>主系统后端端口</label>
-          <p class="field-desc">E2E 预检时检查主系统后端是否启动</p>
-          <div class="input-row">
-            <input v-model.number="form.mainBackendPort" type="number" :min="1" :max="65535" />
-            <span v-if="checks.mainBackendPort" class="check-badge" :class="checks.mainBackendPort.ok ? 'ok' : 'err'">
-              {{ checks.mainBackendPort.msg }}
             </span>
           </div>
         </div>
@@ -269,11 +224,8 @@ const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 
 // 基础配置表单
 const form = reactive<PlatformConfig>({
-  projectRoot: '',
   aiPlatformRoot: '',
   e2eDataDir: '',
-  mainFrontendPort: 5173,
-  mainBackendPort: 9998,
   apiTestBaseUrl: '',
 })
 
