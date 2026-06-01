@@ -1,0 +1,399 @@
+{
+  "admin": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/admin/index.html"
+  },
+  "chat": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/chat/index.html"
+  },
+  "setting-system": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/setting-system/index.html"
+  },
+  "setting-app": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/setting-app/index.html"
+  },
+  "manage": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/manage/index.html"
+  },
+  "dashboard": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/dashboard/index.html"
+  },
+  "setting": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/setting/index.html"
+  },
+  "portal": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/portal/index.html"
+  },
+  "app": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/app/index.html"
+  },
+  "mobile": {
+    "error": "Vue 未挂载或入口无效",
+    "url": "http://192.168.1.10:9999/knowledge-center/mobile/index.html"
+  },
+  "web": {
+    "title": "知识库 - 校本知识中心",
+    "url": "http://192.168.1.10:9999/knowledge-center/web/index.html",
+    "routeCount": 5,
+    "paramValues": {},
+    "routes": [
+      {
+        "path": "/knowledge/edit",
+        "name": "KnowledgeEdit",
+        "title": "编辑知识库",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/web/index.html#/knowledge/edit",
+        "paramValues": {}
+      },
+      {
+        "path": "/KnowledgeDetailEdit/:id",
+        "name": "KnowledgeDetailEdit",
+        "title": "知识库详情",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/web/index.html#/KnowledgeDetailEdit/:id",
+        "paramValues": {}
+      },
+      {
+        "path": "/KnowledgeDetailReadonly/:id",
+        "name": "KnowledgeDetailReadonly",
+        "title": "知识库详情",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/web/index.html#/KnowledgeDetailReadonly/:id",
+        "paramValues": {}
+      },
+      {
+        "path": "/",
+        "name": "",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/web/index.html#/",
+        "paramValues": {}
+      },
+      {
+        "path": "/knowledge",
+        "name": "KnowledgeList",
+        "title": "知识库",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/web/index.html#/knowledge",
+        "paramValues": {}
+      }
+    ]
+  },
+  "login": {
+    "title": "校本知识中心",
+    "url": "http://192.168.1.10:9999/knowledge-center/login/index.html",
+    "routeCount": 3,
+    "paramValues": {},
+    "routes": [
+      {
+        "path": "/",
+        "name": "",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/login/index.html#/",
+        "paramValues": {}
+      },
+      {
+        "path": "/login",
+        "name": "Login",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/login/index.html#/login",
+        "paramValues": {}
+      },
+      {
+        "path": "/login-proxy",
+        "name": "LoginProxy",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/login/index.html#/login-proxy",
+        "paramValues": {}
+      }
+    ]
+  },
+  "index": {
+    "title": "校本知识中心",
+    "url": "http://192.168.1.10:9999/knowledge-center/index/index.html",
+    "routeCount": 29,
+    "paramValues": {},
+    "routes": [
+      {
+        "path": "/integration/reverse/data/:id",
+        "name": "integration-reverse-data",
+        "title": "",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/index/index.html#/integration/reverse/data/:id",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission/third-system/api-manage",
+        "name": "third-system-api-manage",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission/third-system/api-manage",
+        "paramValues": {}
+      },
+      {
+        "path": "/integration/reverse/:id/:nameX",
+        "name": "integration-reverse",
+        "title": "",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/index/index.html#/integration/reverse/:id/:nameX",
+        "paramValues": {}
+      },
+      {
+        "path": "/knowledge/split",
+        "name": "knowledge-split",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/knowledge/split",
+        "paramValues": {}
+      },
+      {
+        "path": "/bussiness-module/develop-plan",
+        "name": "develop-plan",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/bussiness-module/develop-plan",
+        "paramValues": {}
+      },
+      {
+        "path": "/bussiness-module/achievement",
+        "name": "achievement",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/bussiness-module/achievement",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission/user",
+        "name": "permission-user",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission/user",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission/role",
+        "name": "permission-role",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission/role",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission/resource",
+        "name": "base-resource",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission/resource",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission/third-system",
+        "name": "base-third-system",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission/third-system",
+        "paramValues": {}
+      },
+      {
+        "path": "/sys/code",
+        "name": "sys-code",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/sys/code",
+        "paramValues": {}
+      },
+      {
+        "path": "/sys/config",
+        "name": "sys-config",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/sys/config",
+        "paramValues": {}
+      },
+      {
+        "path": "/sys/database",
+        "name": "sys-database",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/sys/database",
+        "paramValues": {}
+      },
+      {
+        "path": "/sys/tag",
+        "name": "sys-tag",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/sys/tag",
+        "paramValues": {}
+      },
+      {
+        "path": "/integration/storage",
+        "name": "integration-storage",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/integration/storage",
+        "paramValues": {}
+      },
+      {
+        "path": "/integration/site",
+        "name": "integration-site",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/integration/site",
+        "paramValues": {}
+      },
+      {
+        "path": "/integration/proxypool",
+        "name": "integration-proxypool",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/integration/proxypool",
+        "paramValues": {}
+      },
+      {
+        "path": "/knowledge-asset/:knowledgeId",
+        "name": "knowledge-asset",
+        "title": "",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/index/index.html#/knowledge-asset/:knowledgeId",
+        "paramValues": {}
+      },
+      {
+        "path": "/new-knowledge-asset/:knowledgeId",
+        "name": "new-knowledge-asset",
+        "title": "",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/index/index.html#/new-knowledge-asset/:knowledgeId",
+        "paramValues": {}
+      },
+      {
+        "path": "/document-manage",
+        "name": "document-manage",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/document-manage",
+        "paramValues": {}
+      },
+      {
+        "path": "/storage",
+        "name": "storage",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/storage",
+        "paramValues": {}
+      },
+      {
+        "path": "/knowledge",
+        "name": "knowledge",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/knowledge",
+        "paramValues": {}
+      },
+      {
+        "path": "/assetManage",
+        "name": "assetManage",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/assetManage",
+        "paramValues": {}
+      },
+      {
+        "path": "/bussiness-module",
+        "name": "bussiness-module",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/bussiness-module",
+        "paramValues": {}
+      },
+      {
+        "path": "/permission",
+        "name": "permission",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/permission",
+        "paramValues": {}
+      },
+      {
+        "path": "/sys",
+        "name": "sys",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/sys",
+        "paramValues": {}
+      },
+      {
+        "path": "/integration",
+        "name": "integration",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/integration",
+        "paramValues": {}
+      },
+      {
+        "path": "/main",
+        "name": "main",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/main",
+        "paramValues": {}
+      },
+      {
+        "path": "/",
+        "name": "App",
+        "title": "",
+        "layout": "",
+        "hasParams": false,
+        "concreteUrl": "/index/index.html#/",
+        "paramValues": {}
+      }
+    ]
+  }
+}

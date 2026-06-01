@@ -1,260 +1,87 @@
 {
-  "index-UserChat-0": {
-    "pageName": "智能对话",
-    "url": "http://localhost:5173/index/index.html#/user/chat",
-    "description": "智能对话页面",
+  "setting-system-app-0": {
+    "pageName": "智能体应用管理",
+    "url": "http://localhost:5173/setting-system/index.html#/app",
+    "description": "智能体应用管理页面",
     "expectedElements": [
       "数据表格",
       "搜索框",
-      "操作按钮",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
       "分页组件"
     ],
     "apiEndpoints": [],
     "interactions": [],
     "commonIssues": []
   },
-  "index-UserAgents-1": {
-    "pageName": "智能体组织",
-    "url": "http://localhost:5173/index/index.html#/user/agents",
-    "description": "智能体组织页面",
+  "setting-system-code-1": {
+    "pageName": "代码管理",
+    "url": "http://localhost:5173/setting-system/index.html#/code",
+    "description": "系统代码/字典管理页面，支持代码的增删改查",
     "expectedElements": [
       "数据表格",
       "搜索框",
-      "操作按钮",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
       "分页组件"
     ],
     "apiEndpoints": [],
     "interactions": [],
     "commonIssues": []
   },
-  "index-UserDataTables-2": {
-    "pageName": "数据表",
-    "url": "http://localhost:5173/index/index.html#/user/data-tables",
-    "description": "数据表页面",
+  "setting-system-model-2": {
+    "pageName": "模型管理",
+    "url": "http://localhost:5173/setting-system/index.html#/model",
+    "description": "AI模型管理页面，配置和管理可用的模型",
     "expectedElements": [
       "数据表格",
       "搜索框",
-      "操作按钮",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
       "分页组件"
     ],
     "apiEndpoints": [],
     "interactions": [],
     "commonIssues": []
   },
-  "index-UserComponents-3": {
-    "pageName": "业务组件",
-    "url": "http://localhost:5173/index/index.html#/user/components",
-    "description": "业务组件页面",
+  "setting-system-config-3": {
+    "pageName": "配置管理",
+    "url": "http://localhost:5173/setting-system/index.html#/config",
+    "description": "系统参数配置页面，管理键值对形式的配置项",
     "expectedElements": [
       "数据表格",
       "搜索框",
-      "操作按钮",
-      "分页组件"
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件",
+      "搜索框",
+      "新增按钮",
+      "操作按钮"
     ],
     "apiEndpoints": [],
     "interactions": [],
     "commonIssues": []
   },
-  "index-user-4": {
-    "pageName": "/user",
-    "url": "http://localhost:5173/index/index.html#/user",
-    "description": "/user页面",
+  "setting-system-datasource-4": {
+    "pageName": "数据源管理",
+    "url": "http://localhost:5173/setting-system/index.html#/datasource",
+    "description": "数据库连接管理页面，支持配置和测试数据库连接",
     "expectedElements": [
       "数据表格",
       "搜索框",
-      "操作按钮",
-      "分页组件"
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件",
+      "测试连接按钮"
     ],
     "apiEndpoints": [],
     "interactions": [],
     "commonIssues": []
   },
-  "index-TestPage-0": {
-    "pageName": "组件测试",
-    "url": "http://localhost:5173/index/index.html#/test/:name",
-    "description": "组件测试页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "index-TestNav-1": {
-    "pageName": "组件测试导航",
-    "url": "http://localhost:5173/index/index.html#/test",
-    "description": "组件测试导航页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "index-Chat-0": {
-    "pageName": "对话",
-    "url": "http://localhost:5173/index/index.html#/chat",
-    "description": "对话页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "index-Mobile-0": {
-    "pageName": "移动端对话",
-    "url": "http://localhost:5173/index/index.html#/mobile",
-    "description": "移动端对话页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-UserChat-0": {
-    "pageName": "智能对话",
-    "url": "http://localhost:5173/chat/index.html#/user/chat",
-    "description": "智能对话页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-UserAgents-1": {
-    "pageName": "智能体组织",
-    "url": "http://localhost:5173/chat/index.html#/user/agents",
-    "description": "智能体组织页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-UserDataTables-2": {
-    "pageName": "数据表",
-    "url": "http://localhost:5173/chat/index.html#/user/data-tables",
-    "description": "数据表页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-UserComponents-3": {
-    "pageName": "业务组件",
-    "url": "http://localhost:5173/chat/index.html#/user/components",
-    "description": "业务组件页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-user-4": {
-    "pageName": "/user",
-    "url": "http://localhost:5173/chat/index.html#/user",
-    "description": "/user页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-TestPage-0": {
-    "pageName": "组件测试",
-    "url": "http://localhost:5173/chat/index.html#/test/:name",
-    "description": "组件测试页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-TestNav-1": {
-    "pageName": "组件测试导航",
-    "url": "http://localhost:5173/chat/index.html#/test",
-    "description": "组件测试导航页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-Chat-0": {
-    "pageName": "对话",
-    "url": "http://localhost:5173/chat/index.html#/chat",
-    "description": "对话页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "chat-Mobile-0": {
-    "pageName": "移动端对话",
-    "url": "http://localhost:5173/chat/index.html#/mobile",
-    "description": "移动端对话页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-storage-file-0": {
-    "pageName": "文件管理",
-    "url": "http://localhost:5173/setting-system/index.html#/storage/file",
-    "description": "文件管理页面",
+  "setting-system-storage-5": {
+    "pageName": "存储管理",
+    "url": "http://localhost:5173/setting-system/index.html#/storage",
+    "description": "存储管理页面",
     "expectedElements": [
       "数据表格",
       "搜索框",
@@ -267,10 +94,113 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-system-storage-1": {
-    "pageName": "存储管理",
-    "url": "http://localhost:5173/setting-system/index.html#/storage",
-    "description": "存储管理页面",
+  "setting-system-datause-6": {
+    "pageName": "基础数据访问控制",
+    "url": "http://localhost:5173/setting-system/index.html#/datause",
+    "description": "基础数据访问控制页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-third-party-system-7": {
+    "pageName": "第三方系统管理",
+    "url": "http://localhost:5173/setting-system/index.html#/third-party-system",
+    "description": "第三方系统管理页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-openclaw-8": {
+    "pageName": "智能体运行容器管理",
+    "url": "http://localhost:5173/setting-system/index.html#/openclaw",
+    "description": "智能体运行容器管理页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-wxbot-9": {
+    "pageName": "微信机器人用户管理",
+    "url": "http://localhost:5173/setting-system/index.html#/wxbot",
+    "description": "微信机器人用户管理页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-monitor-10": {
+    "pageName": "资源监控",
+    "url": "http://localhost:5173/setting-system/index.html#/monitor",
+    "description": "资源监控页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-MemoryManagement-11": {
+    "pageName": "记忆管理",
+    "url": "http://localhost:5173/setting-system/index.html#/memory",
+    "description": "记忆管理页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-MsgList-12": {
+    "pageName": "消息列表",
+    "url": "http://localhost:5173/setting-system/index.html#/msg",
+    "description": "消息列表页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-system-storage-file-0": {
+    "pageName": "文件管理",
+    "url": "http://localhost:5173/setting-system/index.html#/storage/file",
+    "description": "文件管理页面",
     "expectedElements": [
       "数据表格",
       "搜索框",
@@ -312,21 +242,6 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-system-MemoryManagement-1": {
-    "pageName": "记忆管理",
-    "url": "http://localhost:5173/setting-system/index.html#/memory",
-    "description": "记忆管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
   "setting-system-MsgTemplate-0": {
     "pageName": "消息模板",
     "url": "http://localhost:5173/setting-system/index.html#/msg/template",
@@ -335,21 +250,6 @@
       "数据表格",
       "搜索框",
       "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-MsgList-1": {
-    "pageName": "消息列表",
-    "url": "http://localhost:5173/setting-system/index.html#/msg",
-    "description": "消息列表页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
       "分页组件"
     ],
     "apiEndpoints": [],
@@ -394,158 +294,6 @@
       "搜索框",
       "新增按钮",
       "操作按钮"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-app-0": {
-    "pageName": "智能体应用管理",
-    "url": "http://localhost:5173/setting-system/index.html#/app",
-    "description": "智能体应用管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-code-0": {
-    "pageName": "代码管理",
-    "url": "http://localhost:5173/setting-system/index.html#/code",
-    "description": "系统代码/字典管理页面，支持代码的增删改查",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-model-0": {
-    "pageName": "模型管理",
-    "url": "http://localhost:5173/setting-system/index.html#/model",
-    "description": "AI模型管理页面，配置和管理可用的模型",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-config-0": {
-    "pageName": "配置管理",
-    "url": "http://localhost:5173/setting-system/index.html#/config",
-    "description": "系统参数配置页面，管理键值对形式的配置项",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件",
-      "搜索框",
-      "新增按钮",
-      "操作按钮"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-datasource-0": {
-    "pageName": "数据源管理",
-    "url": "http://localhost:5173/setting-system/index.html#/datasource",
-    "description": "数据库连接管理页面，支持配置和测试数据库连接",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件",
-      "测试连接按钮"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-datause-0": {
-    "pageName": "基础数据访问控制",
-    "url": "http://localhost:5173/setting-system/index.html#/datause",
-    "description": "基础数据访问控制页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-third-party-system-0": {
-    "pageName": "第三方系统管理",
-    "url": "http://localhost:5173/setting-system/index.html#/third-party-system",
-    "description": "第三方系统管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-openclaw-0": {
-    "pageName": "智能体运行容器管理",
-    "url": "http://localhost:5173/setting-system/index.html#/openclaw",
-    "description": "智能体运行容器管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-wxbot-0": {
-    "pageName": "微信机器人用户管理",
-    "url": "http://localhost:5173/setting-system/index.html#/wxbot",
-    "description": "微信机器人用户管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-system-monitor-0": {
-    "pageName": "资源监控",
-    "url": "http://localhost:5173/setting-system/index.html#/monitor",
-    "description": "资源监控页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "操作按钮",
-      "分页组件"
     ],
     "apiEndpoints": [],
     "interactions": [],
@@ -1086,6 +834,132 @@
       "搜索框",
       "新增按钮",
       "操作按钮(编辑/删除)",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-TestPage-0": {
+    "pageName": "组件测试",
+    "url": "http://localhost:5173/index/index.html#/test/:name",
+    "description": "组件测试页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-__shallow__-1": {
+    "pageName": "/user",
+    "url": "http://localhost:5173/index/index.html#/user",
+    "description": "/user页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-Chat-2": {
+    "pageName": "对话",
+    "url": "http://localhost:5173/index/index.html#/chat",
+    "description": "对话页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-TestNav-3": {
+    "pageName": "组件测试导航",
+    "url": "http://localhost:5173/index/index.html#/test",
+    "description": "组件测试导航页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-Mobile-4": {
+    "pageName": "移动端对话",
+    "url": "http://localhost:5173/index/index.html#/mobile",
+    "description": "移动端对话页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-UserChat-0": {
+    "pageName": "智能对话",
+    "url": "http://localhost:5173/index/index.html#/user/chat",
+    "description": "智能对话页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-UserAgents-1": {
+    "pageName": "智能体组织",
+    "url": "http://localhost:5173/index/index.html#/user/agents",
+    "description": "智能体组织页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-UserDataTables-2": {
+    "pageName": "数据表",
+    "url": "http://localhost:5173/index/index.html#/user/data-tables",
+    "description": "数据表页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
+      "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "index-UserComponents-3": {
+    "pageName": "业务组件",
+    "url": "http://localhost:5173/index/index.html#/user/components",
+    "description": "业务组件页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "操作按钮",
       "分页组件"
     ],
     "apiEndpoints": [],
