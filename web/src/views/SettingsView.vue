@@ -249,20 +249,31 @@
             <span class="global-params-hint">配置一次，所有含该参数的页面自动生效</span>
           </div>
           <div v-if="showGlobalParams" class="global-params-body">
-            <div v-for="paramName in allDynamicParamNames" :key="paramName" class="global-param-row">
-              <code class="param-key">{{ paramName }}</code>
-              <input
-                :value="(globalParams[paramName] || []).join(', ')"
-                @change="saveGlobalParamItem(paramName, ($event.target as HTMLInputElement).value)"
-                :placeholder="'输入实际值，逗号分隔'"
-                class="inline-input"
-              />
-              <span class="param-status" v-if="(globalParams[paramName] || []).length">
-                已配 {{ (globalParams[paramName] || []).length }} 个值
-              </span>
-              <span class="param-status text-muted" v-else>
-                未配置，{{ paramUsageCount(paramName) }} 个页面将跳过
-              </span>
+            <div v-for="paramName in allDynamicParamNames" :key="paramName" class="global-param-item">
+              <div class="global-param-row">
+                <code class="param-key">{{ paramName }}</code>
+                <input
+                  :value="(globalParams[paramName] || []).join(', ')"
+                  @change="saveGlobalParamItem(paramName, ($event.target as HTMLInputElement).value)"
+                  :placeholder="'输入实际值，逗号分隔'"
+                  class="inline-input"
+                />
+                <span class="param-status" v-if="(globalParams[paramName] || []).length">
+                  已配 {{ (globalParams[paramName] || []).length }} 个值
+                </span>
+                <span class="param-status text-muted" v-else>
+                  未配置，{{ paramUsageCount(paramName) }} 个页面将跳过
+                </span>
+                <button class="btn btn-xs param-ref-toggle" @click="toggleParamRef(paramName)">
+                  {{ expandedParamRefs.has(paramName) ? '收起引用' : `引用: ${paramUsageCount(paramName)} 个页面` }}
+                </button>
+              </div>
+              <div v-if="expandedParamRefs.has(paramName)" class="param-ref-list">
+                <div v-for="p in pagesUsingParam(paramName)" :key="p.id" class="param-ref-item" @click="showPageDetail(p)">
+                  <span class="param-ref-name">{{ p.name || '(未命名)' }}</span>
+                  <code class="param-ref-path">{{ p.path }}</code>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -511,6 +522,7 @@ const showDiscoveryLog = ref(false)
 // 公共动态参数
 const globalParams = ref<Record<string, string[]>>({})
 const showGlobalParams = ref(true)
+const expandedParamRefs = ref(new Set<string>())
 // 页面详情
 const detailPage = ref<PageConfig | null>(null)
 const detailPageBaseUrl = ref('')
@@ -776,6 +788,25 @@ function paramUsageCount(paramName: string): number {
     }
   }
   return count
+}
+
+/** 获取使用某参数的所有页面 */
+function pagesUsingParam(paramName: string): PageConfig[] {
+  const result: PageConfig[] = []
+  for (const ps of pageManagerSets.value) {
+    for (const p of ps.pages) {
+      if (p.params && paramName in p.params) result.push(p)
+    }
+  }
+  return result
+}
+
+/** 切换参数引用列表展开/收起 */
+function toggleParamRef(paramName: string) {
+  const s = new Set(expandedParamRefs.value)
+  if (s.has(paramName)) s.delete(paramName)
+  else s.add(paramName)
+  expandedParamRefs.value = s
 }
 
 /** 保存单个公共参数 */
@@ -1549,6 +1580,46 @@ function showPageDetail(page: PageConfig) {
   font-size: 11px;
   color: #666;
   white-space: nowrap;
+}
+.param-ref-toggle {
+  margin-left: auto;
+  font-size: 10px !important;
+  color: #7c3aed !important;
+  background: #f5f3ff !important;
+}
+.param-ref-toggle:hover {
+  background: #ede9fe !important;
+}
+.param-ref-list {
+  margin: 4px 0 8px 68px;
+  padding: 6px 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.param-ref-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.param-ref-item:last-child {
+  border-bottom: none;
+}
+.param-ref-item:hover {
+  background: #f5f3ff;
+}
+.param-ref-name {
+  min-width: 100px;
+  color: #333;
+}
+.param-ref-path {
+  font-size: 11px;
+  color: #888;
 }
 .param-detail-list {
   display: flex;
