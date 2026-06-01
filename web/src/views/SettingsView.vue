@@ -36,6 +36,9 @@
             <div class="project-actions">
               <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
               <button class="btn btn-sm" @click="editProject(project)">编辑</button>
+              <button class="btn btn-sm btn-discover" @click="doDiscover(project.id)" :disabled="discoveringProject === project.id">
+                {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
+              </button>
               <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
                 {{ checkingProject === project.id ? '检测中...' : '检测' }}
               </button>
@@ -57,6 +60,16 @@
               class="check-badge" :class="result.ok ? 'ok' : 'err'">
               {{ key }}: {{ result.msg }}
             </span>
+          </div>
+          <!-- 发现进度面板 -->
+          <div v-if="discoverLogs[project.id]" class="discover-progress">
+            <div class="discover-progress-header">
+              <span>页面发现进度</span>
+              <span class="discover-stage">{{ discoverLogs[project.id].stage }}</span>
+            </div>
+            <div v-for="(log, idx) in discoverLogs[project.id].logs" :key="idx" class="discover-log">
+              {{ log }}
+            </div>
           </div>
         </div>
       </section>
@@ -244,6 +257,7 @@ import {
   deleteProject as apiDeleteProject,
   setDefaultProject as apiSetDefault,
   checkProject as apiCheckProject,
+  discoverProject as apiDiscoverProject,
   type TestProject,
   type ProjectCheckResult,
 } from '../api/projects'
@@ -274,7 +288,9 @@ const showProjectModal = ref(false)
 const editingProject = ref<TestProject | null>(null)
 const savingProject = ref(false)
 const checkingProject = ref<string | null>(null)
+const discoveringProject = ref<string | null>(null)
 const projectChecks = reactive<Record<string, ProjectCheckResult>>({})
+const discoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 
 const projectForm = reactive({
   name: '',
@@ -428,6 +444,33 @@ async function doCheckProject(id: string) {
     message.value = { type: 'error', text: '检测失败: ' + e.message }
   } finally {
     checkingProject.value = null
+  }
+}
+
+async function doDiscover(id: string) {
+  discoveringProject.value = id
+  discoverLogs[id] = { stage: 'init', logs: ['开始页面发现...'] }
+  message.value = null
+
+  try {
+    await apiDiscoverProject(id, 'runtime', (progress) => {
+      if (!discoverLogs[id]) discoverLogs[id] = { stage: '', logs: [] }
+      discoverLogs[id].stage = progress.stage
+      discoverLogs[id].logs.push(progress.message)
+    })
+
+    // 刷新项目列表
+    const projectsRes = await fetchProjects()
+    projects.value = projectsRes.data
+
+    message.value = { type: 'success', text: '页面发现完成' }
+  } catch (e: any) {
+    message.value = { type: 'error', text: '发现失败: ' + e.message }
+    if (discoverLogs[id]) {
+      discoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
+    }
+  } finally {
+    discoveringProject.value = null
   }
 }
 
@@ -739,6 +782,42 @@ async function doCheck() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.discover-progress {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #fafbff;
+  border: 1px solid #e0e0f0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.discover-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #667eea;
+}
+.discover-stage {
+  font-size: 11px;
+  background: #f0f0ff;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.discover-log {
+  color: #666;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.btn-discover {
+  background: #667eea !important;
+  color: #fff !important;
+}
+.btn-discover:hover:not(:disabled) {
+  background: #5a6fd6 !important;
 }
 .empty-projects {
   text-align: center;

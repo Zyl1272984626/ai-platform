@@ -47,8 +47,15 @@
             />
           </div>
         </div>
-        <!-- E2E 测试：模式/范围选择 + 并发控制 -->
+        <!-- E2E 测试：项目选择 + 模式/范围 + 并发控制 -->
         <div v-if="activeType === 'e2e'" class="agent-params">
+          <div class="param-row">
+            <label>目标项目</label>
+            <select v-model="selectedProjectId" @change="onProjectChange" class="param-input">
+              <option value="">请选择项目</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
           <div class="param-row">
             <label>测试模式</label>
             <select v-model="e2eMode" class="param-input">
@@ -59,14 +66,11 @@
           </div>
           <div class="param-row">
             <label>测试范围</label>
-            <select v-model="e2eScope" class="param-input">
-              <option value="admin-sys">系统管理 (6页)</option>
-              <option value="admin-all">Admin全部 (23页)</option>
-              <option value="setting-sys">系统设置 (14页)</option>
-              <option value="setting-app">应用设置 (26页)</option>
-              <option value="index-all">应用首页 (19页)</option>
-              <option value="chat">对话模块 (6页)</option>
-              <option value="all">全系统 (88页)</option>
+            <select v-model="e2eScope" class="param-input" :disabled="!selectedProjectId">
+              <option value="all">全部页面</option>
+              <option v-for="ps in currentPageSets" :key="ps.id" :value="ps.id">
+                {{ ps.name }}
+              </option>
             </select>
           </div>
         </div>
@@ -84,7 +88,7 @@
           </div>
         </div>
       </div>
-      <button class="btn-run" :disabled="activeType === 'agent' && !agentId.trim()" @click="startTest">
+      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId)" @click="startTest">
         ▶ 开始测试
       </button>
     </div>
@@ -199,6 +203,12 @@ import {
   getConcurrency, setConcurrency as apiSetConcurrency,
   type TestTypeInfo, type TestRun,
 } from '../api/tests'
+import {
+  getProjects as fetchProjects,
+  getProjectPages,
+  type TestProject,
+  type PageSet,
+} from '../api/projects'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -236,7 +246,13 @@ const userXgh = ref('')
 
 // E2E 测试参数
 const e2eMode = ref('standard')
-const e2eScope = ref('admin-sys')
+const e2eScope = ref('all')
+
+// 多项目支持
+const projects = ref<TestProject[]>([])
+const selectedProjectId = ref<string>('')
+const currentPageSets = ref<PageSet[]>([])
+const loadingPages = ref(false)
 
 // 并发控制
 const concurrencyVal = ref(2)
@@ -436,6 +452,7 @@ async function startTest() {
   if (activeType.value === 'e2e') {
     config.mode = e2eMode.value
     config.scope = e2eScope.value
+    config.projectId = selectedProjectId.value
   }
 
   try {
@@ -516,6 +533,19 @@ async function updateConcurrency() {
   } catch { /* ignore */ }
 }
 
+async function onProjectChange() {
+  currentPageSets.value = []
+  e2eScope.value = 'all'
+  if (!selectedProjectId.value) return
+
+  loadingPages.value = true
+  try {
+    const res = await getProjectPages(selectedProjectId.value)
+    currentPageSets.value = res.data || []
+  } catch { /* ignore */ }
+  loadingPages.value = false
+}
+
 function openReport(runId: string) {
   window.open(getReportUrl(runId), '_blank')
 }
@@ -524,13 +554,21 @@ function openReport(runId: string) {
 onMounted(async () => {
   try {
     // 先加载类型和 runs（cleanupStaleRuns 在 listTestRuns 内部执行）
-    const [types, r, concurrency] = await Promise.all([
+    const [types, r, concurrency, projRes] = await Promise.all([
       listTestTypes(),
       listTestRuns(),
       getConcurrency(),
+      fetchProjects(),
     ])
     testTypes.value = types
     runs.value = r
+    projects.value = projRes.data
+
+    // 自动选择默认项目
+    if (projects.value.length > 0 && !selectedProjectId.value) {
+      selectedProjectId.value = projects.value[0].id
+      onProjectChange()
+    }
 
     // 之后再查 running，确保拿到清理后的数据
     const running = await listRunningTests()

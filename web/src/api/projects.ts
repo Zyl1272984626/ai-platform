@@ -84,7 +84,60 @@ export function checkProject(id: string) {
   return api.post<ProjectCheckResult>(`/projects/${id}/check`)
 }
 
-/** 触发页面发现 */
-export function discoverProject(id: string) {
-  return api.post(`/projects/${id}/discover`)
+/** 触发页面发现 — SSE 流式返回进度 */
+export function discoverProject(
+  id: string,
+  mode: 'runtime' | 'source' | 'both' = 'runtime',
+  onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+): Promise<{ stage: string; message: string }> {
+  return new Promise((resolve, reject) => {
+    const es = new EventSource(`/api/projects/${id}/discover?mode=${mode}`, { withCredentials: true })
+
+    // POST body 不能通过 EventSource 传递，改用 fetch + SSE reader
+    es.close()
+
+    fetch(`/api/projects/${id}/discover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }).then(async (response) => {
+      if (!response.ok) {
+        reject(new Error(`HTTP ${response.status}`))
+        return
+      }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        reject(new Error('No response body'))
+        return
+      }
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              onProgress?.(data)
+              if (data.stage === 'complete' || data.stage === 'done') {
+                resolve(data)
+              } else if (data.stage === 'error') {
+                reject(new Error(data.message))
+                return
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+
+      resolve({ stage: 'complete', message: '发现完成' })
+    }).catch(reject)
+  })
 }

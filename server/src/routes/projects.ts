@@ -196,20 +196,42 @@ projectsRouter.post('/:id/check', async (req: Request, res: Response) => {
   res.json(results);
 });
 
-// ========== 页面发现（触发） ==========
+// ========== 页面发现（触发 + SSE） ==========
 
-/** 触发页面发现 — 返回 task ID，进度通过 SSE 推送 */
-projectsRouter.post('/:id/discover', (req: Request, res: Response) => {
+/** 触发页面发现 — 直接开始，通过 SSE 实时推送进度 */
+projectsRouter.post('/:id/discover', async (req: Request, res: Response) => {
   const project = getProjectById(req.params.id);
   if (!project) {
     res.status(404).json({ error: '项目不存在' });
     return;
   }
 
-  // 发现逻辑在 page-discovery.ts 中实现
-  // 这里先返回确认，实际发现通过 SSE stream 接口
-  res.json({
-    projectId: project.id,
-    message: '请使用 SSE 接口监听发现进度: GET /api/projects/:id/discover/stream',
-  });
+  const mode = (req.body?.mode as string) || 'runtime';
+
+  // 设置 SSE 响应头
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch { /* client disconnected */ }
+  };
+
+  try {
+    const { discoverPages } = await import('../services/page-discovery.js');
+
+    await discoverPages(project.id, mode as any, (progress) => {
+      sendSSE(progress);
+    });
+
+    sendSSE({ stage: 'complete', message: '发现流程结束' });
+  } catch (err: any) {
+    sendSSE({ stage: 'error', message: err.message });
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
+  }
 });

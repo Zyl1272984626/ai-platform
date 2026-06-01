@@ -11,7 +11,7 @@ import { v4 as uuid } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import net from 'net';
-import { AI_PLATFORM_ROOT, getConfig } from './config.js';
+import { AI_PLATFORM_ROOT, getConfig, getProjectById, type TestProject, type PageConfig } from './config.js';
 import { testBus } from './test-events.js';
 
 // ========== 类型 ==========
@@ -99,16 +99,33 @@ function checkPort(port: number, host = 'localhost'): Promise<boolean> {
   });
 }
 
-async function preflightCheck(type: TestType): Promise<string | null> {
+async function preflightCheck(type: TestType, config?: Record<string, unknown>): Promise<string | null> {
   if (type !== 'e2e') return null;
-  const cfg = getConfig();
-  const checks = [
-    { port: cfg.mainFrontendPort, name: `主系统前端 (localhost:${cfg.mainFrontendPort})` },
-    { port: cfg.mainBackendPort, name: `主系统后端 (localhost:${cfg.mainBackendPort})` },
-  ];
-  for (const c of checks) {
-    const ok = await checkPort(c.port);
-    if (!ok) return `${c.name} 未启动，请先启动主系统后再执行 E2E 测试`;
+
+  // 如果有项目配置，检测项目的前端/后端可达性
+  const projectId = config?.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+
+  if (project) {
+    try {
+      const resp = await fetch(project.baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      if (!resp.ok && resp.status !== 200) {
+        return `项目 ${project.name} 前端不可达 (${project.baseUrl})`;
+      }
+    } catch {
+      return `项目 ${project.name} 前端不可达 (${project.baseUrl})`;
+    }
+  } else {
+    // 兼容旧逻辑
+    const cfg = getConfig();
+    const checks = [
+      { port: cfg.mainFrontendPort, name: `主系统前端 (localhost:${cfg.mainFrontendPort})` },
+      { port: cfg.mainBackendPort, name: `主系统后端 (localhost:${cfg.mainBackendPort})` },
+    ];
+    for (const c of checks) {
+      const ok = await checkPort(c.port);
+      if (!ok) return `${c.name} 未启动，请先启动主系统后再执行 E2E 测试`;
+    }
   }
   return null;
 }
@@ -345,8 +362,16 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   const { query } = await import('@anthropic-ai/claude-code');
   console.log('[E2E] SDK 加载成功');
 
-  // 加载 e2e-page-test Skill
-  const skillPath = path.resolve(getConfig().projectRoot, '.claude', 'skills', 'e2e-page-test', 'SKILL.md');
+  // 获取项目配置
+  const projectId = config.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+
+  // 解析 Skill 路径
+  const skillBasePath = project?.skillPath
+    ? path.dirname(project.skillPath)
+    : path.resolve(getConfig().projectRoot, '.claude', 'skills', 'e2e-page-test');
+  const skillPath = path.resolve(skillBasePath, 'SKILL.md');
+
   let skillContent = '';
   try {
     skillContent = fs.readFileSync(skillPath, 'utf-8');
@@ -358,13 +383,32 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   }
 
   const mode = (config.mode as string) || 'standard';
-  const scope = (config.scope as string) || 'admin-sys';
+  const scope = (config.scope as string) || 'all';
 
-  const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试 ${scope} 范围的页面。
+  // 从项目配置解析页面列表
+  let pageListPrompt = '';
+  if (project) {
+    const pages = resolvePages(project, scope);
+    const baseUrl = project.baseUrl;
+    pageListPrompt = `
+## 当前项目信息
+- 项目名称: ${project.name}
+- 前端地址: ${baseUrl}
+- 后端 API: ${project.apiBaseUrl}
+- 登录页: ${baseUrl}${project.loginUrl}
+- 登录凭据: ${project.username} / ${project.password}
 
+## 待测试页面 (${pages.length}页)
+${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
+`;
+  }
+
+  const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试${project ? ` ${project.name}` : ''} ${scope} 范围的页面。
+
+${pageListPrompt}
 输入参数：
 \`\`\`json
-{"mode": "${mode}", "scope": "${scope}"}
+{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}}
 \`\`\`
 
 请严格按照 SKILL.md 中的流程执行：登录 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
@@ -385,10 +429,11 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 
   try {
     console.log('[E2E] 调用 query()...');
+    const e2eCwd = project?.sourcePath || getConfig().projectRoot;
     const response = query({
       prompt,
       options: {
-        cwd: getConfig().projectRoot,
+        cwd: e2eCwd,
         allowedTools: [
           'Read', 'Write', 'Bash', 'Glob', 'Grep',
           'mcp__playwright__browser_navigate',
@@ -530,6 +575,15 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   testBus.emit('test:update', { suiteId: suite.id, caseId: mainCase.id, status: mainCase.status, duration: mainCase.duration });
 }
 
+/** 根据项目配置和 scope 解析出要测试的页面列表 */
+function resolvePages(project: TestProject, scope: string): PageConfig[] {
+  if (scope === 'all') {
+    return project.pageSets.flatMap(ps => ps.pages);
+  }
+  const pageSet = project.pageSets.find(ps => ps.id === scope);
+  return pageSet?.pages || [];
+}
+
 // ========== 前端单元测试 ==========
 
 async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
@@ -644,8 +698,11 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
       break;
     case 'e2e': {
       const mode = (config.mode as string) || 'standard';
-      const scope = (config.scope as string) || 'admin-sys';
-      cases.push({ id: uuid(), name: `E2E ${mode} 测试 (${scope})`, type, status: 'pending' });
+      const scope = (config.scope as string) || 'all';
+      const projectId = config.projectId as string | undefined;
+      const project = projectId ? getProjectById(projectId) : undefined;
+      const label = project ? `${project.name} ${scope}` : scope;
+      cases.push({ id: uuid(), name: `E2E ${mode} 测试 (${label})`, type, status: 'pending' });
       break;
     }
     case 'frontend':
@@ -666,7 +723,7 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
 
   const suite: TestSuite = {
     id: uuid(),
-    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? `E2E页面(${(config.scope as string) || 'admin-sys'})` : type === 'frontend' ? '前端单元' : 'API接口'}测试`,
+    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : 'API接口'}测试`,
     type,
     status: 'pending',
     cases,
@@ -684,7 +741,7 @@ export async function executeTestRun(suiteId: string): Promise<TestSuite> {
   if (!suite) throw new Error('Test run not found');
 
   // 端口预检
-  const checkError = await preflightCheck(suite.type);
+  const checkError = await preflightCheck(suite.type, suite.config);
   if (checkError) {
     suite.status = 'error';
     for (const tc of suite.cases) {
