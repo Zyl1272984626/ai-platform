@@ -49,6 +49,7 @@ export interface TestProject {
   // 以下字段从独立文件读取，不再内联到主配置
   pageSets?: PageSet[];
   discoveredAt?: string;
+  globalParams?: Record<string, string[]>;   // 公共动态参数，如 { ":appId": ["base_app"] }
 }
 
 export interface PlatformConfig {
@@ -109,6 +110,7 @@ export interface ProjectPageData {
   pageSets: PageSet[];
   discoveredAt?: string;
   totalPages?: number;
+  globalParams?: Record<string, string[]>;   // 公共动态参数
 }
 
 /** 从独立文件读取项目页面数据 */
@@ -133,6 +135,19 @@ export function saveProjectPages(projectId: string, data: ProjectPageData): void
     JSON.stringify(data, null, 2),
     'utf-8',
   );
+}
+
+/** 读取项目公共参数 */
+export function getGlobalParams(projectId: string): Record<string, string[]> {
+  const data = loadProjectPages(projectId);
+  return data.globalParams || {};
+}
+
+/** 保存项目公共参数 */
+export function saveGlobalParams(projectId: string, params: Record<string, string[]>): void {
+  const data = loadProjectPages(projectId);
+  data.globalParams = params;
+  saveProjectPages(projectId, data);
 }
 
 /** 保存原始发现数据到独立文件 */

@@ -570,7 +570,9 @@ function resolvePages(project: TestProject, scope: string): PageConfig[] {
     ? (project.pageSets || []).flatMap(ps => ps.pages)
     : (project.pageSets || []).find(ps => ps.id === scope)?.pages || [];
 
+  const globalParams = project.globalParams || {};
   const expanded: PageConfig[] = [];
+
   for (const page of rawPages) {
     // 无动态参数，直接使用
     if (!page.hasDynamicParams || !page.params) {
@@ -578,10 +580,15 @@ function resolvePages(project: TestProject, scope: string): PageConfig[] {
       continue;
     }
 
+    // 合并参数：页面级别覆盖公共级别（页面有值用页面的，否则用公共的）
+    const mergedParams: Record<string, string[]> = {};
+    for (const [param, pageValues] of Object.entries(page.params)) {
+      mergedParams[param] = pageValues.length > 0 ? pageValues : (globalParams[param] || []);
+    }
+
     // 检查所有参数是否都有值
-    const allConfigured = Object.values(page.params).every(values => values.length > 0);
+    const allConfigured = Object.values(mergedParams).every(values => values.length > 0);
     if (!allConfigured) {
-      // 参数未配置，保留原页面但标记
       expanded.push({
         ...page,
         name: `${page.name} (参数未配置，已跳过)`,
@@ -590,7 +597,7 @@ function resolvePages(project: TestProject, scope: string): PageConfig[] {
     }
 
     // 展开参数组合（笛卡尔积）
-    const combinations = generateParamCombinations(page.params);
+    const combinations = generateParamCombinations(mergedParams);
     for (const combo of combinations) {
       let resolvedUrl = page.url;
       let resolvedPath = page.path;

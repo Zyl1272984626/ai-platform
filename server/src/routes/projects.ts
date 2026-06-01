@@ -13,6 +13,8 @@ import {
   updateProjectPages,
   loadProjectPages,
   saveProjectPageSets,
+  getGlobalParams,
+  saveGlobalParams,
   type TestProject,
   type PageSet,
   type PageConfig,
@@ -307,6 +309,23 @@ projectsRouter.post('/:id/pages/batch-set-param', (req: Request, res: Response) 
 
   saveProjectPageSets(req.params.id, pageData.pageSets);
   res.json({ success: true, updatedCount });
+});
+
+/** 获取项目公共动态参数 */
+projectsRouter.get('/:id/global-params', (req: Request, res: Response) => {
+  const params = getGlobalParams(req.params.id);
+  res.json(params);
+});
+
+/** 保存项目公共动态参数 */
+projectsRouter.post('/:id/global-params', (req: Request, res: Response) => {
+  const { params } = req.body;
+  if (!params || typeof params !== 'object') {
+    res.status(400).json({ error: '缺少 params' });
+    return;
+  }
+  saveGlobalParams(req.params.id, params);
+  res.json({ success: true });
 });
 
 /** 删除页面 */

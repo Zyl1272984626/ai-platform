@@ -139,6 +139,16 @@ export function batchSetParam(projectId: string, paramName: string, values: stri
   return api.post(`/projects/${projectId}/pages/batch-set-param`, { paramName, values, scope })
 }
 
+/** 获取项目公共动态参数 */
+export function getGlobalParams(projectId: string) {
+  return api.get<Record<string, string[]>>(`/projects/${projectId}/global-params`)
+}
+
+/** 保存项目公共动态参数 */
+export function saveGlobalParams(projectId: string, params: Record<string, string[]>) {
+  return api.post(`/projects/${projectId}/global-params`, { params })
+}
+
 /** 删除页面 */
 export function deletePage(projectId: string, pageId: string) {
   return api.post(`/projects/${projectId}/pages/delete`, { pageId })

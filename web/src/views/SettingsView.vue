@@ -242,6 +242,31 @@
           </button>
         </p>
 
+        <!-- 公共动态参数 -->
+        <div v-if="allDynamicParamNames.length > 0" class="global-params-section">
+          <div class="global-params-header" @click="showGlobalParams = !showGlobalParams">
+            <span>{{ showGlobalParams ? '▼' : '▶' }} 公共动态参数 ({{ allDynamicParamNames.length }})</span>
+            <span class="global-params-hint">配置一次，所有含该参数的页面自动生效</span>
+          </div>
+          <div v-if="showGlobalParams" class="global-params-body">
+            <div v-for="paramName in allDynamicParamNames" :key="paramName" class="global-param-row">
+              <code class="param-key">{{ paramName }}</code>
+              <input
+                :value="(globalParams[paramName] || []).join(', ')"
+                @change="saveGlobalParamItem(paramName, ($event.target as HTMLInputElement).value)"
+                :placeholder="'输入实际值，逗号分隔'"
+                class="inline-input"
+              />
+              <span class="param-status" v-if="(globalParams[paramName] || []).length">
+                已配 {{ (globalParams[paramName] || []).length }} 个值
+              </span>
+              <span class="param-status text-muted" v-else>
+                未配置，{{ paramUsageCount(paramName) }} 个页面将跳过
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- 发现日志 -->
         <div v-if="showDiscoveryLog && discoveryEntries.length" class="discovery-log-panel">
           <div v-if="discoverySourceEntries.length" class="discovery-source-info">
@@ -426,6 +451,8 @@ import {
   addPageToSet as apiAddPageToSet,
   updatePage as apiUpdatePage,
   deletePage as apiDeletePage,
+  getGlobalParams,
+  saveGlobalParams as apiSaveGlobalParams,
   type TestProject,
   type ProjectCheckResult,
   type PageSet,
@@ -481,6 +508,9 @@ const renameValue = ref('')
 const discoveryEntries = ref<{ name: string; status: string; routeCount: number; error?: string }[]>([])
 const discoverySourceEntries = ref<string[]>([])
 const showDiscoveryLog = ref(false)
+// 公共动态参数
+const globalParams = ref<Record<string, string[]>>({})
+const showGlobalParams = ref(true)
 // 页面详情
 const detailPage = ref<PageConfig | null>(null)
 const detailPageBaseUrl = ref('')
@@ -724,6 +754,42 @@ const pageManagerTotalPages = computed(() => {
   return pageManagerSets.value.reduce((s, ps) => s + ps.pages.length, 0)
 })
 
+/** 所有页面中出现的动态参数名（去重） */
+const allDynamicParamNames = computed(() => {
+  const names = new Set<string>()
+  for (const ps of pageManagerSets.value) {
+    for (const p of ps.pages) {
+      if (p.params) {
+        for (const k of Object.keys(p.params)) names.add(k)
+      }
+    }
+  }
+  return Array.from(names).sort()
+})
+
+/** 某个参数被多少页面使用 */
+function paramUsageCount(paramName: string): number {
+  let count = 0
+  for (const ps of pageManagerSets.value) {
+    for (const p of ps.pages) {
+      if (p.params && paramName in p.params) count++
+    }
+  }
+  return count
+}
+
+/** 保存单个公共参数 */
+async function saveGlobalParamItem(paramName: string, valueStr: string) {
+  const values = valueStr.split(',').map(v => v.trim()).filter(Boolean)
+  const updated = { ...globalParams.value, [paramName]: values }
+  try {
+    await apiSaveGlobalParams(pageManagerProjectId.value, updated)
+    globalParams.value = updated
+  } catch (e: any) {
+    message.value = { type: 'error', text: '保存参数失败: ' + e.message }
+  }
+}
+
 async function openPageManager(project: TestProject) {
   pageManagerProjectId.value = project.id
   pageManagerProjectName.value = project.name
@@ -740,13 +806,15 @@ async function openPageManager(project: TestProject) {
   showDiscoveryLog.value = false
 
   try {
-    const [pagesRes, logRes] = await Promise.all([
+    const [pagesRes, logRes, paramsRes] = await Promise.all([
       getProjectPages(project.id),
       getDiscoveryLog(project.id),
+      getGlobalParams(project.id).catch(() => ({ data: {} })),
     ])
     pageManagerSets.value = pagesRes.data
     discoveryEntries.value = logRes.data.entries || []
     discoverySourceEntries.value = logRes.data.sourceEntries || []
+    globalParams.value = paramsRes.data || {}
   } catch (e: any) {
     message.value = { type: 'error', text: '加载页面数据失败: ' + e.message }
   } finally {
@@ -1434,6 +1502,52 @@ function showPageDetail(page: PageConfig) {
   max-width: 250px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-params-section {
+  margin: 8px 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.global-params-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f4ff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+.global-params-header:hover {
+  background: #e8edff;
+}
+.global-params-hint {
+  font-size: 11px;
+  color: #888;
+  font-weight: 400;
+}
+.global-params-body {
+  padding: 8px 12px;
+}
+.global-param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.param-key {
+  min-width: 60px;
+  font-size: 13px;
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.param-status {
+  font-size: 11px;
+  color: #666;
   white-space: nowrap;
 }
 .param-detail-list {
