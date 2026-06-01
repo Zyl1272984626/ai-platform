@@ -564,13 +564,67 @@ ${pageListPrompt}
   testBus.emit('test:update', { suiteId: suite.id, caseId: mainCase.id, status: mainCase.status, duration: mainCase.duration });
 }
 
-/** 根据项目配置和 scope 解析出要测试的页面列表 */
+/** 根据项目配置和 scope 解析出要测试的页面列表，展开动态参数 */
 function resolvePages(project: TestProject, scope: string): PageConfig[] {
-  if (scope === 'all') {
-    return (project.pageSets || []).flatMap(ps => ps.pages);
+  const rawPages = scope === 'all'
+    ? (project.pageSets || []).flatMap(ps => ps.pages)
+    : (project.pageSets || []).find(ps => ps.id === scope)?.pages || [];
+
+  const expanded: PageConfig[] = [];
+  for (const page of rawPages) {
+    // 无动态参数，直接使用
+    if (!page.hasDynamicParams || !page.params) {
+      expanded.push(page);
+      continue;
+    }
+
+    // 检查所有参数是否都有值
+    const allConfigured = Object.values(page.params).every(values => values.length > 0);
+    if (!allConfigured) {
+      // 参数未配置，保留原页面但标记
+      expanded.push({
+        ...page,
+        name: `${page.name} (参数未配置，已跳过)`,
+      });
+      continue;
+    }
+
+    // 展开参数组合（笛卡尔积）
+    const combinations = generateParamCombinations(page.params);
+    for (const combo of combinations) {
+      let resolvedUrl = page.url;
+      let resolvedPath = page.path;
+      for (const [param, value] of Object.entries(combo)) {
+        resolvedUrl = resolvedUrl.replace(param, value);
+        resolvedPath = resolvedPath.replace(param, value);
+      }
+      expanded.push({
+        ...page,
+        id: `${page.id}-${Object.values(combo).join('-')}`,
+        name: `${page.name} (${Object.values(combo).join('/')})`,
+        url: resolvedUrl,
+        path: resolvedPath,
+        hasDynamicParams: false,
+        params: undefined,
+      });
+    }
   }
-  const pageSet = (project.pageSets || []).find(ps => ps.id === scope);
-  return pageSet?.pages || [];
+  return expanded;
+}
+
+/** 生成参数的笛卡尔积组合 */
+function generateParamCombinations(params: Record<string, string[]>): Record<string, string>[] {
+  const entries = Object.entries(params);
+  if (entries.length === 0) return [{}];
+  const [key, values] = entries[0];
+  const rest = generateParamCombinations(Object.fromEntries(entries.slice(1)));
+  const result: Record<string, string>[] = [];
+  for (const value of values) {
+    for (const combo of rest) {
+      result.push({ [key]: value, ...combo });
+    }
+  }
+  return result;
 }
 
 // ========== 前端单元测试 ==========

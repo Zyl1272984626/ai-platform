@@ -311,6 +311,22 @@
                         移动到: {{ t.name }}
                       </option>
                     </select>
+                    <!-- 动态参数编辑区 -->
+                    <div v-if="Object.keys(editPageForm.params).length > 0" class="param-edit-section">
+                      <div class="param-edit-label">动态参数:</div>
+                      <div v-for="(values, paramName) in editPageForm.params" :key="paramName" class="param-edit-row">
+                        <span class="param-name">{{ paramName }}</span>
+                        <input
+                          :value="values.join(', ')"
+                          @input="editPageForm.params[paramName] = ($event.target as HTMLInputElement).value.split(',').map((v: string) => v.trim()).filter(Boolean)"
+                          :placeholder="'输入实际值，逗号分隔'"
+                          class="inline-input param-input"
+                        />
+                        <span v-if="values.length" class="param-preview">
+                          {{ page.path.replace(paramName, values[0]) }}
+                        </span>
+                      </div>
+                    </div>
                     <button class="btn btn-xs btn-save" @click="doEditPage">保存</button>
                     <button class="btn btn-xs btn-cancel" @click="editingPage = null">取消</button>
                   </div>
@@ -318,6 +334,9 @@
                 <template v-else>
                   <span class="page-name">{{ page.name }}</span>
                   <span class="page-path" :title="page.url">{{ page.path }}</span>
+                  <span v-if="page.hasDynamicParams" class="badge badge-dynamic" title="含动态参数，需配置实际值">动态参数</span>
+                  <span v-if="page.hasDynamicParams && page.params && Object.values(page.params).some(v => v.length > 0)" class="badge badge-ok">已配置</span>
+                  <span v-if="page.hasDynamicParams && page.params && Object.values(page.params).every(v => v.length === 0)" class="badge badge-warn">未配置</span>
                   <div class="page-actions">
                     <button class="btn btn-xs btn-open" @click="openPageUrl(page)" title="在新标签页打开">打开</button>
                     <button class="btn btn-xs" @click="showPageDetail(page)" title="查看详情">详情</button>
@@ -361,6 +380,16 @@
           <div v-if="detailPage.description" class="page-detail-row">
             <label>描述</label>
             <span>{{ detailPage.description }}</span>
+          </div>
+          <div v-if="detailPage.hasDynamicParams && detailPage.params" class="page-detail-row">
+            <label>动态参数</label>
+            <div class="param-detail-list">
+              <div v-for="(values, paramName) in detailPage.params" :key="paramName" class="param-detail-item">
+                <code>{{ paramName }}</code> =
+                <span v-if="values.length">{{ values.join(', ') }}</span>
+                <span v-else class="text-muted">未配置</span>
+              </div>
+            </div>
           </div>
           <div class="page-detail-row">
             <label>页面 ID</label>
@@ -444,7 +473,7 @@ const addingToSetId = ref<string | null>(null)
 const newPageForm = reactive({ name: '', url: '', path: '', description: '' })
 // 编辑页面
 const editingPage = ref<PageConfig | null>(null)
-const editPageForm = reactive({ name: '', url: '', path: '', description: '', targetSetId: '' })
+const editPageForm = reactive({ name: '', url: '', path: '', description: '', targetSetId: '', params: {} as Record<string, string[]> })
 // 重命名页面集
 const renamingSetId = ref<string | null>(null)
 const renameValue = ref('')
@@ -816,6 +845,8 @@ function startEditPage(page: PageConfig, currentSetId: string) {
   editPageForm.path = page.path
   editPageForm.description = page.description || ''
   editPageForm.targetSetId = ''
+  // 深拷贝 params，避免直接修改原对象
+  editPageForm.params = page.params ? JSON.parse(JSON.stringify(page.params)) : {}
 }
 
 async function doEditPage() {
@@ -827,6 +858,7 @@ async function doEditPage() {
       url: editPageForm.url.trim(),
       path: editPageForm.path.trim(),
       description: editPageForm.description.trim(),
+      params: Object.keys(editPageForm.params).length > 0 ? editPageForm.params : undefined,
       targetSetId: editPageForm.targetSetId || undefined,
     })
     // 如果移动了页面，需要刷新整个列表
@@ -840,6 +872,7 @@ async function doEditPage() {
       page.url = editPageForm.url.trim()
       page.path = editPageForm.path.trim()
       page.description = editPageForm.description.trim()
+      page.params = Object.keys(editPageForm.params).length > 0 ? JSON.parse(JSON.stringify(editPageForm.params)) : undefined
     }
     editingPage.value = null
   } catch (e: any) {
@@ -1365,6 +1398,69 @@ function showPageDetail(page: PageConfig) {
   background: #fafbff;
   border-radius: 4px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.param-edit-section {
+  width: 100%;
+  background: #f5f5ff;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 2px 0;
+}
+.param-edit-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+.param-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.param-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  min-width: 50px;
+}
+.param-input {
+  flex: 1;
+  min-width: 150px;
+}
+.param-preview {
+  font-size: 11px;
+  color: #888;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.param-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.param-detail-item {
+  font-size: 13px;
+}
+.text-muted {
+  color: #999;
+  font-style: italic;
+}
+.badge-dynamic {
+  background: #ede9fe;
+  color: #7c3aed;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.badge-ok {
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
 }
 .move-select {
   padding: 4px 6px;

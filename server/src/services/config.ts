@@ -21,6 +21,8 @@ export interface PageConfig {
   url: string;
   path: string;
   description?: string;
+  hasDynamicParams?: boolean;                // 路径是否含动态参数（:xxx）
+  params?: Record<string, string[]>;         // 动态参数映射，如 { ":appId": ["base_app"] }
 }
 
 export interface PageSet {

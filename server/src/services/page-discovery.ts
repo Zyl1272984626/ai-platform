@@ -482,12 +482,21 @@ function groupRoutes(routesMap: Record<string, EntryRoutes>): { pageSets: PageSe
         entry,
         relatedEntries: related.length > 0 ? related : undefined,
         suggestSplit,
-        pages: routes.map((r, i) => ({
-          id: `${entry}-${r.name || groupId}-${i}`,
-          name: r.title,
-          url: r.concreteUrl,
-          path: r.path,
-        })),
+        pages: routes.map((r, i) => {
+          // 从路径提取动态参数名（如 :appId, :id）
+          const paramNames = r.path.match(/:\w+/g) || [];
+          const hasDynamicParams = paramNames.length > 0;
+          return {
+            id: `${entry}-${r.name || groupId}-${i}`,
+            name: r.title,
+            url: r.concreteUrl,
+            path: r.path,
+            hasDynamicParams: hasDynamicParams || undefined,
+            params: hasDynamicParams
+              ? Object.fromEntries(paramNames.map(p => [p, []]))
+              : undefined,
+          };
+        }),
       });
     }
 

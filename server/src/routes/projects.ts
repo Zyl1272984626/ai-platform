@@ -227,7 +227,7 @@ projectsRouter.post('/:id/page-sets/:setId/pages/add', (req: Request, res: Respo
 
 /** 更新页面 */
 projectsRouter.post('/:id/pages/update', (req: Request, res: Response) => {
-  const { pageId, name, url, path, description, targetSetId } = req.body;
+  const { pageId, name, url, path, description, targetSetId, params } = req.body;
   if (!pageId) {
     res.status(400).json({ error: '缺少 pageId' });
     return;
@@ -253,12 +253,14 @@ projectsRouter.post('/:id/pages/update', (req: Request, res: Response) => {
           url: url || page.url,
           path: path || page.path,
           description: description !== undefined ? description : page.description,
+          params: params !== undefined ? params : page.params,
         });
       } else {
         if (name) page.name = name;
         if (url) page.url = url;
         if (path) page.path = path;
         if (description !== undefined) page.description = description;
+        if (params !== undefined) page.params = params;
       }
       found = true;
       break;
@@ -272,6 +274,39 @@ projectsRouter.post('/:id/pages/update', (req: Request, res: Response) => {
 
   saveProjectPageSets(req.params.id, pageData.pageSets);
   res.json({ success: true });
+});
+
+/** 批量设置动态参数值（为项目中所有含该参数的页面统一设置） */
+projectsRouter.post('/:id/pages/batch-set-param', (req: Request, res: Response) => {
+  const { paramName, values, scope } = req.body;
+  if (!paramName || !Array.isArray(values)) {
+    res.status(400).json({ error: '缺少 paramName 或 values' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  let updatedCount = 0;
+
+  const targetSets = scope
+    ? pageData.pageSets.filter(ps => ps.id === scope)
+    : pageData.pageSets;
+
+  for (const set of targetSets) {
+    for (const page of set.pages) {
+      if (page.params && paramName in page.params) {
+        page.params[paramName] = values;
+        updatedCount++;
+      }
+    }
+  }
+
+  if (updatedCount === 0) {
+    res.status(404).json({ error: `未找到含参数 ${paramName} 的页面` });
+    return;
+  }
+
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json({ success: true, updatedCount });
 });
 
 /** 删除页面 */

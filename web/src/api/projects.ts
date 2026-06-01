@@ -8,6 +8,8 @@ export interface PageConfig {
   url: string
   path: string
   description?: string
+  hasDynamicParams?: boolean
+  params?: Record<string, string[]>
 }
 
 export interface PageSet {
@@ -126,9 +128,15 @@ export function updatePage(projectId: string, data: {
   url?: string
   path?: string
   description?: string
+  params?: Record<string, string[]>
   targetSetId?: string
 }) {
   return api.post(`/projects/${projectId}/pages/update`, data)
+}
+
+/** 批量设置动态参数值 */
+export function batchSetParam(projectId: string, paramName: string, values: string[], scope?: string) {
+  return api.post(`/projects/${projectId}/pages/batch-set-param`, { paramName, values, scope })
 }
 
 /** 删除页面 */
