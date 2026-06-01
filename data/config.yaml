@@ -4,7 +4,7 @@
 
 # 主系统路径
 project:
-  root: "C:/FengSuKeJi/agent"
+  root: "E:/project/agent1"
   backend: "${project.root}/backend"
   frontend: "${project.root}/frontend"
 

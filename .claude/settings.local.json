@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "mcp__zai-mcp-server__diagnose_error_screenshot",
+      "Bash(jar tf:*)",
+      "Bash(jar:*)"
+    ]
+  }
+}
