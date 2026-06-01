@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../data');
 const CONFIG_FILE = path.join(DATA_DIR, 'platform-config.json');
+const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 
 // ========== 类型定义 ==========
 
@@ -26,6 +27,9 @@ export interface PageSet {
   id: string;
   name: string;
   description?: string;
+  entry?: string;         // 所属子应用入口
+  relatedEntries?: string[]; // 关联的子应用入口
+  suggestSplit?: boolean; // 建议拆分标记
   pages: PageConfig[];
 }
 
@@ -39,10 +43,10 @@ export interface TestProject {
   password: string;
   sourcePath?: string;
   skillPath?: string;
-  pageSets: PageSet[];
-  discoveredAt?: string;
-  discoveryResult?: any;
   status: 'active' | 'inactive';
+  // 以下字段从独立文件读取，不再内联到主配置
+  pageSets?: PageSet[];
+  discoveredAt?: string;
 }
 
 export interface PlatformConfig {
@@ -91,6 +95,55 @@ const DEFAULT_CONFIG: PlatformConfig = {
 /** 运行时配置缓存 */
 let config: PlatformConfig = { ...DEFAULT_CONFIG, projects: [...DEFAULT_CONFIG.projects] };
 
+// ========== 项目独立文件读写 ==========
+
+/** 获取项目数据目录 */
+function getProjectDir(projectId: string): string {
+  return path.join(PROJECTS_DIR, projectId);
+}
+
+/** 项目页面数据结构 */
+export interface ProjectPageData {
+  pageSets: PageSet[];
+  discoveredAt?: string;
+  totalPages?: number;
+}
+
+/** 从独立文件读取项目页面数据 */
+export function loadProjectPages(projectId: string): ProjectPageData {
+  const filePath = path.join(getProjectDir(projectId), 'project.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+  } catch (e: any) {
+    console.warn(`[Config] 读取项目页面数据失败 (${projectId}):`, e.message);
+  }
+  return { pageSets: [] };
+}
+
+/** 将项目页面数据写入独立文件 */
+export function saveProjectPages(projectId: string, data: ProjectPageData): void {
+  const dir = getProjectDir(projectId);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'project.json'),
+    JSON.stringify(data, null, 2),
+    'utf-8',
+  );
+}
+
+/** 保存原始发现数据到独立文件 */
+export function saveDiscoveryResult(projectId: string, discoveryResult: any): void {
+  const dir = getProjectDir(projectId);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'discovery-result.json'),
+    JSON.stringify(discoveryResult, null, 2),
+    'utf-8',
+  );
+}
+
 // ========== 旧配置迁移 ==========
 
 function migrateConfig(saved: any): PlatformConfig {
@@ -131,6 +184,33 @@ export function loadConfig(): PlatformConfig {
       config = migrateConfig(saved);
       console.log('[Config] 从文件加载配置:', CONFIG_FILE);
       console.log(`[Config] 已配置 ${config.projects.length} 个项目`);
+
+      // 自动迁移：将内联的 pageSets/discoveryResult 拆分到独立文件
+      let migrated = false;
+      for (const project of config.projects) {
+        if ((project as any).pageSets && (project as any).pageSets.length > 0) {
+          const pageData: ProjectPageData = {
+            pageSets: (project as any).pageSets,
+            discoveredAt: (project as any).discoveredAt,
+            totalPages: (project as any).pageSets.reduce((s: number, ps: PageSet) => s + ps.pages.length, 0),
+          };
+          saveProjectPages(project.id, pageData);
+
+          if ((project as any).discoveryResult) {
+            saveDiscoveryResult(project.id, (project as any).discoveryResult);
+          }
+
+          // 从主配置中移除内联数据
+          delete (project as any).pageSets;
+          delete (project as any).discoveredAt;
+          delete (project as any).discoveryResult;
+          migrated = true;
+        }
+      }
+      if (migrated) {
+        saveConfig();
+        console.log('[Config] 已将内联数据迁移到独立文件');
+      }
     }
   } catch (e: any) {
     console.warn('[Config] 配置文件读取失败，使用默认值:', e.message);
@@ -169,14 +249,28 @@ function saveConfig(): void {
 
 // ========== 项目管理 ==========
 
-/** 获取所有项目 */
+/** 获取所有项目（动态合并页面数据） */
 export function getProjects(): TestProject[] {
-  return config.projects;
+  return config.projects.map(p => {
+    const pageData = loadProjectPages(p.id);
+    return {
+      ...p,
+      pageSets: pageData.pageSets,
+      discoveredAt: pageData.discoveredAt || p.discoveredAt,
+    };
+  });
 }
 
-/** 根据 ID 获取项目 */
+/** 根据 ID 获取项目（动态合并页面数据） */
 export function getProjectById(id: string): TestProject | undefined {
-  return config.projects.find(p => p.id === id);
+  const p = config.projects.find(p => p.id === id);
+  if (!p) return undefined;
+  const pageData = loadProjectPages(p.id);
+  return {
+    ...p,
+    pageSets: pageData.pageSets,
+    discoveredAt: pageData.discoveredAt || p.discoveredAt,
+  };
 }
 
 /** 获取默认项目 */
@@ -218,6 +312,17 @@ export function deleteProject(id: string): boolean {
     config.defaultProjectId = config.projects[0].id;
   }
   saveConfig();
+
+  // 清理项目独立数据目录
+  const projectDir = getProjectDir(id);
+  try {
+    if (fs.existsSync(projectDir)) {
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  } catch (e: any) {
+    console.warn(`[Config] 清理项目数据目录失败:`, e.message);
+  }
+
   return true;
 }
 
@@ -230,18 +335,41 @@ export function setDefaultProject(id: string): boolean {
   return true;
 }
 
-/** 更新项目的页面集（发现后更新） */
+/** 更新项目的页面集（发现后更新，写入独立文件） */
 export function updateProjectPages(id: string, pageSets: PageSet[], discoveryResult?: any): TestProject | null {
   const idx = config.projects.findIndex(p => p.id === id);
   if (idx === -1) return null;
 
-  config.projects[idx].pageSets = pageSets;
-  config.projects[idx].discoveredAt = new Date().toISOString();
+  const now = new Date().toISOString();
+  const totalPages = pageSets.reduce((s, ps) => s + ps.pages.length, 0);
+
+  // 写入独立文件
+  saveProjectPages(id, { pageSets, discoveredAt: now, totalPages });
   if (discoveryResult) {
-    config.projects[idx].discoveryResult = discoveryResult;
+    saveDiscoveryResult(id, discoveryResult);
   }
+
+  // 主配置只记录发现时间（用于列表展示）
+  config.projects[idx].discoveredAt = now;
+  config.projects[idx].pageSets = pageSets;
   saveConfig();
   return config.projects[idx];
+}
+
+/** 仅更新页面集数据（不更新发现结果，用于手动编辑） */
+export function saveProjectPageSets(id: string, pageSets: PageSet[]): PageSet[] | null {
+  const project = config.projects.find(p => p.id === id);
+  if (!project) return null;
+
+  const existing = loadProjectPages(id);
+  const totalPages = pageSets.reduce((s, ps) => s + ps.pages.length, 0);
+  saveProjectPages(id, {
+    pageSets,
+    discoveredAt: existing.discoveredAt,
+    totalPages,
+  });
+
+  return pageSets;
 }
 
 // ========== 配置检查 ==========

@@ -32,6 +32,8 @@ export interface DiscoveryResult {
   rawRoutes: Record<string, EntryRoutes>;
   validEntries: string[];
   totalPages: number;
+  sourceEntries?: string[];    // 源码分析发现的入口
+  probedEntries?: string[];    // 实际探测的全部入口
 }
 
 interface EntryRoutes {
@@ -307,55 +309,185 @@ async function extractRoutes(
   }
 }
 
-// ========== 自动分组 ==========
+// ========== 自动分组（通用深度聚合算法） ==========
+
+interface FlatRoute {
+  path: string;
+  name: string;
+  title: string;
+  concreteUrl: string;
+  depth: number;           // 非动态路径段的数量
+  firstSegment: string;    // 第一个非动态路径段
+  entry: string;           // 所属子应用入口
+}
+
+/** 检测两个子应用是否路由完全相同（用于关联标记） */
+function findRelatedEntries(routesMap: Record<string, EntryRoutes>): Map<string, string[]> {
+  const entryPaths = new Map<string, Set<string>>();
+  for (const [entry, data] of Object.entries(routesMap)) {
+    if (data.error || !data.routes) continue;
+    const paths = new Set(data.routes.map(r => r.path).sort());
+    entryPaths.set(entry, paths);
+  }
+
+  const relations = new Map<string, string[]>();
+  const entries = Array.from(entryPaths.keys());
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      const a = entryPaths.get(entries[i])!;
+      const b = entryPaths.get(entries[j])!;
+      if (a.size === b.size && [...a].every((v, idx) => v === [...b][idx])) {
+        // 路由完全相同，标记关联
+        if (!relations.has(entries[i])) relations.set(entries[i], []);
+        relations.get(entries[i])!.push(entries[j]);
+      }
+    }
+  }
+  return relations;
+}
+
+/** 计算路径的非动态段深度 */
+function pathDepth(path: string): number {
+  return path.split('/').filter(s => s && !s.startsWith(':')).length;
+}
+
+/** 获取路径的第一个非动态段 */
+function firstRealSegment(path: string): string {
+  const segs = path.split('/').filter(s => s && !s.startsWith(':'));
+  return segs[0] || 'root';
+}
+
+/** 获取路径的第二个非动态段 */
+function secondRealSegment(path: string): string {
+  const segs = path.split('/').filter(s => s && !s.startsWith(':'));
+  return segs[1] || '';
+}
 
 function groupRoutes(routesMap: Record<string, EntryRoutes>): { pageSets: PageSet[]; totalPages: number } {
   const allPageSets: PageSet[] = [];
   let totalPages = 0;
 
+  // 1. 找出关联子应用
+  const relatedEntries = findRelatedEntries(routesMap);
+  const relatedOf = new Map<string, string>();
+  for (const [primary, others] of relatedEntries) {
+    for (const other of others) {
+      relatedOf.set(other, primary);
+    }
+  }
+
+  // 已处理的子应用（关联的子应用不重复处理）
+  const processedEntries = new Set<string>();
+
   for (const [entry, data] of Object.entries(routesMap)) {
     if (data.error || !data.routes) continue;
+    if (processedEntries.has(entry)) continue;
 
-    // 过滤掉根路由、登录页
+    // 标记关联入口为已处理
+    const related = relatedEntries.get(entry) || [];
+    for (const r of related) processedEntries.add(r);
+
+    // 2. 过滤掉根路由、登录页
     const testableRoutes = data.routes.filter(r =>
       r.path !== '/' &&
       r.path !== '/login' &&
       !(r.path.endsWith('/') && r.path.length > 1)
     );
 
-    // 按路径前缀分组
-    const groups: Record<string, { pages: PageConfig[] }> = {};
+    if (testableRoutes.length === 0) continue;
 
-    for (const route of testableRoutes) {
-      const segments = route.path.split('/').filter(Boolean);
-      const firstRealSegment = segments.find(s => !s.startsWith(':')) || segments[0] || 'root';
+    // 3. 将路由扁平化并计算深度
+    const flatRoutes: FlatRoute[] = testableRoutes.map(r => ({
+      path: r.path,
+      name: r.name || '',
+      title: r.title || r.name || r.path,
+      concreteUrl: r.concreteUrl || `/${entry}/index.html#${r.path}`,
+      depth: pathDepth(r.path),
+      firstSegment: firstRealSegment(r.path),
+      entry,
+    }));
 
-      let groupId: string;
-      if (segments.length <= 1) {
-        groupId = firstRealSegment;
-      } else if (segments[0].startsWith(':')) {
-        groupId = segments[1] || firstRealSegment;
-      } else {
-        groupId = segments[0];
+    // 4. 统计深度分布，决定分组策略
+    const depthCounts = new Map<number, number>();
+    for (const r of flatRoutes) {
+      depthCounts.set(r.depth, (depthCounts.get(r.depth) || 0) + 1);
+    }
+    const mostRoutesDeep = flatRoutes.filter(r => r.depth >= 2).length > flatRoutes.length * 0.5;
+
+    // 5. 分组
+    const groups = new Map<string, FlatRoute[]>();
+
+    if (mostRoutesDeep) {
+      // 大部分路由 depth ≥ 2：按第一段分组
+      for (const r of flatRoutes) {
+        const key = r.firstSegment;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(r);
+      }
+    } else {
+      // 大部分路由 depth = 1：depth=1 的合并为一个大组，depth≥2 的按第一段分组
+      const shallow: FlatRoute[] = [];
+      const deep: FlatRoute[] = [];
+      for (const r of flatRoutes) {
+        if (r.depth <= 1) shallow.push(r);
+        else deep.push(r);
       }
 
-      if (!groups[groupId]) {
-        groups[groupId] = { pages: [] };
+      if (shallow.length > 0) {
+        groups.set(`__shallow__`, shallow);
       }
-
-      groups[groupId].pages.push({
-        id: `${entry}-${route.name || groupId}-${groups[groupId].pages.length}`,
-        name: route.title || route.name || route.path,
-        url: route.concreteUrl || `/${entry}/index.html#${route.path}`,
-        path: route.path,
-      });
+      for (const r of deep) {
+        const key = r.firstSegment;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(r);
+      }
     }
 
-    for (const [groupId, group] of Object.entries(groups)) {
+    // 6. 小组智能合并：仅合并语义相近的单页分组（共享路径前缀）
+    const singleGroups = [...groups.entries()].filter(([, routes]) => routes.length <= 1);
+    if (singleGroups.length >= 2) {
+      // 找出可合并的单页组（它们的 firstSegment 有共同前缀）
+      const mergeableBuckets = new Map<string, string[]>();
+      for (const [key, routes] of singleGroups) {
+        // 用第一个路由的 firstSegment 作为合并依据
+        const seg = routes[0].firstSegment;
+        if (!mergeableBuckets.has(seg)) mergeableBuckets.set(seg, []);
+        mergeableBuckets.get(seg)!.push(key);
+      }
+      // 只合并数量 ≥2 的桶
+      for (const [seg, keys] of mergeableBuckets) {
+        if (keys.length < 2) continue;
+        const mergedRoutes: FlatRoute[] = [];
+        for (const k of keys) {
+          mergedRoutes.push(...groups.get(k)!);
+          groups.delete(k);
+        }
+        groups.set(`${seg}-merged`, mergedRoutes);
+      }
+    }
+
+    // 7. 生成页面集
+    for (const [groupId, routes] of groups) {
+      const displayName = groupId === '__shallow__'
+        ? `${entry} (首页功能)`
+        : groupId.endsWith('-merged')
+          ? `${groupId.replace('-merged', '')} (${entry})`
+          : `${groupId} (${entry}, ${routes.length}页)`;
+
+      const suggestSplit = routes.length > 10;
+
       allPageSets.push({
         id: `${entry}-${groupId}`,
-        name: `${groupId} (${entry}, ${group.pages.length}页)`,
-        pages: group.pages,
+        name: displayName,
+        entry,
+        relatedEntries: related.length > 0 ? related : undefined,
+        suggestSplit,
+        pages: routes.map((r, i) => ({
+          id: `${entry}-${r.name || groupId}-${i}`,
+          name: r.title,
+          url: r.concreteUrl,
+          path: r.path,
+        })),
       });
     }
 
@@ -497,7 +629,7 @@ export async function discoverPages(
 
     // 3. 探测子应用入口
     const entriesToProbe = [...new Set([...knownEntries, ...COMMON_ENTRIES, deployInfo.currentSubApp])];
-    onProgress?.({ stage: 'probing', message: `探测 ${entriesToProbe.length} 个可能的入口...` });
+    onProgress?.({ stage: 'probing', message: `探测 ${entriesToProbe.length} 个可能的入口（其中源码发现 ${knownEntries.length} 个: ${knownEntries.join(', ')}）...` });
 
     const validEntries = await probeEntries(
       page, deployInfo.origin, deployInfo.deployRoot, entriesToProbe,
@@ -508,6 +640,12 @@ export async function discoverPages(
       stage: 'probing',
       message: `发现 ${validEntries.length} 个有效入口: ${validEntries.join(', ')}`,
     });
+
+    // 3.5 将探测失败的入口也记录到 routesMap（用于展示发现日志）
+    const failedEntries = entriesToProbe.filter(e => !validEntries.includes(e));
+    for (const entry of failedEntries) {
+      routesMap[entry] = { error: 'Vue 未挂载或入口无效', url: `${deployInfo.origin}${deployInfo.deployRoot}${entry}/index.html` };
+    }
 
     // 4. 提取路由
     for (const entry of validEntries) {
@@ -543,7 +681,14 @@ export async function discoverPages(
     onProgress?.({ stage: 'grouping', message: '正在生成知识库骨架...' });
     generatePageContext(projectId, pageSets, project.baseUrl);
 
-    return { pageSets, rawRoutes: routesMap, validEntries, totalPages };
+    return {
+      pageSets,
+      rawRoutes: routesMap,
+      validEntries,
+      totalPages,
+      sourceEntries: knownEntries,
+      probedEntries: entriesToProbe,
+    };
   } catch (err: any) {
     onProgress?.({ stage: 'error', message: `发现失败: ${err.message}` });
     throw err;

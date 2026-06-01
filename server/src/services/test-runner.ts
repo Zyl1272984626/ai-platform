@@ -567,9 +567,9 @@ ${pageListPrompt}
 /** 根据项目配置和 scope 解析出要测试的页面列表 */
 function resolvePages(project: TestProject, scope: string): PageConfig[] {
   if (scope === 'all') {
-    return project.pageSets.flatMap(ps => ps.pages);
+    return (project.pageSets || []).flatMap(ps => ps.pages);
   }
-  const pageSet = project.pageSets.find(ps => ps.id === scope);
+  const pageSet = (project.pageSets || []).find(ps => ps.id === scope);
   return pageSet?.pages || [];
 }
 

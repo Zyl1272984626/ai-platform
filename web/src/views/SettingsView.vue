@@ -36,8 +36,11 @@
             <div class="project-actions">
               <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
               <button class="btn btn-sm" @click="editProject(project)">编辑</button>
-              <button class="btn btn-sm btn-discover" @click="doDiscover(project.id)" :disabled="discoveringProject === project.id">
+              <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
                 {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
+              </button>
+              <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
+                管理页面
               </button>
               <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
                 {{ checkingProject === project.id ? '检测中...' : '检测' }}
@@ -199,11 +202,183 @@
         </div>
       </div>
     </div>
+
+    <!-- 发现模式选择弹窗 -->
+    <div v-if="showDiscoverDialog" class="modal-overlay" @click.self="showDiscoverDialog = false">
+      <div class="modal-content" style="width: 400px;">
+        <h3>发现页面</h3>
+        <p class="field-desc">选择发现方式（项目{{ discoverDialogProject?.sourcePath ? '已配置源码路径' : '未配置源码路径' }}）</p>
+        <div class="discover-options">
+          <div class="discover-option" :class="{ active: discoverMode === 'both' }" @click="discoverMode = 'both'">
+            <div class="discover-option-title">源码 + 浏览器</div>
+            <div class="discover-option-desc">先分析源码入口，再浏览器验证，最全面</div>
+          </div>
+          <div class="discover-option" :class="{ active: discoverMode === 'runtime' }" @click="discoverMode = 'runtime'">
+            <div class="discover-option-title">仅浏览器探测</div>
+            <div class="discover-option-desc">登录后遍历入口提取路由，适合无源码时</div>
+          </div>
+          <div class="discover-option" :class="{ active: discoverMode === 'source' }" @click="discoverMode = 'source'">
+            <div class="discover-option-title">仅源码分析</div>
+            <div class="discover-option-desc">读 vite.config.ts 和 pages 目录，速度快</div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showDiscoverDialog = false">取消</button>
+          <button class="btn btn-save" @click="confirmDiscover" :disabled="discoveringProject !== null">
+            {{ discoveringProject ? '发现中...' : '开始发现' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 页面管理弹窗 -->
+    <div v-if="showPageManager" class="modal-overlay" @click.self="closePageManager">
+      <div class="modal-content modal-wide">
+        <h3>页面管理 — {{ pageManagerProjectName }}</h3>
+        <p class="field-desc">
+          {{ pageManagerSets.length }} 个页面集 | {{ pageManagerTotalPages }} 个页面
+          <button v-if="discoveryEntries.length" class="btn btn-xs" style="margin-left: 8px;" @click="showDiscoveryLog = !showDiscoveryLog">
+            {{ showDiscoveryLog ? '收起发现日志' : '查看发现日志' }}
+          </button>
+        </p>
+
+        <!-- 发现日志 -->
+        <div v-if="showDiscoveryLog && discoveryEntries.length" class="discovery-log-panel">
+          <div v-if="discoverySourceEntries.length" class="discovery-source-info">
+            源码分析发现 {{ discoverySourceEntries.length }} 个入口: {{ discoverySourceEntries.join(', ') }}
+          </div>
+          <div class="discovery-log-title">子应用入口探测结果（✅ 有效入口参与分组，❌ 失败入口不影响结果，多测无害）</div>
+          <div v-for="entry in discoveryEntries" :key="entry.name" class="discovery-entry" :class="entry.status">
+            <span class="entry-status">{{ entry.status === 'valid' ? '✅' : '❌' }}</span>
+            <span class="entry-name">
+              {{ entry.name }}
+              <span v-if="discoverySourceEntries.includes(entry.name)" class="badge badge-source">源码</span>
+            </span>
+            <span class="entry-info">
+              {{ entry.status === 'valid'
+                ? `${entry.routeCount} 条路由`
+                : '未挂载（可能从未实现、已废弃、或属于其他入口的内部路由）'
+              }}
+            </span>
+          </div>
+        </div>
+
+        <div v-if="pageManagerLoading" class="loading" style="padding: 20px;">加载中...</div>
+
+        <div v-else class="page-set-list">
+          <div v-for="ps in pageManagerSets" :key="ps.id" class="page-set-block">
+            <div class="page-set-header" @click="toggleSetExpand(ps.id)">
+              <span class="expand-icon">{{ expandedSetIds.has(ps.id) ? '▼' : '▶' }}</span>
+              <span class="page-set-name">
+                <!-- 重命名状态 -->
+                <template v-if="renamingSetId === ps.id">
+                  <input v-model="renameValue" class="rename-input" @keyup.enter="doRenameSet(ps.id)" @keyup.escape="renamingSetId = null" />
+                  <button class="btn btn-xs btn-save" @click.stop="doRenameSet(ps.id)">确定</button>
+                  <button class="btn btn-xs btn-cancel" @click.stop="renamingSetId = null">取消</button>
+                </template>
+                <template v-else>
+                  {{ ps.name }}
+                </template>
+              </span>
+              <span class="page-set-count">{{ ps.pages.length }} 页</span>
+              <span v-if="ps.suggestSplit" class="badge badge-warn">建议拆分</span>
+              <span v-if="ps.relatedEntries?.length" class="badge badge-info">关联: {{ ps.relatedEntries.join(', ') }}</span>
+              <div class="page-set-actions" @click.stop>
+                <button class="btn btn-xs" @click="startRenameSet(ps)" title="重命名">重命名</button>
+                <button class="btn btn-xs" @click="startAddPage(ps.id)" title="添加页面">+ 页面</button>
+                <button class="btn btn-xs btn-danger" @click="doDeleteSet(ps.id)" title="删除页面集">删除</button>
+              </div>
+            </div>
+
+            <!-- 展开的页面列表 -->
+            <div v-if="expandedSetIds.has(ps.id)" class="page-list">
+              <div v-if="addingToSetId === ps.id" class="add-page-form">
+                <input v-model="newPageForm.name" placeholder="页面名称" class="inline-input" />
+                <input v-model="newPageForm.path" placeholder="路由路径" class="inline-input" />
+                <input v-model="newPageForm.url" placeholder="访问URL（可选）" class="inline-input" />
+                <button class="btn btn-xs btn-save" @click="doAddPage(ps.id)">添加</button>
+                <button class="btn btn-xs btn-cancel" @click="addingToSetId = null">取消</button>
+              </div>
+
+              <div v-for="page in ps.pages" :key="page.id" class="page-item">
+                <template v-if="editingPage?.id === page.id">
+                  <div class="edit-page-form">
+                    <input v-model="editPageForm.name" placeholder="名称" class="inline-input" />
+                    <input v-model="editPageForm.path" placeholder="路径" class="inline-input" />
+                    <select v-model="editPageForm.targetSetId" class="move-select">
+                      <option value="">不移动</option>
+                      <option v-for="t in pageManagerSets.filter(s => s.id !== ps.id)" :key="t.id" :value="t.id">
+                        移动到: {{ t.name }}
+                      </option>
+                    </select>
+                    <button class="btn btn-xs btn-save" @click="doEditPage">保存</button>
+                    <button class="btn btn-xs btn-cancel" @click="editingPage = null">取消</button>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="page-name">{{ page.name }}</span>
+                  <span class="page-path" :title="page.url">{{ page.path }}</span>
+                  <div class="page-actions">
+                    <button class="btn btn-xs btn-open" @click="openPageUrl(page)" title="在新标签页打开">打开</button>
+                    <button class="btn btn-xs" @click="showPageDetail(page)" title="查看详情">详情</button>
+                    <button class="btn btn-xs" @click="startEditPage(page, ps.id)">编辑</button>
+                    <button class="btn btn-xs btn-danger" @click="doDeletePage(page.id, ps.id)">删除</button>
+                  </div>
+                </template>
+              </div>
+
+              <div v-if="ps.pages.length === 0 && addingToSetId !== ps.id" class="empty-pages">
+                暂无页面
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 新建页面集 -->
+        <div class="add-set-row">
+          <input v-model="newSetName" placeholder="新页面集名称" class="inline-input" />
+          <button class="btn btn-sm btn-save" @click="doCreateSet" :disabled="!newSetName.trim()">新建页面集</button>
+        </div>
+
+        <!-- 页面详情 -->
+        <div v-if="detailPage" class="page-detail-panel">
+          <div class="page-detail-header">
+            <span>页面详情</span>
+            <button class="btn btn-xs" @click="detailPage = null">关闭</button>
+          </div>
+          <div class="page-detail-row">
+            <label>名称</label>
+            <span>{{ detailPage.name }}</span>
+          </div>
+          <div class="page-detail-row">
+            <label>路由路径</label>
+            <code>{{ detailPage.path }}</code>
+          </div>
+          <div class="page-detail-row">
+            <label>访问 URL</label>
+            <code>{{ detailPageBaseUrl }}{{ detailPage.url }}</code>
+          </div>
+          <div v-if="detailPage.description" class="page-detail-row">
+            <label>描述</label>
+            <span>{{ detailPage.description }}</span>
+          </div>
+          <div class="page-detail-row">
+            <label>页面 ID</label>
+            <code>{{ detailPage.id }}</code>
+          </div>
+          <button class="btn btn-sm btn-open" @click="openPageUrl(detailPage)" style="margin-top: 8px;">在新标签页打开此页面</button>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="closePageManager">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { getSettings, updateSettings, checkSettings, type PlatformConfig, type CheckResult } from '../api/settings'
 import {
   getProjects as fetchProjects,
@@ -213,8 +388,19 @@ import {
   setDefaultProject as apiSetDefault,
   checkProject as apiCheckProject,
   discoverProject as apiDiscoverProject,
+  getProjectPages,
+  getDiscoveryLog,
+  saveProjectPages,
+  createPageSet as apiCreatePageSet,
+  updatePageSet as apiUpdatePageSet,
+  deletePageSet as apiDeletePageSet,
+  addPageToSet as apiAddPageToSet,
+  updatePage as apiUpdatePage,
+  deletePage as apiDeletePage,
   type TestProject,
   type ProjectCheckResult,
+  type PageSet,
+  type PageConfig,
 } from '../api/projects'
 
 const loading = ref(true)
@@ -243,6 +429,32 @@ const checkingProject = ref<string | null>(null)
 const discoveringProject = ref<string | null>(null)
 const projectChecks = reactive<Record<string, ProjectCheckResult>>({})
 const discoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+
+// 页面管理弹窗
+const showPageManager = ref(false)
+const pageManagerProjectId = ref('')
+const pageManagerProjectName = ref('')
+const pageManagerSets = ref<PageSet[]>([])
+const pageManagerLoading = ref(false)
+const expandedSetIds = reactive<Set<string>>(new Set())
+// 新建页面集
+const newSetName = ref('')
+// 添加页面
+const addingToSetId = ref<string | null>(null)
+const newPageForm = reactive({ name: '', url: '', path: '', description: '' })
+// 编辑页面
+const editingPage = ref<PageConfig | null>(null)
+const editPageForm = reactive({ name: '', url: '', path: '', description: '', targetSetId: '' })
+// 重命名页面集
+const renamingSetId = ref<string | null>(null)
+const renameValue = ref('')
+// 发现日志
+const discoveryEntries = ref<{ name: string; status: string; routeCount: number; error?: string }[]>([])
+const discoverySourceEntries = ref<string[]>([])
+const showDiscoveryLog = ref(false)
+// 页面详情
+const detailPage = ref<PageConfig | null>(null)
+const detailPageBaseUrl = ref('')
 
 const projectForm = reactive({
   name: '',
@@ -399,13 +611,31 @@ async function doCheckProject(id: string) {
   }
 }
 
+// 发现模式
+const discoverMode = ref<'runtime' | 'source' | 'both'>('both')
+const showDiscoverDialog = ref(false)
+const discoverDialogProject = ref<TestProject | null>(null)
+
+function openDiscoverDialog(project: TestProject) {
+  discoverDialogProject.value = project
+  // 有源码路径默认走 both，没有默认走 runtime
+  discoverMode.value = project.sourcePath ? 'both' : 'runtime'
+  showDiscoverDialog.value = true
+}
+
+function confirmDiscover() {
+  if (!discoverDialogProject.value) return
+  showDiscoverDialog.value = false
+  doDiscover(discoverDialogProject.value.id)
+}
+
 async function doDiscover(id: string) {
   discoveringProject.value = id
-  discoverLogs[id] = { stage: 'init', logs: ['开始页面发现...'] }
+  discoverLogs[id] = { stage: 'init', logs: [`开始页面发现（模式: ${discoverMode.value}）...`] }
   message.value = null
 
   try {
-    await apiDiscoverProject(id, 'runtime', (progress) => {
+    await apiDiscoverProject(id, discoverMode.value, (progress) => {
       if (!discoverLogs[id]) discoverLogs[id] = { stage: '', logs: [] }
       discoverLogs[id].stage = progress.stage
       discoverLogs[id].logs.push(progress.message)
@@ -457,6 +687,184 @@ async function doCheck() {
   } finally {
     checking.value = false
   }
+}
+
+// ========== 页面管理 ==========
+
+const pageManagerTotalPages = computed(() => {
+  return pageManagerSets.value.reduce((s, ps) => s + ps.pages.length, 0)
+})
+
+async function openPageManager(project: TestProject) {
+  pageManagerProjectId.value = project.id
+  pageManagerProjectName.value = project.name
+  detailPageBaseUrl.value = project.baseUrl
+  showPageManager.value = true
+  pageManagerLoading.value = true
+  expandedSetIds.clear()
+  addingToSetId.value = null
+  editingPage.value = null
+  renamingSetId.value = null
+  newSetName.value = ''
+  discoveryEntries.value = []
+  discoverySourceEntries.value = []
+  showDiscoveryLog.value = false
+
+  try {
+    const [pagesRes, logRes] = await Promise.all([
+      getProjectPages(project.id),
+      getDiscoveryLog(project.id),
+    ])
+    pageManagerSets.value = pagesRes.data
+    discoveryEntries.value = logRes.data.entries || []
+    discoverySourceEntries.value = logRes.data.sourceEntries || []
+  } catch (e: any) {
+    message.value = { type: 'error', text: '加载页面数据失败: ' + e.message }
+  } finally {
+    pageManagerLoading.value = false
+  }
+}
+
+function closePageManager() {
+  showPageManager.value = false
+  // 刷新项目列表
+  fetchProjects().then(res => { projects.value = res.data })
+}
+
+function toggleSetExpand(setId: string) {
+  if (expandedSetIds.has(setId)) {
+    expandedSetIds.delete(setId)
+  } else {
+    expandedSetIds.add(setId)
+  }
+}
+
+async function doCreateSet() {
+  if (!newSetName.value.trim()) return
+  try {
+    const res = await apiCreatePageSet(pageManagerProjectId.value, newSetName.value.trim())
+    pageManagerSets.value.push(res.data)
+    newSetName.value = ''
+  } catch (e: any) {
+    message.value = { type: 'error', text: '创建失败: ' + e.message }
+  }
+}
+
+function startRenameSet(ps: PageSet) {
+  renamingSetId.value = ps.id
+  renameValue.value = ps.name
+}
+
+async function doRenameSet(setId: string) {
+  if (!renameValue.value.trim()) return
+  try {
+    await apiUpdatePageSet(pageManagerProjectId.value, setId, { name: renameValue.value.trim() })
+    const set = pageManagerSets.value.find(s => s.id === setId)
+    if (set) set.name = renameValue.value.trim()
+    renamingSetId.value = null
+  } catch (e: any) {
+    message.value = { type: 'error', text: '重命名失败: ' + e.message }
+  }
+}
+
+async function doDeleteSet(setId: string) {
+  const set = pageManagerSets.value.find(s => s.id === setId)
+  if (!confirm(`确定删除页面集「${set?.name}」及其下 ${set?.pages.length || 0} 个页面？`)) return
+  try {
+    await apiDeletePageSet(pageManagerProjectId.value, setId)
+    pageManagerSets.value = pageManagerSets.value.filter(s => s.id !== setId)
+    expandedSetIds.delete(setId)
+  } catch (e: any) {
+    message.value = { type: 'error', text: '删除失败: ' + e.message }
+  }
+}
+
+function startAddPage(setId: string) {
+  addingToSetId.value = setId
+  newPageForm.name = ''
+  newPageForm.url = ''
+  newPageForm.path = ''
+  newPageForm.description = ''
+  // 自动展开
+  expandedSetIds.add(setId)
+}
+
+async function doAddPage(setId: string) {
+  if (!newPageForm.name.trim() || !newPageForm.path.trim()) {
+    message.value = { type: 'error', text: '页面名称和路径不能为空' }
+    return
+  }
+  try {
+    const res = await apiAddPageToSet(pageManagerProjectId.value, setId, {
+      name: newPageForm.name.trim(),
+      url: newPageForm.url.trim() || newPageForm.path.trim(),
+      path: newPageForm.path.trim(),
+      description: newPageForm.description.trim(),
+    })
+    const set = pageManagerSets.value.find(s => s.id === setId)
+    if (set) set.pages.push(res.data)
+    addingToSetId.value = null
+  } catch (e: any) {
+    message.value = { type: 'error', text: '添加失败: ' + e.message }
+  }
+}
+
+function startEditPage(page: PageConfig, currentSetId: string) {
+  editingPage.value = page
+  editPageForm.name = page.name
+  editPageForm.url = page.url
+  editPageForm.path = page.path
+  editPageForm.description = page.description || ''
+  editPageForm.targetSetId = ''
+}
+
+async function doEditPage() {
+  if (!editingPage.value) return
+  try {
+    await apiUpdatePage(pageManagerProjectId.value, {
+      pageId: editingPage.value.id,
+      name: editPageForm.name.trim(),
+      url: editPageForm.url.trim(),
+      path: editPageForm.path.trim(),
+      description: editPageForm.description.trim(),
+      targetSetId: editPageForm.targetSetId || undefined,
+    })
+    // 如果移动了页面，需要刷新整个列表
+    if (editPageForm.targetSetId) {
+      const res = await getProjectPages(pageManagerProjectId.value)
+      pageManagerSets.value = res.data
+    } else {
+      // 就地更新
+      const page = editingPage.value
+      page.name = editPageForm.name.trim()
+      page.url = editPageForm.url.trim()
+      page.path = editPageForm.path.trim()
+      page.description = editPageForm.description.trim()
+    }
+    editingPage.value = null
+  } catch (e: any) {
+    message.value = { type: 'error', text: '编辑失败: ' + e.message }
+  }
+}
+
+async function doDeletePage(pageId: string, setId: string) {
+  if (!confirm('确定删除此页面？')) return
+  try {
+    await apiDeletePage(pageManagerProjectId.value, pageId)
+    const set = pageManagerSets.value.find(s => s.id === setId)
+    if (set) set.pages = set.pages.filter(p => p.id !== pageId)
+  } catch (e: any) {
+    message.value = { type: 'error', text: '删除失败: ' + e.message }
+  }
+}
+
+function openPageUrl(page: PageConfig) {
+  const fullUrl = detailPageBaseUrl.value + page.url
+  window.open(fullUrl, '_blank')
+}
+
+function showPageDetail(page: PageConfig) {
+  detailPage.value = page
 }
 </script>
 
@@ -828,5 +1236,317 @@ async function doCheck() {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+.modal-wide {
+  width: 860px;
+  max-height: 90vh;
+}
+
+/* 页面管理 */
+.btn-manage {
+  background: #f9f0ff !important;
+  color: #722ed1 !important;
+}
+.btn-manage:hover:not(:disabled) {
+  background: #efdbff !important;
+}
+.page-set-list {
+  margin-top: 12px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.page-set-block {
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.page-set-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+}
+.page-set-header:hover {
+  background: #f5f5f5;
+}
+.expand-icon {
+  font-size: 10px;
+  color: #999;
+  width: 14px;
+}
+.page-set-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: #333;
+  flex: 1;
+}
+.page-set-count {
+  font-size: 11px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.page-set-actions {
+  display: flex;
+  gap: 4px;
+}
+.page-list {
+  padding: 8px 12px;
+}
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.page-item:hover {
+  background: #f9f9fb;
+}
+.page-name {
+  font-weight: 500;
+  color: #333;
+  min-width: 120px;
+}
+.page-path {
+  color: #999;
+  font-family: monospace;
+  font-size: 12px;
+  flex: 1;
+}
+.page-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.page-item:hover .page-actions {
+  opacity: 1;
+}
+.empty-pages {
+  text-align: center;
+  color: #ccc;
+  font-size: 12px;
+  padding: 12px;
+}
+.add-set-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+.inline-input {
+  padding: 4px 8px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.rename-input {
+  padding: 2px 6px;
+  border: 1px solid #667eea;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 200px;
+}
+.add-page-form, .edit-page-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: #fafbff;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+.move-select {
+  padding: 4px 6px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #f0f0f0;
+  color: #333;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.btn-xs:hover {
+  background: #e0e0e0;
+}
+.btn-xs.btn-danger {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+.btn-xs.btn-danger:hover {
+  background: #ffccc7;
+}
+.btn-xs.btn-save {
+  background: #667eea;
+  color: #fff;
+}
+.btn-xs.btn-cancel {
+  background: #f0f0f0;
+  color: #666;
+}
+.badge-warn {
+  background: #fffbe6;
+  color: #faad14;
+  border: 1px solid #ffe58f;
+}
+.badge-info {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+/* 发现日志 */
+.discovery-log-panel {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.discovery-log-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 8px;
+}
+.discovery-source-info {
+  font-size: 12px;
+  color: #667eea;
+  background: #fafaff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.badge-source {
+  background: #f9f0ff;
+  color: #722ed1;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+.discovery-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+.discovery-entry.valid {
+  background: #f6ffed;
+}
+.discovery-entry.error {
+  background: #fff2f0;
+}
+.entry-status {
+  width: 16px;
+  text-align: center;
+}
+.entry-name {
+  font-weight: 500;
+  color: #333;
+  min-width: 120px;
+}
+.entry-info {
+  color: #999;
+  font-size: 11px;
+}
+
+/* 打开按钮 */
+.btn-open {
+  background: #e6f7ff !important;
+  color: #1890ff !important;
+}
+.btn-open:hover {
+  background: #bae7ff !important;
+}
+
+/* 页面详情 */
+.page-detail-panel {
+  margin-top: 12px;
+  background: #fafbff;
+  border: 1px solid #e0e0f0;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+.page-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 500;
+  font-size: 13px;
+  color: #667eea;
+  margin-bottom: 8px;
+}
+.page-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.page-detail-row label {
+  min-width: 70px;
+  color: #999;
+  font-size: 12px;
+}
+.page-detail-row code {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #333;
+  word-break: break-all;
+}
+
+/* 发现模式选择 */
+.discover-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.discover-option {
+  border: 2px solid #f0f0f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.discover-option:hover {
+  border-color: #d9d9d9;
+}
+.discover-option.active {
+  border-color: #667eea;
+  background: #fafaff;
+}
+.discover-option-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+.discover-option.active .discover-option-title {
+  color: #667eea;
+}
+.discover-option-desc {
+  font-size: 12px;
+  color: #999;
 }
 </style>

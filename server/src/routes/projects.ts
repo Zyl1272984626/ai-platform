@@ -11,8 +11,19 @@ import {
   deleteProject,
   setDefaultProject,
   updateProjectPages,
+  loadProjectPages,
+  saveProjectPageSets,
   type TestProject,
+  type PageSet,
+  type PageConfig,
 } from '../services/config.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.resolve(__dirname, '../../data');
 
 export const projectsRouter = Router();
 
@@ -63,7 +74,7 @@ projectsRouter.post('/', (req: Request, res: Response) => {
 });
 
 /** 更新项目 */
-projectsRouter.put('/:id', (req: Request, res: Response) => {
+projectsRouter.post('/:id/update', (req: Request, res: Response) => {
   const updated = updateProject(req.params.id, req.body);
   if (!updated) {
     res.status(404).json({ error: '项目不存在' });
@@ -73,7 +84,7 @@ projectsRouter.put('/:id', (req: Request, res: Response) => {
 });
 
 /** 删除项目 */
-projectsRouter.delete('/:id', (req: Request, res: Response) => {
+projectsRouter.post('/:id/delete', (req: Request, res: Response) => {
   const ok = deleteProject(req.params.id);
   if (!ok) {
     res.status(404).json({ error: '项目不存在' });
@@ -104,20 +115,232 @@ projectsRouter.get('/:id/pages', (req: Request, res: Response) => {
   res.json(project.pageSets || []);
 });
 
-/** 手动更新项目的页面集 */
-projectsRouter.put('/:id/pages', (req: Request, res: Response) => {
+/** 批量保存项目页面集 */
+projectsRouter.post('/:id/pages/save', (req: Request, res: Response) => {
   const { pageSets } = req.body;
   if (!Array.isArray(pageSets)) {
     res.status(400).json({ error: 'pageSets 必须为数组' });
     return;
   }
 
-  const updated = updateProjectPages(req.params.id, pageSets);
-  if (!updated) {
+  const result = saveProjectPageSets(req.params.id, pageSets);
+  if (!result) {
     res.status(404).json({ error: '项目不存在' });
     return;
   }
-  res.json(updated.pageSets);
+  res.json(result);
+});
+
+/** 新建页面集 */
+projectsRouter.post('/:id/page-sets/create', (req: Request, res: Response) => {
+  const { name } = req.body;
+  if (!name) {
+    res.status(400).json({ error: '页面集名称不能为空' });
+    return;
+  }
+
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  const newSet: PageSet = {
+    id: uuidv4().substring(0, 8),
+    name,
+    pages: [],
+  };
+  pageData.pageSets.push(newSet);
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json(newSet);
+});
+
+/** 更新页面集（重命名等） */
+projectsRouter.post('/:id/page-sets/update', (req: Request, res: Response) => {
+  const { setId, name, description } = req.body;
+  if (!setId) {
+    res.status(400).json({ error: '缺少 setId' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  const set = pageData.pageSets.find(s => s.id === setId);
+  if (!set) {
+    res.status(404).json({ error: '页面集不存在' });
+    return;
+  }
+
+  if (name) set.name = name;
+  if (description !== undefined) set.description = description;
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json(set);
+});
+
+/** 删除页面集 */
+projectsRouter.post('/:id/page-sets/delete', (req: Request, res: Response) => {
+  const { setId } = req.body;
+  if (!setId) {
+    res.status(400).json({ error: '缺少 setId' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  const idx = pageData.pageSets.findIndex(s => s.id === setId);
+  if (idx === -1) {
+    res.status(404).json({ error: '页面集不存在' });
+    return;
+  }
+
+  pageData.pageSets.splice(idx, 1);
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json({ success: true });
+});
+
+/** 添加页面到页面集 */
+projectsRouter.post('/:id/page-sets/:setId/pages/add', (req: Request, res: Response) => {
+  const { setId } = req.params;
+  const { name, url, path, description } = req.body;
+  if (!name || !path) {
+    res.status(400).json({ error: '页面名称和路径不能为空' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  const set = pageData.pageSets.find(s => s.id === setId);
+  if (!set) {
+    res.status(404).json({ error: '页面集不存在' });
+    return;
+  }
+
+  const newPage: PageConfig = {
+    id: uuidv4().substring(0, 8),
+    name,
+    url: url || path,
+    path,
+    description,
+  };
+  set.pages.push(newPage);
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json(newPage);
+});
+
+/** 更新页面 */
+projectsRouter.post('/:id/pages/update', (req: Request, res: Response) => {
+  const { pageId, name, url, path, description, targetSetId } = req.body;
+  if (!pageId) {
+    res.status(400).json({ error: '缺少 pageId' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  let found = false;
+
+  for (const set of pageData.pageSets) {
+    const page = set.pages.find(p => p.id === pageId);
+    if (page) {
+      // 如果要移动到其他页面集
+      if (targetSetId && targetSetId !== set.id) {
+        const targetSet = pageData.pageSets.find(s => s.id === targetSetId);
+        if (!targetSet) {
+          res.status(404).json({ error: '目标页面集不存在' });
+          return;
+        }
+        set.pages = set.pages.filter(p => p.id !== pageId);
+        targetSet.pages.push({
+          ...page,
+          name: name || page.name,
+          url: url || page.url,
+          path: path || page.path,
+          description: description !== undefined ? description : page.description,
+        });
+      } else {
+        if (name) page.name = name;
+        if (url) page.url = url;
+        if (path) page.path = path;
+        if (description !== undefined) page.description = description;
+      }
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    res.status(404).json({ error: '页面不存在' });
+    return;
+  }
+
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json({ success: true });
+});
+
+/** 删除页面 */
+projectsRouter.post('/:id/pages/delete', (req: Request, res: Response) => {
+  const { pageId } = req.body;
+  if (!pageId) {
+    res.status(400).json({ error: '缺少 pageId' });
+    return;
+  }
+
+  const pageData = loadProjectPages(req.params.id);
+  let found = false;
+
+  for (const set of pageData.pageSets) {
+    const idx = set.pages.findIndex(p => p.id === pageId);
+    if (idx !== -1) {
+      set.pages.splice(idx, 1);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    res.status(404).json({ error: '页面不存在' });
+    return;
+  }
+
+  saveProjectPageSets(req.params.id, pageData.pageSets);
+  res.json({ success: true });
+});
+
+// ========== 发现日志 ==========
+
+/** 获取项目的发现结果（探测了哪些入口、哪些有效/无效） */
+projectsRouter.get('/:id/discovery-log', (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const filePath = path.join(DATA_DIR, 'projects', req.params.id, 'discovery-result.json');
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const data = raw.rawRoutes || raw; // 兼容两种结构
+      const entries: { name: string; status: string; routeCount: number; error?: string }[] = [];
+      for (const [name, info] of Object.entries(data)) {
+        const entry = info as any;
+        if (entry.error) {
+          entries.push({ name, status: 'error', routeCount: 0, error: entry.error });
+        } else if (entry.routes) {
+          entries.push({ name, status: 'valid', routeCount: entry.routes.length });
+        } else {
+          entries.push({ name, status: 'unknown', routeCount: 0 });
+        }
+      }
+      res.json({
+        entries,
+        validEntries: entries.filter(e => e.status === 'valid').map(e => e.name),
+        sourceEntries: raw.sourceEntries || [],
+        probedEntries: raw.probedEntries || [],
+        discoveredAt: project.discoveredAt,
+      });
+    } else {
+      res.json({ entries: [], validEntries: [], discoveredAt: project.discoveredAt });
+    }
+  } catch {
+    res.json({ entries: [], validEntries: [], discoveredAt: project.discoveredAt });
+  }
 });
 
 // ========== 连通性检测 ==========

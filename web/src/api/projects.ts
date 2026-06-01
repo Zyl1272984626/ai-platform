@@ -14,6 +14,9 @@ export interface PageSet {
   id: string
   name: string
   description?: string
+  entry?: string
+  relatedEntries?: string[]
+  suggestSplit?: boolean
   pages: PageConfig[]
 }
 
@@ -29,7 +32,6 @@ export interface TestProject {
   skillPath?: string
   pageSets: PageSet[]
   discoveredAt?: string
-  discoveryResult?: any
   status: 'active' | 'inactive'
 }
 
@@ -37,7 +39,7 @@ export interface ProjectCheckResult {
   [key: string]: { ok: boolean; msg: string }
 }
 
-// ========== API 调用 ==========
+// ========== 项目 CRUD ==========
 
 /** 获取所有项目 */
 export function getProjects() {
@@ -54,14 +56,14 @@ export function addProject(data: Partial<TestProject>) {
   return api.post<TestProject>('/projects', data)
 }
 
-/** 更新项目 */
+/** 更新项目（POST 代替 PUT） */
 export function updateProject(id: string, data: Partial<TestProject>) {
-  return api.put<TestProject>(`/projects/${id}`, data)
+  return api.post<TestProject>(`/projects/${id}/update`, data)
 }
 
-/** 删除项目 */
+/** 删除项目（POST 代替 DELETE） */
 export function deleteProject(id: string) {
-  return api.delete(`/projects/${id}`)
+  return api.post(`/projects/${id}/delete`)
 }
 
 /** 设置默认项目 */
@@ -69,20 +71,72 @@ export function setDefaultProject(id: string) {
   return api.post(`/projects/${id}/default`)
 }
 
+/** 检测项目连通性 */
+export function checkProject(id: string) {
+  return api.post<ProjectCheckResult>(`/projects/${id}/check`)
+}
+
+// ========== 页面管理 ==========
+
 /** 获取项目页面集 */
 export function getProjectPages(id: string) {
   return api.get<PageSet[]>(`/projects/${id}/pages`)
 }
 
-/** 手动更新项目页面集 */
-export function updateProjectPages(id: string, pageSets: PageSet[]) {
-  return api.put(`/projects/${id}/pages`, { pageSets })
+/** 获取项目发现日志 */
+export function getDiscoveryLog(id: string) {
+  return api.get<{
+    entries: { name: string; status: string; routeCount: number; error?: string }[]
+    validEntries: string[]
+    sourceEntries: string[]
+    probedEntries: string[]
+    discoveredAt?: string
+  }>(`/projects/${id}/discovery-log`)
 }
 
-/** 检测项目连通性 */
-export function checkProject(id: string) {
-  return api.post<ProjectCheckResult>(`/projects/${id}/check`)
+/** 批量保存项目页面集 */
+export function saveProjectPages(id: string, pageSets: PageSet[]) {
+  return api.post(`/projects/${id}/pages/save`, { pageSets })
 }
+
+/** 新建页面集 */
+export function createPageSet(projectId: string, name: string) {
+  return api.post<PageSet>(`/projects/${projectId}/page-sets/create`, { name })
+}
+
+/** 更新页面集（重命名等） */
+export function updatePageSet(projectId: string, setId: string, data: { name?: string; description?: string }) {
+  return api.post<PageSet>(`/projects/${projectId}/page-sets/update`, { setId, ...data })
+}
+
+/** 删除页面集 */
+export function deletePageSet(projectId: string, setId: string) {
+  return api.post(`/projects/${projectId}/page-sets/delete`, { setId })
+}
+
+/** 添加页面到页面集 */
+export function addPageToSet(projectId: string, setId: string, page: { name: string; url: string; path: string; description?: string }) {
+  return api.post<PageConfig>(`/projects/${projectId}/page-sets/${setId}/pages/add`, page)
+}
+
+/** 更新页面（含移动到其他页面集） */
+export function updatePage(projectId: string, data: {
+  pageId: string
+  name?: string
+  url?: string
+  path?: string
+  description?: string
+  targetSetId?: string
+}) {
+  return api.post(`/projects/${projectId}/pages/update`, data)
+}
+
+/** 删除页面 */
+export function deletePage(projectId: string, pageId: string) {
+  return api.post(`/projects/${projectId}/pages/delete`, { pageId })
+}
+
+// ========== 页面发现 ==========
 
 /** 触发页面发现 — SSE 流式返回进度 */
 export function discoverProject(
@@ -91,11 +145,6 @@ export function discoverProject(
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
-    const es = new EventSource(`/api/projects/${id}/discover?mode=${mode}`, { withCredentials: true })
-
-    // POST body 不能通过 EventSource 传递，改用 fetch + SSE reader
-    es.close()
-
     fetch(`/api/projects/${id}/discover`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

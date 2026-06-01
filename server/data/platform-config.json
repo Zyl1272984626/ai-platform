@@ -1,6 +1,6 @@
 {
-  "projectRoot": "E:/project/agent1",
-  "aiPlatformRoot": "E:/project/ai-platform",
+  "projectRoot": "C:/FengSuKeJi/agent",
+  "aiPlatformRoot": "C:/FengSuKeJi/ai-platform",
   "e2eDataDir": "F:/e2e-test-data",
   "mainFrontendPort": 5173,
   "mainBackendPort": 9998,
@@ -14,9 +14,1395 @@
       "loginUrl": "/web/index.html#/login",
       "username": "fskjadmin",
       "password": "fskj_dst_2023",
-      "sourcePath": "E:/project/agent1",
-      "pageSets": [],
-      "status": "active"
+      "sourcePath": "C:/FengSuKeJi/agent",
+      "pageSets": [
+        {
+          "id": "index-user",
+          "name": "user (index, 5页)",
+          "pages": [
+            {
+              "id": "index-UserChat-0",
+              "name": "智能对话",
+              "url": "/index/index.html#/user/chat",
+              "path": "/user/chat"
+            },
+            {
+              "id": "index-UserAgents-1",
+              "name": "智能体组织",
+              "url": "/index/index.html#/user/agents",
+              "path": "/user/agents"
+            },
+            {
+              "id": "index-UserDataTables-2",
+              "name": "数据表",
+              "url": "/index/index.html#/user/data-tables",
+              "path": "/user/data-tables"
+            },
+            {
+              "id": "index-UserComponents-3",
+              "name": "业务组件",
+              "url": "/index/index.html#/user/components",
+              "path": "/user/components"
+            },
+            {
+              "id": "index-user-4",
+              "name": "/user",
+              "url": "/index/index.html#/user",
+              "path": "/user"
+            }
+          ]
+        },
+        {
+          "id": "index-test",
+          "name": "test (index, 2页)",
+          "pages": [
+            {
+              "id": "index-TestPage-0",
+              "name": "组件测试",
+              "url": "/index/index.html#/test/:name",
+              "path": "/test/:name"
+            },
+            {
+              "id": "index-TestNav-1",
+              "name": "组件测试导航",
+              "url": "/index/index.html#/test",
+              "path": "/test"
+            }
+          ]
+        },
+        {
+          "id": "index-chat",
+          "name": "chat (index, 1页)",
+          "pages": [
+            {
+              "id": "index-Chat-0",
+              "name": "对话",
+              "url": "/index/index.html#/chat",
+              "path": "/chat"
+            }
+          ]
+        },
+        {
+          "id": "index-mobile",
+          "name": "mobile (index, 1页)",
+          "pages": [
+            {
+              "id": "index-Mobile-0",
+              "name": "移动端对话",
+              "url": "/index/index.html#/mobile",
+              "path": "/mobile"
+            }
+          ]
+        },
+        {
+          "id": "chat-user",
+          "name": "user (chat, 5页)",
+          "pages": [
+            {
+              "id": "chat-UserChat-0",
+              "name": "智能对话",
+              "url": "/chat/index.html#/user/chat",
+              "path": "/user/chat"
+            },
+            {
+              "id": "chat-UserAgents-1",
+              "name": "智能体组织",
+              "url": "/chat/index.html#/user/agents",
+              "path": "/user/agents"
+            },
+            {
+              "id": "chat-UserDataTables-2",
+              "name": "数据表",
+              "url": "/chat/index.html#/user/data-tables",
+              "path": "/user/data-tables"
+            },
+            {
+              "id": "chat-UserComponents-3",
+              "name": "业务组件",
+              "url": "/chat/index.html#/user/components",
+              "path": "/user/components"
+            },
+            {
+              "id": "chat-user-4",
+              "name": "/user",
+              "url": "/chat/index.html#/user",
+              "path": "/user"
+            }
+          ]
+        },
+        {
+          "id": "chat-test",
+          "name": "test (chat, 2页)",
+          "pages": [
+            {
+              "id": "chat-TestPage-0",
+              "name": "组件测试",
+              "url": "/chat/index.html#/test/:name",
+              "path": "/test/:name"
+            },
+            {
+              "id": "chat-TestNav-1",
+              "name": "组件测试导航",
+              "url": "/chat/index.html#/test",
+              "path": "/test"
+            }
+          ]
+        },
+        {
+          "id": "chat-chat",
+          "name": "chat (chat, 1页)",
+          "pages": [
+            {
+              "id": "chat-Chat-0",
+              "name": "对话",
+              "url": "/chat/index.html#/chat",
+              "path": "/chat"
+            }
+          ]
+        },
+        {
+          "id": "chat-mobile",
+          "name": "mobile (chat, 1页)",
+          "pages": [
+            {
+              "id": "chat-Mobile-0",
+              "name": "移动端对话",
+              "url": "/chat/index.html#/mobile",
+              "path": "/mobile"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-storage",
+          "name": "storage (setting-system, 2页)",
+          "pages": [
+            {
+              "id": "setting-system-storage-file-0",
+              "name": "文件管理",
+              "url": "/setting-system/index.html#/storage/file",
+              "path": "/storage/file"
+            },
+            {
+              "id": "setting-system-storage-1",
+              "name": "存储管理",
+              "url": "/setting-system/index.html#/storage",
+              "path": "/storage"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-knowledge",
+          "name": "knowledge (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-knowledge-source-0",
+              "name": "知识库源管理",
+              "url": "/setting-system/index.html#/knowledge/source",
+              "path": "/knowledge/source"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-memory",
+          "name": "memory (setting-system, 2页)",
+          "pages": [
+            {
+              "id": "setting-system-MemoryDetail-0",
+              "name": "记忆详情",
+              "url": "/setting-system/index.html#/memory/detail",
+              "path": "/memory/detail"
+            },
+            {
+              "id": "setting-system-MemoryManagement-1",
+              "name": "记忆管理",
+              "url": "/setting-system/index.html#/memory",
+              "path": "/memory"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-msg",
+          "name": "msg (setting-system, 2页)",
+          "pages": [
+            {
+              "id": "setting-system-MsgTemplate-0",
+              "name": "消息模板",
+              "url": "/setting-system/index.html#/msg/template",
+              "path": "/msg/template"
+            },
+            {
+              "id": "setting-system-MsgList-1",
+              "name": "消息列表",
+              "url": "/setting-system/index.html#/msg",
+              "path": "/msg"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-task",
+          "name": "task (setting-system, 3页)",
+          "pages": [
+            {
+              "id": "setting-system-task-list-0",
+              "name": "任务管理",
+              "url": "/setting-system/index.html#/task/list",
+              "path": "/task/list"
+            },
+            {
+              "id": "setting-system-task-execute-1",
+              "name": "任务执行日志",
+              "url": "/setting-system/index.html#/task/execute",
+              "path": "/task/execute"
+            },
+            {
+              "id": "setting-system-task-data-sync-config-2",
+              "name": "数据同步任务设置",
+              "url": "/setting-system/index.html#/task/data-sync-config",
+              "path": "/task/data-sync-config"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-app",
+          "name": "app (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-app-0",
+              "name": "智能体应用管理",
+              "url": "/setting-system/index.html#/app",
+              "path": "/app"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-code",
+          "name": "code (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-code-0",
+              "name": "代码管理",
+              "url": "/setting-system/index.html#/code",
+              "path": "/code"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-model",
+          "name": "model (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-model-0",
+              "name": "模型管理",
+              "url": "/setting-system/index.html#/model",
+              "path": "/model"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-config",
+          "name": "config (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-config-0",
+              "name": "配置管理",
+              "url": "/setting-system/index.html#/config",
+              "path": "/config"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-datasource",
+          "name": "datasource (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-datasource-0",
+              "name": "数据源管理",
+              "url": "/setting-system/index.html#/datasource",
+              "path": "/datasource"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-datause",
+          "name": "datause (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-datause-0",
+              "name": "基础数据访问控制",
+              "url": "/setting-system/index.html#/datause",
+              "path": "/datause"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-third-party-system",
+          "name": "third-party-system (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-third-party-system-0",
+              "name": "第三方系统管理",
+              "url": "/setting-system/index.html#/third-party-system",
+              "path": "/third-party-system"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-openclaw",
+          "name": "openclaw (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-openclaw-0",
+              "name": "智能体运行容器管理",
+              "url": "/setting-system/index.html#/openclaw",
+              "path": "/openclaw"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-wxbot",
+          "name": "wxbot (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-wxbot-0",
+              "name": "微信机器人用户管理",
+              "url": "/setting-system/index.html#/wxbot",
+              "path": "/wxbot"
+            }
+          ]
+        },
+        {
+          "id": "setting-system-monitor",
+          "name": "monitor (setting-system, 1页)",
+          "pages": [
+            {
+              "id": "setting-system-monitor-0",
+              "name": "资源监控",
+              "url": "/setting-system/index.html#/monitor",
+              "path": "/monitor"
+            }
+          ]
+        },
+        {
+          "id": "setting-app-meeting",
+          "name": "meeting (setting-app, 1页)",
+          "pages": [
+            {
+              "id": "setting-app-MeetingAudioRead-0",
+              "name": "会议音频阅读",
+              "url": "/setting-app/index.html#/meeting/audio-read",
+              "path": "/meeting/audio-read"
+            }
+          ]
+        },
+        {
+          "id": "setting-app-app",
+          "name": "app (setting-app, 34页)",
+          "pages": [
+            {
+              "id": "setting-app-setting-sys-table-data-0",
+              "name": "表数据",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/table/data/:id",
+              "path": "/app/:appId/setting/sys/table/data/:id"
+            },
+            {
+              "id": "setting-app-setting-sys-table-column-metadata-1",
+              "name": "列元数据",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/table/column-metadata",
+              "path": "/app/:appId/setting/sys/table/column-metadata"
+            },
+            {
+              "id": "setting-app-setting-sys-data-object-tables-2",
+              "name": "关联表管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/data-object/tables",
+              "path": "/app/:appId/setting/sys/data-object/tables"
+            },
+            {
+              "id": "setting-app-setting-permission-user-3",
+              "name": "用户管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/permission/user",
+              "path": "/app/:appId/setting/permission/user"
+            },
+            {
+              "id": "setting-app-setting-permission-role-4",
+              "name": "角色管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/permission/role",
+              "path": "/app/:appId/setting/permission/role"
+            },
+            {
+              "id": "setting-app-setting-permission-resource-5",
+              "name": "资源管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/permission/resource",
+              "path": "/app/:appId/setting/permission/resource"
+            },
+            {
+              "id": "setting-app-setting-permission-ug-6",
+              "name": "用户组管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/permission/ug",
+              "path": "/app/:appId/setting/permission/ug"
+            },
+            {
+              "id": "setting-app-setting-permission-qwapp-7",
+              "name": "企微应用管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/permission/qwapp",
+              "path": "/app/:appId/setting/permission/qwapp"
+            },
+            {
+              "id": "setting-app-setting-sys-page-8",
+              "name": "页面管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/page",
+              "path": "/app/:appId/setting/sys/page"
+            },
+            {
+              "id": "setting-app-setting-sys-nav-9",
+              "name": "导航管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/nav",
+              "path": "/app/:appId/setting/sys/nav"
+            },
+            {
+              "id": "setting-app-setting-sys-table-10",
+              "name": "数据表管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/table",
+              "path": "/app/:appId/setting/sys/table"
+            },
+            {
+              "id": "setting-app-setting-sys-data-object-11",
+              "name": "数据对象管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/data-object",
+              "path": "/app/:appId/setting/sys/data-object"
+            },
+            {
+              "id": "setting-app-setting-sys-knowledge-12",
+              "name": "知识库管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/knowledge",
+              "path": "/app/:appId/setting/sys/knowledge"
+            },
+            {
+              "id": "setting-app-setting-sys-plugin-13",
+              "name": "插件管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/plugin",
+              "path": "/app/:appId/setting/sys/plugin"
+            },
+            {
+              "id": "setting-app-setting-sys-mention-14",
+              "name": "注入配置",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/mention",
+              "path": "/app/:appId/setting/sys/mention"
+            },
+            {
+              "id": "setting-app-setting-sys-api-config-15",
+              "name": "API配置管理",
+              "url": "/setting-app/index.html#/app/:appId/setting/sys/api-config",
+              "path": "/app/:appId/setting/sys/api-config"
+            },
+            {
+              "id": "setting-app-DataTableDetail-16",
+              "name": "数据表详情",
+              "url": "/setting-app/index.html#/app/:appId/dataTable/detail/:id",
+              "path": "/app/:appId/dataTable/detail/:id"
+            },
+            {
+              "id": "setting-app-KnowledgeBaseDetail-17",
+              "name": "知识库详情",
+              "url": "/setting-app/index.html#/app/:appId/knowledgeBase/detail/:id",
+              "path": "/app/:appId/knowledgeBase/detail/:id"
+            },
+            {
+              "id": "setting-app-AgentUserList-18",
+              "name": "智能体用户列表",
+              "url": "/setting-app/index.html#/app/:appId/agent/user",
+              "path": "/app/:appId/agent/user"
+            },
+            {
+              "id": "setting-app-AgentEditConversation-19",
+              "name": "编辑对话流智能体",
+              "url": "/setting-app/index.html#/app/:appId/agent/edit-conversation",
+              "path": "/app/:appId/agent/edit-conversation"
+            },
+            {
+              "id": "setting-app-AgentEditLLM-20",
+              "name": "编辑LLM智能体",
+              "url": "/setting-app/index.html#/app/:appId/agent/edit-llm",
+              "path": "/app/:appId/agent/edit-llm"
+            },
+            {
+              "id": "setting-app-WorkflowDesign-21",
+              "name": "流程设计",
+              "url": "/setting-app/index.html#/app/:appId/workflow/design",
+              "path": "/app/:appId/workflow/design"
+            },
+            {
+              "id": "setting-app-SkillDetail-22",
+              "name": "技能详情",
+              "url": "/setting-app/index.html#/app/:appId/skill/detail",
+              "path": "/app/:appId/skill/detail"
+            },
+            {
+              "id": "setting-app-CompDesign-23",
+              "name": "组件设计",
+              "url": "/setting-app/index.html#/app/:appId/comp/design",
+              "path": "/app/:appId/comp/design"
+            },
+            {
+              "id": "setting-app-AgentList-24",
+              "name": "智能体列表",
+              "url": "/setting-app/index.html#/app/:appId/agent",
+              "path": "/app/:appId/agent"
+            },
+            {
+              "id": "setting-app-WorkflowList-25",
+              "name": "流程列表",
+              "url": "/setting-app/index.html#/app/:appId/workflow",
+              "path": "/app/:appId/workflow"
+            },
+            {
+              "id": "setting-app-PluginList-26",
+              "name": "插件管理",
+              "url": "/setting-app/index.html#/app/:appId/plugin",
+              "path": "/app/:appId/plugin"
+            },
+            {
+              "id": "setting-app-SkillList-27",
+              "name": "技能列表",
+              "url": "/setting-app/index.html#/app/:appId/skill",
+              "path": "/app/:appId/skill"
+            },
+            {
+              "id": "setting-app-Analytics-28",
+              "name": "会话监控分析",
+              "url": "/setting-app/index.html#/app/:appId/analytics",
+              "path": "/app/:appId/analytics"
+            },
+            {
+              "id": "setting-app-AnalyticsDetail-29",
+              "name": "统计分析详情",
+              "url": "/setting-app/index.html#/app/:appId/analytics-detail",
+              "path": "/app/:appId/analytics-detail"
+            },
+            {
+              "id": "setting-app-KnowledgeBase-30",
+              "name": "知识库",
+              "url": "/setting-app/index.html#/app/:appId/knowledgeBase",
+              "path": "/app/:appId/knowledgeBase"
+            },
+            {
+              "id": "setting-app-CompList-31",
+              "name": "组件管理",
+              "url": "/setting-app/index.html#/app/:appId/comp",
+              "path": "/app/:appId/comp"
+            },
+            {
+              "id": "setting-app-AppSetting-32",
+              "name": "AppSetting",
+              "url": "/setting-app/index.html#/app/:appId/setting",
+              "path": "/app/:appId/setting"
+            },
+            {
+              "id": "setting-app-AppHome-33",
+              "name": "应用首页",
+              "url": "/setting-app/index.html#/app/:appId",
+              "path": "/app/:appId"
+            }
+          ]
+        },
+        {
+          "id": "setting-app-comp-preview",
+          "name": "comp-preview (setting-app, 1页)",
+          "pages": [
+            {
+              "id": "setting-app-CompPreview-0",
+              "name": "组件预览",
+              "url": "/setting-app/index.html#/comp-preview",
+              "path": "/comp-preview"
+            }
+          ]
+        },
+        {
+          "id": "setting-app-app-list",
+          "name": "app-list (setting-app, 1页)",
+          "pages": [
+            {
+              "id": "setting-app-AppList-0",
+              "name": "应用列表",
+              "url": "/setting-app/index.html#/app-list",
+              "path": "/app-list"
+            }
+          ]
+        }
+      ],
+      "status": "active",
+      "discoveredAt": "2026-06-01T04:01:12.069Z",
+      "discoveryResult": {
+        "index": {
+          "title": "智能应用开发与管理平台",
+          "url": "http://localhost:5173/index/index.html",
+          "routeCount": 11,
+          "paramValues": {},
+          "routes": [
+            {
+              "path": "/user/chat",
+              "name": "UserChat",
+              "title": "智能对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/user/chat",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/agents",
+              "name": "UserAgents",
+              "title": "智能体组织",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/user/agents",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/data-tables",
+              "name": "UserDataTables",
+              "title": "数据表",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/user/data-tables",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/components",
+              "name": "UserComponents",
+              "title": "业务组件",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/user/components",
+              "paramValues": {}
+            },
+            {
+              "path": "/test/:name",
+              "name": "TestPage",
+              "title": "组件测试",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/index/index.html#/test/:name",
+              "paramValues": {}
+            },
+            {
+              "path": "/",
+              "name": "",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/",
+              "paramValues": {}
+            },
+            {
+              "path": "/login",
+              "name": "Login",
+              "title": "登录",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/login",
+              "paramValues": {}
+            },
+            {
+              "path": "/user",
+              "name": "",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/user",
+              "paramValues": {}
+            },
+            {
+              "path": "/chat",
+              "name": "Chat",
+              "title": "对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/chat",
+              "paramValues": {}
+            },
+            {
+              "path": "/test",
+              "name": "TestNav",
+              "title": "组件测试导航",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/test",
+              "paramValues": {}
+            },
+            {
+              "path": "/mobile",
+              "name": "Mobile",
+              "title": "移动端对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/index/index.html#/mobile",
+              "paramValues": {}
+            }
+          ]
+        },
+        "chat": {
+          "title": "智能应用开发与管理平台",
+          "url": "http://localhost:5173/chat/index.html",
+          "routeCount": 11,
+          "paramValues": {},
+          "routes": [
+            {
+              "path": "/user/chat",
+              "name": "UserChat",
+              "title": "智能对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/user/chat",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/agents",
+              "name": "UserAgents",
+              "title": "智能体组织",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/user/agents",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/data-tables",
+              "name": "UserDataTables",
+              "title": "数据表",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/user/data-tables",
+              "paramValues": {}
+            },
+            {
+              "path": "/user/components",
+              "name": "UserComponents",
+              "title": "业务组件",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/user/components",
+              "paramValues": {}
+            },
+            {
+              "path": "/test/:name",
+              "name": "TestPage",
+              "title": "组件测试",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/chat/index.html#/test/:name",
+              "paramValues": {}
+            },
+            {
+              "path": "/",
+              "name": "",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/",
+              "paramValues": {}
+            },
+            {
+              "path": "/login",
+              "name": "Login",
+              "title": "登录",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/login",
+              "paramValues": {}
+            },
+            {
+              "path": "/user",
+              "name": "",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/user",
+              "paramValues": {}
+            },
+            {
+              "path": "/chat",
+              "name": "Chat",
+              "title": "对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/chat",
+              "paramValues": {}
+            },
+            {
+              "path": "/test",
+              "name": "TestNav",
+              "title": "组件测试导航",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/test",
+              "paramValues": {}
+            },
+            {
+              "path": "/mobile",
+              "name": "Mobile",
+              "title": "移动端对话",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/chat/index.html#/mobile",
+              "paramValues": {}
+            }
+          ]
+        },
+        "setting-system": {
+          "title": "平台设置",
+          "url": "http://localhost:5173/setting-system/index.html",
+          "routeCount": 21,
+          "paramValues": {},
+          "routes": [
+            {
+              "path": "/storage/file",
+              "name": "storage-file",
+              "title": "文件管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/storage/file",
+              "paramValues": {}
+            },
+            {
+              "path": "/knowledge/source",
+              "name": "knowledge-source",
+              "title": "知识库源管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/knowledge/source",
+              "paramValues": {}
+            },
+            {
+              "path": "/memory/detail",
+              "name": "MemoryDetail",
+              "title": "记忆详情",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/memory/detail",
+              "paramValues": {}
+            },
+            {
+              "path": "/msg/template",
+              "name": "MsgTemplate",
+              "title": "消息模板",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/msg/template",
+              "paramValues": {}
+            },
+            {
+              "path": "/task/list",
+              "name": "task-list",
+              "title": "任务管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/task/list",
+              "paramValues": {}
+            },
+            {
+              "path": "/task/execute",
+              "name": "task-execute",
+              "title": "任务执行日志",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/task/execute",
+              "paramValues": {}
+            },
+            {
+              "path": "/task/data-sync-config",
+              "name": "task-data-sync-config",
+              "title": "数据同步任务设置",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/task/data-sync-config",
+              "paramValues": {}
+            },
+            {
+              "path": "/app",
+              "name": "app",
+              "title": "智能体应用管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/app",
+              "paramValues": {}
+            },
+            {
+              "path": "/code",
+              "name": "code",
+              "title": "代码管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/code",
+              "paramValues": {}
+            },
+            {
+              "path": "/model",
+              "name": "model",
+              "title": "模型管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/model",
+              "paramValues": {}
+            },
+            {
+              "path": "/config",
+              "name": "config",
+              "title": "配置管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/config",
+              "paramValues": {}
+            },
+            {
+              "path": "/datasource",
+              "name": "datasource",
+              "title": "数据源管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/datasource",
+              "paramValues": {}
+            },
+            {
+              "path": "/storage",
+              "name": "storage",
+              "title": "存储管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/storage",
+              "paramValues": {}
+            },
+            {
+              "path": "/datause",
+              "name": "datause",
+              "title": "基础数据访问控制",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/datause",
+              "paramValues": {}
+            },
+            {
+              "path": "/third-party-system",
+              "name": "third-party-system",
+              "title": "第三方系统管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/third-party-system",
+              "paramValues": {}
+            },
+            {
+              "path": "/openclaw",
+              "name": "openclaw",
+              "title": "智能体运行容器管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/openclaw",
+              "paramValues": {}
+            },
+            {
+              "path": "/wxbot",
+              "name": "wxbot",
+              "title": "微信机器人用户管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/wxbot",
+              "paramValues": {}
+            },
+            {
+              "path": "/monitor",
+              "name": "monitor",
+              "title": "资源监控",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/monitor",
+              "paramValues": {}
+            },
+            {
+              "path": "/memory",
+              "name": "MemoryManagement",
+              "title": "记忆管理",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/memory",
+              "paramValues": {}
+            },
+            {
+              "path": "/msg",
+              "name": "MsgList",
+              "title": "消息列表",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/msg",
+              "paramValues": {}
+            },
+            {
+              "path": "/",
+              "name": "App",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-system/index.html#/",
+              "paramValues": {}
+            }
+          ]
+        },
+        "setting-app": {
+          "title": "应用列表",
+          "url": "http://localhost:5173/setting-app/index.html",
+          "routeCount": 39,
+          "paramValues": {},
+          "routes": [
+            {
+              "path": "/meeting/audio-read",
+              "name": "MeetingAudioRead",
+              "title": "会议音频阅读",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-app/index.html#/meeting/audio-read",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/table/data/:id",
+              "name": "setting-sys-table-data",
+              "title": "表数据",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/table/data/:id",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/table/column-metadata",
+              "name": "setting-sys-table-column-metadata",
+              "title": "列元数据",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/table/column-metadata",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/data-object/tables",
+              "name": "setting-sys-data-object-tables",
+              "title": "关联表管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/data-object/tables",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/permission/user",
+              "name": "setting-permission-user",
+              "title": "用户管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/permission/user",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/permission/role",
+              "name": "setting-permission-role",
+              "title": "角色管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/permission/role",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/permission/resource",
+              "name": "setting-permission-resource",
+              "title": "资源管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/permission/resource",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/permission/ug",
+              "name": "setting-permission-ug",
+              "title": "用户组管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/permission/ug",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/permission/qwapp",
+              "name": "setting-permission-qwapp",
+              "title": "企微应用管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/permission/qwapp",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/page",
+              "name": "setting-sys-page",
+              "title": "页面管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/page",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/nav",
+              "name": "setting-sys-nav",
+              "title": "导航管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/nav",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/table",
+              "name": "setting-sys-table",
+              "title": "数据表管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/table",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/data-object",
+              "name": "setting-sys-data-object",
+              "title": "数据对象管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/data-object",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/knowledge",
+              "name": "setting-sys-knowledge",
+              "title": "知识库管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/knowledge",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/plugin",
+              "name": "setting-sys-plugin",
+              "title": "插件管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/plugin",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/mention",
+              "name": "setting-sys-mention",
+              "title": "注入配置",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/mention",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting/sys/api-config",
+              "name": "setting-sys-api-config",
+              "title": "API配置管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/api-config",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/dataTable/detail/:id",
+              "name": "DataTableDetail",
+              "title": "数据表详情",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/dataTable/detail/:id",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/knowledgeBase/detail/:id",
+              "name": "KnowledgeBaseDetail",
+              "title": "知识库详情",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/knowledgeBase/detail/:id",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/agent/user",
+              "name": "AgentUserList",
+              "title": "智能体用户列表",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/agent/user",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/agent/edit-conversation",
+              "name": "AgentEditConversation",
+              "title": "编辑对话流智能体",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/agent/edit-conversation",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/agent/edit-llm",
+              "name": "AgentEditLLM",
+              "title": "编辑LLM智能体",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/agent/edit-llm",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/workflow/design",
+              "name": "WorkflowDesign",
+              "title": "流程设计",
+              "layout": "full",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/workflow/design",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/skill/detail",
+              "name": "SkillDetail",
+              "title": "技能详情",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/skill/detail",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/comp/design",
+              "name": "CompDesign",
+              "title": "组件设计",
+              "layout": "full",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/comp/design",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/agent",
+              "name": "AgentList",
+              "title": "智能体列表",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/agent",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/workflow",
+              "name": "WorkflowList",
+              "title": "流程列表",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/workflow",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/plugin",
+              "name": "PluginList",
+              "title": "插件管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/plugin",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/skill",
+              "name": "SkillList",
+              "title": "技能列表",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/skill",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/analytics",
+              "name": "Analytics",
+              "title": "会话监控分析",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/analytics",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/analytics-detail",
+              "name": "AnalyticsDetail",
+              "title": "统计分析详情",
+              "layout": "independent",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/analytics-detail",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/knowledgeBase",
+              "name": "KnowledgeBase",
+              "title": "知识库",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/knowledgeBase",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/comp",
+              "name": "CompList",
+              "title": "组件管理",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/comp",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId/setting",
+              "name": "AppSetting",
+              "title": "",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId/setting",
+              "paramValues": {}
+            },
+            {
+              "path": "/app/:appId",
+              "name": "AppHome",
+              "title": "应用首页",
+              "layout": "",
+              "hasParams": true,
+              "concreteUrl": "/setting-app/index.html#/app/:appId",
+              "paramValues": {}
+            },
+            {
+              "path": "/",
+              "name": "",
+              "title": "",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-app/index.html#/",
+              "paramValues": {}
+            },
+            {
+              "path": "/login",
+              "name": "Login",
+              "title": "登录",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-app/index.html#/login",
+              "paramValues": {}
+            },
+            {
+              "path": "/comp-preview",
+              "name": "CompPreview",
+              "title": "组件预览",
+              "layout": "full",
+              "hasParams": false,
+              "concreteUrl": "/setting-app/index.html#/comp-preview",
+              "paramValues": {}
+            },
+            {
+              "path": "/app-list",
+              "name": "AppList",
+              "title": "应用列表",
+              "layout": "",
+              "hasParams": false,
+              "concreteUrl": "/setting-app/index.html#/app-list",
+              "paramValues": {}
+            }
+          ]
+        }
+      }
     }
   ],
   "defaultProjectId": "agent-main"
