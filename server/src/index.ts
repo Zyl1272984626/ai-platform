@@ -37,6 +37,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', projects: getConfig().projects.length, version: '0.1.0' });
 });
 
+// SPA fallback：非 /api 路径返回 index.html，交给前端路由处理
+app.get('*', (_req, res) => {
+  res.sendFile('index.html', { root: '../web/dist' });
+});
+
 app.listen(PORT, () => {
   const config = getConfig();
   console.log(`[AI Platform] Server running on http://localhost:${PORT}`);
