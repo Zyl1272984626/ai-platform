@@ -13,6 +13,40 @@ interface SchoolDeploy {
   sshKey?: string;
 }
 
+export interface CasConfig {
+  enableCas?: boolean;
+  enableMobileCas?: boolean;
+  casHost?: string;
+  loginUrl?: string;
+  loginSuccess?: string;
+}
+
+export interface SandboxConfig {
+  basePath?: string;
+  strategy?: string;
+  sandboxieHome?: string;
+  sandboxieIniPath?: string;
+}
+
+export interface SecurityConfig {
+  mode?: string;
+}
+
+export interface PasswordConfig {
+  username?: string;
+  defaultPassword?: string;
+  superPassword?: string;
+  salt?: string;
+}
+
+export interface CommonConfig {
+  amapKey?: string;
+  uploadDir?: string;
+  druidUser?: string;
+  druidPassword?: string;
+  helperDialect?: string;
+}
+
 export interface School {
   code: string;
   name: string;
@@ -22,11 +56,15 @@ export interface School {
   deploy: SchoolDeploy;
   status: 'pending' | 'configured' | 'deployed' | 'error';
   lastDeploy: string | null;
-  amapKey?: string;
   dbHost?: string;
   dbPort?: number;
   dbUser?: string;
   dbPassword?: string;
+  cas?: CasConfig;
+  sandbox?: SandboxConfig;
+  security?: SecurityConfig;
+  passwords?: PasswordConfig;
+  common?: CommonConfig;
 }
 
 interface SchoolsData {

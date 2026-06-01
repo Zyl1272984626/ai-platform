@@ -11,29 +11,6 @@
           <label>编码 <span class="req">*</span></label>
           <input v-model="form.code" placeholder="例：guizhou_shuili" :disabled="mode === 'edit'" required />
         </div>
-        <div class="form-row">
-          <label>数据库类型</label>
-          <select v-model="form.type">
-            <option value="mysql">MySQL</option>
-            <option value="dameng">达梦</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <label>端口</label>
-          <input v-model.number="form.port" type="number" placeholder="9996" />
-        </div>
-        <div class="form-row">
-          <label>数据库名</label>
-          <input v-model="form.database" placeholder="AGENT_PORTAL" />
-        </div>
-        <div class="form-row">
-          <label>部署主机</label>
-          <input v-model="form.deployHost" placeholder="172.18.102.107" />
-        </div>
-        <div class="form-row">
-          <label>SSH 用户</label>
-          <input v-model="form.deployUser" placeholder="root" />
-        </div>
         <div class="form-actions">
           <button type="button" class="btn-cancel" @click="$emit('cancel')">取消</button>
           <button type="submit" class="btn-save">{{ mode === 'add' ? '添加' : '保存' }}</button>
@@ -60,23 +37,18 @@ const emit = defineEmits<{
 const form = reactive({
   name: props.school?.name || '',
   code: props.school?.code || '',
-  type: props.school?.type || 'dameng',
-  port: props.school?.port || 9996,
-  database: props.school?.database || 'AGENT_PORTAL',
-  deployHost: props.school?.deploy?.host || '',
-  deployUser: props.school?.deploy?.user || 'root',
 })
 
 function handleSubmit() {
   const data: any = {
     name: form.name,
     code: form.code,
-    type: form.type,
-    port: form.port,
-    database: form.database,
-    deploy: { host: form.deployHost, user: form.deployUser },
   }
   if (props.mode === 'add') {
+    data.type = 'dameng'
+    data.port = 9996
+    data.database = 'AGENT_PORTAL'
+    data.deploy = { host: '', user: 'root' }
     data.status = 'pending'
     data.lastDeploy = null
   }

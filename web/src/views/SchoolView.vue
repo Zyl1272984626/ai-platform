@@ -17,19 +17,35 @@
     <div v-else class="school-grid">
       <div v-for="s in schools" :key="s.code" class="school-card">
         <div class="card-top">
-          <div class="school-name">{{ s.name }}</div>
+          <div class="school-name" @click="goDetail(s.code)">{{ s.name }}</div>
           <StatusBadge :status="s.status" />
         </div>
         <div class="card-info">
-          <div class="info-row"><span class="info-label">编码</span><span class="info-value">{{ s.code }}</span></div>
-          <div class="info-row"><span class="info-label">数据库</span><span class="info-value">{{ s.type }}</span></div>
-          <div class="info-row"><span class="info-label">端口</span><span class="info-value">{{ s.port }}</span></div>
-          <div class="info-row"><span class="info-label">主机</span><span class="info-value">{{ s.deploy?.host || '-' }}</span></div>
-          <div v-if="s.lastDeploy" class="info-row"><span class="info-label">最近部署</span><span class="info-value">{{ s.lastDeploy }}</span></div>
+          <div class="info-row">
+            <span class="info-label">访问地址</span>
+            <span class="info-value">{{ getAccessUrl(s) }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">用户名</span>
+            <span class="info-value">{{ s.passwords?.username || '-' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">密码</span>
+            <span class="info-value password-row">
+              <span v-if="visiblePasswords[s.code]">{{ s.passwords?.defaultPassword || '-' }}</span>
+              <span v-else>••••••</span>
+              <button class="pwd-toggle" @click.stop="togglePassword(s.code)">
+                {{ visiblePasswords[s.code] ? '隐藏' : '显示' }}
+              </button>
+            </span>
+          </div>
         </div>
         <div class="card-actions">
+          <button class="act-btn act-config" @click="goDetail(s.code)">配置</button>
           <button class="act-btn act-edit" @click="startEdit(s)">编辑</button>
-          <button class="act-btn act-deploy" @click="deploySchool(s)">部署</button>
+          <button class="act-btn act-deploy" @click="doDeploy(s)" :disabled="deployingCode === s.code">
+            {{ deployingCode === s.code ? '构建中...' : '部署' }}
+          </button>
           <button class="act-btn act-del" @click="confirmDelete(s)">删除</button>
         </div>
       </div>
@@ -46,18 +62,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SchoolForm from '../components/school/SchoolForm.vue'
-import { listSchools, addSchool, updateSchool, deleteSchool } from '../api/schools'
+import { listSchools, addSchool, updateSchool, deleteSchool, deploySchool } from '../api/schools'
 import type { School } from '../api/types'
 
 const schools = ref<School[]>([])
 const showAddForm = ref(false)
 const editingSchool = ref<School | null>(null)
+const deployingCode = ref('')
+const router = useRouter()
+const visiblePasswords = reactive<Record<string, boolean>>({})
+
+function getAccessUrl(s: School): string {
+  return s.cas?.casHost || '-'
+}
+
+function togglePassword(code: string) {
+  visiblePasswords[code] = !visiblePasswords[code]
+}
 
 onMounted(fetchSchools)
+
+function goDetail(code: string) {
+  router.push(`/schools/${code}`)
+}
 
 async function fetchSchools() {
   try { schools.value = await listSchools() } catch { /* ignore */ }
@@ -96,8 +128,16 @@ async function confirmDelete(s: School) {
   }
 }
 
-function deploySchool(s: School) {
-  alert(`部署功能将通过工作流触发：POST /api/workflows/学校部署全流程/run\n学校: ${s.name} (${s.code})`)
+async function doDeploy(s: School) {
+  if (!confirm(`确认为「${s.name}」生成部署包？\n将自动执行 Maven 构建并打包配置，请耐心等待。`)) return
+  deployingCode.value = s.code
+  try {
+    await deploySchool(s.code)
+  } catch (e: any) {
+    alert('部署失败: ' + e.message)
+  } finally {
+    deployingCode.value = ''
+  }
 }
 </script>
 
@@ -158,6 +198,10 @@ function deploySchool(s: School) {
   font-size: 16px;
   font-weight: 600;
   color: #1a1a2e;
+  cursor: pointer;
+}
+.school-name:hover {
+  color: #667eea;
 }
 .card-info { flex: 1; margin-bottom: 14px; }
 .info-row {
@@ -168,6 +212,24 @@ function deploySchool(s: School) {
 }
 .info-label { color: #999; }
 .info-value { color: #333; font-family: monospace; font-size: 12px; }
+.password-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pwd-toggle {
+  padding: 1px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  color: #999;
+}
+.pwd-toggle:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
 .card-actions {
   display: flex;
   gap: 8px;
@@ -186,6 +248,7 @@ function deploySchool(s: School) {
   transition: all 0.15s;
 }
 .act-edit:hover { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
+.act-config:hover { border-color: #667eea; color: #667eea; background: #f0f0ff; }
 .act-deploy:hover { border-color: #52c41a; color: #52c41a; background: #f6ffed; }
 .act-del:hover { border-color: #ff4d4f; color: #ff4d4f; background: #fff2f0; }
 .empty-grid { padding: 40px 0; }

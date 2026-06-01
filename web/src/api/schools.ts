@@ -20,3 +20,31 @@ export function updateSchool(code: string, data: Partial<School>) {
 export function deleteSchool(code: string) {
   return api.delete(`/schools/${code}`).then(r => r.data)
 }
+
+export function previewConfigs(code: string) {
+  return api.get<Record<string, string>>(`/schools/${code}/preview-configs`).then(r => r.data)
+}
+
+export function generateConfigsApi(code: string) {
+  return api.post<{ ok: boolean; files: string[] }>(`/schools/${code}/generate-configs`).then(r => r.data)
+}
+
+export async function deploySchool(code: string) {
+  const resp = await fetch(`/api/schools/${code}/deploy`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(10 * 60 * 1000), // 10 分钟超时（Maven 构建耗时）
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: '部署失败' }))
+    throw new Error(err.error)
+  }
+  const blob = await resp.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${code}.war`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}

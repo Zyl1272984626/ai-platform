@@ -7,6 +7,7 @@ import App from './App.vue'
 const DashboardView = () => import('./views/DashboardView.vue')
 const ChatView = () => import('./views/ChatView.vue')
 const SchoolView = () => import('./views/SchoolView.vue')
+const SchoolDetailView = () => import('./views/SchoolDetailView.vue')
 const WorkflowView = () => import('./views/WorkflowView.vue')
 const SkillView = () => import('./views/SkillView.vue')
 const TestView = () => import('./views/TestView.vue')
@@ -18,6 +19,7 @@ const router = createRouter({
     { path: '/', component: DashboardView },
     { path: '/chat', component: ChatView },
     { path: '/schools', component: SchoolView },
+    { path: '/schools/:code', component: SchoolDetailView },
     { path: '/workflows', component: WorkflowView },
     { path: '/skills', component: SkillView },
     { path: '/tests', component: TestView },
