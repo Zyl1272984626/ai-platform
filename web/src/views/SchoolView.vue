@@ -43,8 +43,9 @@
         <div class="card-actions">
           <button class="act-btn act-config" @click="goDetail(s.code)">配置</button>
           <button class="act-btn act-edit" @click="startEdit(s)">编辑</button>
-          <button class="act-btn act-deploy" @click="doDeploy(s)" :disabled="deployingCode === s.code">
-            {{ deployingCode === s.code ? '构建中...' : '部署' }}
+          <button class="act-btn act-deploy" @click="goDeploy(s.code)">部署配置</button>
+          <button class="act-btn act-war" @click="doDeploy(s)" :disabled="deployingCode === s.code">
+            {{ deployingCode === s.code ? '构建中...' : '生成WAR' }}
           </button>
           <button class="act-btn act-del" @click="confirmDelete(s)">删除</button>
         </div>
@@ -128,8 +129,12 @@ async function confirmDelete(s: School) {
   }
 }
 
+function goDeploy(code: string) {
+  router.push(`/schools/${code}/deploy`)
+}
+
 async function doDeploy(s: School) {
-  if (!confirm(`确认为「${s.name}」生成部署包？\n将自动执行 Maven 构建并打包配置，请耐心等待。`)) return
+  if (!confirm(`确认为「${s.name}」生成 WAR 包？\n将自动执行 Maven 构建并打包配置，请耐心等待。`)) return
   deployingCode.value = s.code
   try {
     await deploySchool(s.code)
@@ -250,6 +255,7 @@ async function doDeploy(s: School) {
 .act-edit:hover { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
 .act-config:hover { border-color: #667eea; color: #667eea; background: #f0f0ff; }
 .act-deploy:hover { border-color: #52c41a; color: #52c41a; background: #f6ffed; }
+.act-war:hover { border-color: #fa8c16; color: #fa8c16; background: #fff7e6; }
 .act-del:hover { border-color: #ff4d4f; color: #ff4d4f; background: #fff2f0; }
 .empty-grid { padding: 40px 0; }
 .start-btn {

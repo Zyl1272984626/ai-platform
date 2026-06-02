@@ -40,11 +40,27 @@ export interface PasswordConfig {
 }
 
 export interface CommonConfig {
+  /** @deprecated use deployConfig.serverOs */
+  serverOs?: 'linux' | 'windows';
+  /** @deprecated use deployConfig.windowsDrive */
+  windowsDrive?: string;
   amapKey?: string;
-  uploadDir?: string;
   druidUser?: string;
   druidPassword?: string;
-  helperDialect?: string;
+}
+
+export interface DeployConfig {
+  serverOs?: 'linux' | 'windows';
+  windowsDrive?: string;
+  dbRootPassword?: string;
+  mysqlContainer?: string;
+  oneapiHost?: string;
+  oneapiPort?: number;
+  oneapiKey?: string;
+  knowledgeBaseUrl?: string;
+  knowledgeAppId?: string;
+  knowledgeApiKey?: string;
+  voiceApiUrl?: string;
 }
 
 export interface School {
@@ -65,6 +81,7 @@ export interface School {
   security?: SecurityConfig;
   passwords?: PasswordConfig;
   common?: CommonConfig;
+  deployConfig?: DeployConfig;
 }
 
 interface SchoolsData {

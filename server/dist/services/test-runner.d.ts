@@ -1,5 +1,13 @@
 export type TestType = 'agent' | 'e2e' | 'frontend' | 'api';
 export type TestStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error';
+export interface StreamBlock {
+    type: 'text' | 'tool_use';
+    content?: string;
+    name?: string;
+    input?: any;
+    result?: string;
+    toolUseId?: string;
+}
 export interface TestCase {
     id: string;
     name: string;
@@ -8,6 +16,7 @@ export interface TestCase {
     duration?: number;
     error?: string;
     output?: string;
+    blocks?: StreamBlock[];
 }
 export interface TestSuite {
     id: string;

@@ -18,9 +18,6 @@
         <button class="btn btn-save" @click="doSave" :disabled="saving">
           {{ saving ? '保存中...' : '保存配置' }}
         </button>
-        <button class="btn btn-generate" @click="doGenerate" :disabled="generating">
-          {{ generating ? '生成中...' : '生成配置文件' }}
-        </button>
       </div>
     </header>
 
@@ -43,6 +40,13 @@
         <h2 class="section-title">数据库配置</h2>
         <div class="form-grid">
           <div class="form-group">
+            <label>数据库类型</label>
+            <select v-model="form.type" @change="onDbTypeChange">
+              <option value="mysql">MySQL</option>
+              <option value="dameng">达梦</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label>DB Host</label>
             <input v-model="form.dbHost" placeholder="数据库主机地址" />
           </div>
@@ -51,12 +55,20 @@
             <input v-model.number="form.dbPort" type="number" placeholder="端口号" />
           </div>
           <div class="form-group">
+            <label>数据库名</label>
+            <input v-model="form.database" placeholder="例: agent_portal" />
+          </div>
+          <div class="form-group">
             <label>DB User</label>
             <input v-model="form.dbUser" placeholder="数据库用户名" />
           </div>
           <div class="form-group">
             <label>DB Password</label>
             <input v-model="form.dbPassword" type="password" placeholder="数据库密码" />
+          </div>
+          <div class="form-group">
+            <label>MySQL Docker 容器名</label>
+            <input v-model="form.deployConfig.mysqlContainer" placeholder="可选；不填则使用宿主机 mysql 命令" />
           </div>
         </div>
       </section>
@@ -75,15 +87,7 @@
           </div>
           <div class="form-group">
             <label>CAS Host</label>
-            <input v-model="form.cas.casHost" placeholder="CAS 服务器地址" />
-          </div>
-          <div class="form-group">
-            <label>Login URL</label>
-            <input v-model="form.cas.loginUrl" placeholder="登录地址" />
-          </div>
-          <div class="form-group">
-            <label>Login Success URL</label>
-            <input v-model="form.cas.loginSuccess" placeholder="登录成功跳转地址" />
+            <input v-model="form.cas.casHost" placeholder="例：http://192.168.73.136:8082/agent" />
           </div>
           <div class="form-group">
             <label>用户名</label>
@@ -96,28 +100,36 @@
         </div>
       </section>
 
-      <!-- Sandbox (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.sandbox = !collapsed.sandbox">
-          <span>沙箱配置</span>
-          <span class="collapse-icon">{{ collapsed.sandbox ? '▸' : '▾' }}</span>
-        </h2>
-        <div v-show="!collapsed.sandbox" class="form-grid">
+      <!-- Deploy Config -->
+      <section class="setting-section">
+        <h2 class="section-title">部署配置</h2>
+        <div class="form-grid">
           <div class="form-group">
-            <label>Base Path</label>
-            <input v-model="form.sandbox.basePath" placeholder="沙箱基础路径" />
+            <label>目标服务器</label>
+            <input v-model="form.deploy.host" placeholder="例: 192.168.1.100" />
           </div>
           <div class="form-group">
-            <label>Strategy</label>
-            <input v-model="form.sandbox.strategy" placeholder="策略" />
+            <label>应用服务器系统</label>
+            <select v-model="form.deployConfig.serverOs">
+              <option value="linux">Linux</option>
+              <option value="windows">Windows</option>
+            </select>
+          </div>
+          <div class="form-group" v-if="form.deployConfig.serverOs === 'windows'">
+            <label>Windows 盘符</label>
+            <select v-model="form.deployConfig.windowsDrive">
+              <option value="C:">C:</option>
+              <option value="D:">D:</option>
+              <option value="E:">E:</option>
+            </select>
           </div>
           <div class="form-group">
-            <label>Sandboxie Home</label>
-            <input v-model="form.sandbox.sandboxieHome" placeholder="Sandboxie 主目录" />
+            <label>SSH 用户</label>
+            <input v-model="form.deploy.user" placeholder="默认 root" />
           </div>
           <div class="form-group">
-            <label>Sandboxie Ini Path</label>
-            <input v-model="form.sandbox.sandboxieIniPath" placeholder="Sandboxie.ini 路径" />
+            <label>数据库 Root 密码</label>
+            <input v-model="form.deployConfig.dbRootPassword" type="password" placeholder="目标服务器数据库 root 密码" />
           </div>
         </div>
       </section>
@@ -147,17 +159,13 @@
       <!-- Common (collapsible) -->
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.common = !collapsed.common">
-          <span>通用配置</span>
+          <span>高级配置</span>
           <span class="collapse-icon">{{ collapsed.common ? '▸' : '▾' }}</span>
         </h2>
         <div v-show="!collapsed.common" class="form-grid">
           <div class="form-group">
             <label>高德地图 Key</label>
             <input v-model="form.common.amapKey" placeholder="AMap Key" />
-          </div>
-          <div class="form-group">
-            <label>上传目录</label>
-            <input v-model="form.common.uploadDir" placeholder="文件上传路径" />
           </div>
           <div class="form-group">
             <label>Druid 用户名</label>
@@ -167,9 +175,63 @@
             <label>Druid 密码</label>
             <input v-model="form.common.druidPassword" type="password" placeholder="Druid 监控密码" />
           </div>
+        </div>
+      </section>
+
+      <!-- OneApi Config (collapsible) -->
+      <section class="setting-section collapsible">
+        <h2 class="section-title clickable" @click="collapsed.oneapi = !collapsed.oneapi">
+          <span>OneApi 配置</span>
+          <span class="collapse-icon">{{ collapsed.oneapi ? '▸' : '▾' }}</span>
+        </h2>
+        <div v-show="!collapsed.oneapi" class="form-grid">
           <div class="form-group">
-            <label>Helper Dialect</label>
-            <input v-model="form.common.helperDialect" placeholder="数据库方言 (mysql/dm)" />
+            <label>OneApi 地址</label>
+            <input v-model="form.deployConfig.oneapiHost" placeholder="例: 192.168.1.100" />
+          </div>
+          <div class="form-group">
+            <label>OneApi 端口</label>
+            <input v-model.number="form.deployConfig.oneapiPort" type="number" placeholder="3000" />
+          </div>
+          <div class="form-group">
+            <label>OneApi Key</label>
+            <input v-model="form.deployConfig.oneapiKey" placeholder="sk-xxx" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Knowledge (collapsible) -->
+      <section class="setting-section collapsible">
+        <h2 class="section-title clickable" @click="collapsed.knowledge = !collapsed.knowledge">
+          <span>知识中心配置</span>
+          <span class="collapse-icon">{{ collapsed.knowledge ? '▸' : '▾' }}</span>
+        </h2>
+        <div v-show="!collapsed.knowledge" class="form-grid">
+          <div class="form-group full">
+            <label>Base URL</label>
+            <input v-model="form.deployConfig.knowledgeBaseUrl" placeholder="例: http://192.168.1.100:9999" />
+          </div>
+          <div class="form-group">
+            <label>APP ID</label>
+            <input v-model="form.deployConfig.knowledgeAppId" placeholder="知识中心应用 ID" />
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input v-model="form.deployConfig.knowledgeApiKey" placeholder="知识中心 API Key" />
+          </div>
+        </div>
+      </section>
+
+      <!-- Voice API (collapsible) -->
+      <section class="setting-section collapsible">
+        <h2 class="section-title clickable" @click="collapsed.voice = !collapsed.voice">
+          <span>语音配置</span>
+          <span class="collapse-icon">{{ collapsed.voice ? '▸' : '▾' }}</span>
+        </h2>
+        <div v-show="!collapsed.voice" class="form-grid">
+          <div class="form-group full">
+            <label>语音识别 API 地址</label>
+            <input v-model="form.deployConfig.voiceApiUrl" placeholder="例: http://192.168.1.10/voice-api" />
           </div>
         </div>
       </section>
@@ -179,29 +241,7 @@
         <button class="btn btn-save" @click="doSave" :disabled="saving">
           {{ saving ? '保存中...' : '保存配置' }}
         </button>
-        <button class="btn btn-generate" @click="doGenerate" :disabled="generating">
-          {{ generating ? '生成中...' : '生成配置文件' }}
-        </button>
       </div>
-
-      <!-- Preview Panel -->
-      <section v-if="previewData" class="setting-section preview-section">
-        <h2 class="section-title">配置预览</h2>
-        <div class="preview-tabs">
-          <button
-            v-for="(_, tabName) in previewData"
-            :key="tabName"
-            class="tab-btn"
-            :class="{ active: activeTab === tabName }"
-            @click="activeTab = tabName"
-          >
-            {{ tabName }}
-          </button>
-        </div>
-        <div class="preview-content">
-          <pre v-if="previewData[activeTab]">{{ previewData[activeTab] }}</pre>
-        </div>
-      </section>
     </div>
   </div>
 </template>
@@ -210,7 +250,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import { getSchool, updateSchool, previewConfigs, generateConfigsApi } from '../api/schools'
+import { getSchool, updateSchool } from '../api/schools'
 import type { School } from '../api/types'
 
 const router = useRouter()
@@ -219,7 +259,6 @@ const code = route.params.code as string
 
 const loading = ref(true)
 const saving = ref(false)
-const generating = ref(false)
 const school = ref<School | null>(null)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 let messageTimer: ReturnType<typeof setTimeout> | null = null
@@ -229,24 +268,17 @@ function showMessage(type: 'success' | 'error', text: string) {
   message.value = { type, text }
   messageTimer = setTimeout(() => { message.value = null }, 3000)
 }
-const previewData = ref<Record<string, string> | null>(null)
-const activeTab = ref('')
-
 // 三个区块默认折叠
 const collapsed = reactive({
-  sandbox: true,
   security: true,
   common: true,
+  oneapi: false,
+  knowledge: true,
+  voice: true,
 })
 
 // 默认值来自主系统当前配置文件
 const DEFAULTS = {
-  sandbox: {
-    basePath: 'D:/tmp/sandbox',
-    strategy: 'sandboxie',
-    sandboxieHome: 'D:/software/Sandboxie-Plus',
-    sandboxieIniPath: 'D:/software/Sandboxie-Plus/Sandboxie.ini',
-  },
   security: {
     mode: 'dev',
   },
@@ -258,18 +290,22 @@ const DEFAULTS = {
   },
   common: {
     amapKey: '3ef0e07e35a573719aba2f0d1f117e4f',
-    uploadDir: '',
     druidUser: 'druid',
     druidPassword: '123456',
-    helperDialect: '',
   },
 }
 
 const form = reactive({
+  type: 'mysql' as 'mysql' | 'dameng',
   dbHost: '',
   dbPort: 5237,
+  database: '',
   dbUser: '',
   dbPassword: '',
+  deploy: {
+    host: '',
+    user: 'root',
+  },
   cas: {
     enableCas: false,
     enableMobileCas: false,
@@ -277,26 +313,44 @@ const form = reactive({
     loginUrl: '',
     loginSuccess: '',
   },
-  sandbox: { ...DEFAULTS.sandbox },
   security: { ...DEFAULTS.security },
   passwords: { ...DEFAULTS.passwords },
   common: { ...DEFAULTS.common },
+  deployConfig: {
+    serverOs: 'linux' as 'linux' | 'windows',
+    windowsDrive: 'D:',
+    dbRootPassword: '',
+    mysqlContainer: '',
+    oneapiHost: '',
+    oneapiPort: 3000,
+    oneapiKey: '',
+    knowledgeBaseUrl: '',
+    knowledgeAppId: '',
+    knowledgeApiKey: '',
+    voiceApiUrl: '',
+  },
 })
 
 onMounted(async () => {
   try {
     const data = await getSchool(code)
     school.value = data
+    form.type = data.type || 'mysql'
     form.dbHost = data.dbHost || ''
     form.dbPort = data.dbPort ?? (data.type === 'mysql' ? 3306 : 5237)
+    form.database = data.database || ''
     form.dbUser = data.dbUser || ''
     form.dbPassword = data.dbPassword || ''
+    form.deploy.host = data.deploy?.host || ''
+    form.deploy.user = data.deploy?.user || 'root'
     if (data.cas) Object.assign(form.cas, data.cas)
     // 已保存的覆盖默认值，未保存的保持默认
-    if (data.sandbox && hasContent(data.sandbox)) Object.assign(form.sandbox, data.sandbox)
-    if (data.security && hasContent(data.security)) Object.assign(form.security, data.security)
-    if (data.passwords && hasContent(data.passwords)) Object.assign(form.passwords, data.passwords)
-    if (data.common && hasContent(data.common)) Object.assign(form.common, data.common)
+    if (data.security && hasContent(data.security as Record<string, unknown>)) Object.assign(form.security, data.security)
+    if (data.passwords && hasContent(data.passwords as Record<string, unknown>)) Object.assign(form.passwords, data.passwords)
+    if (data.common && hasContent(data.common as Record<string, unknown>)) Object.assign(form.common, data.common)
+    if (data.deployConfig && hasContent(data.deployConfig as Record<string, unknown>)) Object.assign(form.deployConfig, data.deployConfig)
+    if (!data.deployConfig?.serverOs && data.common?.serverOs) form.deployConfig.serverOs = data.common.serverOs
+    if (!data.deployConfig?.windowsDrive && data.common?.windowsDrive) form.deployConfig.windowsDrive = data.common.windowsDrive
   } catch (e: any) {
     showMessage('error', '加载失败: ' + e.message)
   } finally {
@@ -309,54 +363,47 @@ function hasContent(obj: Record<string, unknown>): boolean {
   return Object.values(obj).some(v => v !== undefined && v !== null && v !== '')
 }
 
+function collectFormData() {
+  return {
+    status: 'configured' as const,
+    type: form.type,
+    dbHost: form.dbHost,
+    dbPort: form.dbPort,
+    database: form.database,
+    dbUser: form.dbUser,
+    dbPassword: form.dbPassword,
+    deploy: {
+      ...(school.value?.deploy || {}),
+      host: form.deploy.host,
+      user: form.deploy.user || 'root',
+    },
+    cas: { ...form.cas },
+    security: { ...form.security },
+    passwords: { ...form.passwords },
+    common: { ...form.common },
+    deployConfig: { ...form.deployConfig },
+  }
+}
+
+function onDbTypeChange() {
+  if (form.type === 'mysql' && (!form.dbPort || form.dbPort === 5237)) {
+    form.dbPort = 3306
+  }
+  if (form.type === 'dameng' && (!form.dbPort || form.dbPort === 3306)) {
+    form.dbPort = 5237
+  }
+}
+
 async function doSave() {
   saving.value = true
   try {
-    const updated = await updateSchool(code, {
-      status: 'configured',
-      dbHost: form.dbHost,
-      dbPort: form.dbPort,
-      dbUser: form.dbUser,
-      dbPassword: form.dbPassword,
-      cas: { ...form.cas },
-      sandbox: { ...form.sandbox },
-      security: { ...form.security },
-      passwords: { ...form.passwords },
-      common: { ...form.common },
-    })
+    const updated = await updateSchool(code, collectFormData())
     school.value = updated
     showMessage('success', '配置已保存')
   } catch (e: any) {
     showMessage('error', '保存失败: ' + e.message)
   } finally {
     saving.value = false
-  }
-}
-
-async function doGenerate() {
-  generating.value = true
-  try {
-    await updateSchool(code, {
-      status: 'configured',
-      dbHost: form.dbHost,
-      dbPort: form.dbPort,
-      dbUser: form.dbUser,
-      dbPassword: form.dbPassword,
-      cas: { ...form.cas },
-      sandbox: { ...form.sandbox },
-      security: { ...form.security },
-      passwords: { ...form.passwords },
-      common: { ...form.common },
-    })
-    const result = await generateConfigsApi(code)
-    showMessage('success', `配置文件已生成: ${result.files.join(', ')}`)
-    const configs = await previewConfigs(code)
-    previewData.value = configs
-    activeTab.value = Object.keys(configs)[0] || ''
-  } catch (e: any) {
-    showMessage('error', '生成失败: ' + e.message)
-  } finally {
-    generating.value = false
   }
 }
 </script>
@@ -420,13 +467,6 @@ async function doGenerate() {
 }
 .btn-save:hover:not(:disabled) {
   background: #e0e0e0;
-}
-.btn-generate {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-}
-.btn-generate:hover:not(:disabled) {
-  opacity: 0.9;
 }
 .loading {
   text-align: center;
@@ -515,14 +555,16 @@ async function doGenerate() {
 }
 .form-group input[type="text"],
 .form-group input[type="password"],
-.form-group input[type="number"] {
+.form-group input[type="number"],
+.form-group select {
   padding: 8px 12px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
   font-size: 14px;
   transition: border-color 0.2s;
 }
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   border-color: #667eea;
   outline: none;
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
@@ -580,47 +622,4 @@ async function doGenerate() {
   transform: translateY(-12px);
 }
 
-/* Preview */
-.preview-section {
-  margin-top: 8px;
-}
-.preview-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.tab-btn {
-  padding: 6px 14px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 12px;
-  color: #666;
-  transition: all 0.15s;
-}
-.tab-btn.active {
-  background: #667eea;
-  color: #fff;
-  border-color: #667eea;
-}
-.tab-btn:hover:not(.active) {
-  border-color: #667eea;
-  color: #667eea;
-}
-.preview-content {
-  background: #1e1e2e;
-  border-radius: 8px;
-  padding: 16px;
-  overflow-x: auto;
-}
-.preview-content pre {
-  margin: 0;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #cdd6f4;
-  white-space: pre;
-}
 </style>

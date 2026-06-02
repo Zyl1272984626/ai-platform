@@ -21,7 +21,13 @@ app.use(cors());
 app.use(express.json());
 
 // 静态文件（Web UI 构建产物）
-app.use(express.static('../web/dist'));
+import * as path from 'path';
+import * as fs from 'fs';
+const webDist = path.resolve(import.meta.dirname, '../../web/dist');
+const hasWebDist = fs.existsSync(path.join(webDist, 'index.html'));
+if (hasWebDist) {
+  app.use(express.static(webDist));
+}
 
 // API 路由
 app.use('/api/sessions', sessionRouter);
@@ -39,7 +45,11 @@ app.get('/api/health', (_req, res) => {
 
 // SPA fallback：非 /api 路径返回 index.html，交给前端路由处理
 app.get('*', (_req, res) => {
-  res.sendFile('index.html', { root: '../web/dist' });
+  if (hasWebDist) {
+    res.sendFile('index.html', { root: webDist });
+  } else {
+    res.status(404).json({ error: 'Frontend not built. Run: cd web && npm run build' });
+  }
 });
 
 app.listen(PORT, () => {

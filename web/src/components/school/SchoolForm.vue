@@ -45,10 +45,11 @@ function handleSubmit() {
     code: form.code,
   }
   if (props.mode === 'add') {
-    data.type = 'dameng'
-    data.port = 9996
-    data.database = 'AGENT_PORTAL'
+    data.type = 'mysql'
+    data.port = 9998
+    data.database = 'agent_portal'
     data.deploy = { host: '', user: 'root' }
+    data.deployConfig = { serverOs: 'linux', windowsDrive: 'D:' }
     data.status = 'pending'
     data.lastDeploy = null
   }
