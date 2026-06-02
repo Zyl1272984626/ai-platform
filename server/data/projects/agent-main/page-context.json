@@ -491,22 +491,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-setting-sys-knowledge-12": {
-    "pageName": "知识库管理",
-    "url": "http://localhost:5173/setting-app/index.html#/app/:appId/setting/sys/knowledge",
-    "description": "知识库管理页面",
-    "expectedElements": [
-      "数据表格",
-      "搜索框",
-      "新增按钮",
-      "操作按钮(编辑/删除)",
-      "分页组件"
-    ],
-    "apiEndpoints": [],
-    "interactions": [],
-    "commonIssues": []
-  },
-  "setting-app-setting-sys-plugin-13": {
+  "setting-app-setting-sys-plugin-12": {
     "pageName": "插件管理",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/setting/sys/plugin",
     "description": "插件管理页面，管理系统中的插件",
@@ -521,7 +506,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-setting-sys-mention-14": {
+  "setting-app-setting-sys-mention-13": {
     "pageName": "注入配置",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/setting/sys/mention",
     "description": "注入配置页面",
@@ -535,7 +520,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-setting-sys-api-config-15": {
+  "setting-app-setting-sys-api-config-14": {
     "pageName": "API配置管理",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/setting/sys/api-config",
     "description": "API配置管理页面",
@@ -553,7 +538,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-DataTableDetail-16": {
+  "setting-app-DataTableDetail-15": {
     "pageName": "数据表详情",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/dataTable/detail/:id",
     "description": "数据表详情页面",
@@ -567,7 +552,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-KnowledgeBaseDetail-17": {
+  "setting-app-KnowledgeBaseDetail-16": {
     "pageName": "知识库详情",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/knowledgeBase/detail/:id",
     "description": "知识库详情页面",
@@ -581,7 +566,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-AgentUserList-18": {
+  "setting-app-AgentUserList-17": {
     "pageName": "智能体用户列表",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/agent/user",
     "description": "智能体用户列表页面",
@@ -596,7 +581,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-AgentEditConversation-19": {
+  "setting-app-AgentEditConversation-18": {
     "pageName": "编辑对话流智能体",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/agent/edit-conversation",
     "description": "编辑对话流智能体页面",
@@ -610,7 +595,7 @@
     "interactions": [],
     "commonIssues": []
   },
-  "setting-app-AgentEditLLM-20": {
+  "setting-app-AgentEditLLM-19": {
     "pageName": "编辑LLM智能体",
     "url": "http://localhost:5173/setting-app/index.html#/app/:appId/agent/edit-llm",
     "description": "编辑LLM智能体页面",
@@ -619,6 +604,20 @@
       "搜索框",
       "操作按钮",
       "分页组件"
+    ],
+    "apiEndpoints": [],
+    "interactions": [],
+    "commonIssues": []
+  },
+  "setting-app-AgentConfigLLM-20": {
+    "pageName": "配置LLM智能体",
+    "url": "http://localhost:5173/setting-app/index.html#/app/:appId/agent/config-llm",
+    "description": "配置LLM智能体页面",
+    "expectedElements": [
+      "数据表格",
+      "搜索框",
+      "新增按钮",
+      "操作按钮"
     ],
     "apiEndpoints": [],
     "interactions": [],

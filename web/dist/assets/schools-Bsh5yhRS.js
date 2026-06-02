@@ -1,1 +1,0 @@
-import{a}from"./client-0OKtmhEB.js";function s(){return a.get("/schools").then(t=>t.data)}function c(t){return a.post("/schools",t).then(o=>o.data)}function h(t,o){return a.put(`/schools/${t}`,o).then(e=>e.data)}function l(t){return a.delete(`/schools/${t}`).then(o=>o.data)}export{c as a,l as d,s as l,h as u};

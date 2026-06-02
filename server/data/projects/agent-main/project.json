@@ -193,212 +193,343 @@
           "name": "表数据",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/table/data/:id",
           "path": "/app/:appId/setting/sys/table/data/:id",
+          "hasDynamicParams": true,
           "params": {
-            ":appId": [
-              "base_app"
-            ],
-            ":id": [
-              "1"
-            ]
+            ":appId": [],
+            ":id": []
           }
         },
         {
           "id": "setting-app-setting-sys-table-column-metadata-1",
           "name": "列元数据",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/table/column-metadata",
-          "path": "/app/:appId/setting/sys/table/column-metadata"
+          "path": "/app/:appId/setting/sys/table/column-metadata",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-sys-data-object-tables-2",
           "name": "关联表管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/data-object/tables",
-          "path": "/app/:appId/setting/sys/data-object/tables"
+          "path": "/app/:appId/setting/sys/data-object/tables",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-permission-user-3",
           "name": "用户管理",
           "url": "/setting-app/index.html#/app/:appId/setting/permission/user",
-          "path": "/app/:appId/setting/permission/user"
+          "path": "/app/:appId/setting/permission/user",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-permission-role-4",
           "name": "角色管理",
           "url": "/setting-app/index.html#/app/:appId/setting/permission/role",
-          "path": "/app/:appId/setting/permission/role"
+          "path": "/app/:appId/setting/permission/role",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-permission-resource-5",
           "name": "资源管理",
           "url": "/setting-app/index.html#/app/:appId/setting/permission/resource",
-          "path": "/app/:appId/setting/permission/resource"
+          "path": "/app/:appId/setting/permission/resource",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-permission-ug-6",
           "name": "用户组管理",
           "url": "/setting-app/index.html#/app/:appId/setting/permission/ug",
-          "path": "/app/:appId/setting/permission/ug"
+          "path": "/app/:appId/setting/permission/ug",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-permission-qwapp-7",
           "name": "企微应用管理",
           "url": "/setting-app/index.html#/app/:appId/setting/permission/qwapp",
-          "path": "/app/:appId/setting/permission/qwapp"
+          "path": "/app/:appId/setting/permission/qwapp",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-sys-page-8",
           "name": "页面管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/page",
-          "path": "/app/:appId/setting/sys/page"
+          "path": "/app/:appId/setting/sys/page",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-sys-nav-9",
           "name": "导航管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/nav",
-          "path": "/app/:appId/setting/sys/nav"
+          "path": "/app/:appId/setting/sys/nav",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-sys-table-10",
           "name": "数据表管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/table",
-          "path": "/app/:appId/setting/sys/table"
+          "path": "/app/:appId/setting/sys/table",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-setting-sys-data-object-11",
           "name": "数据对象管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/data-object",
-          "path": "/app/:appId/setting/sys/data-object"
+          "path": "/app/:appId/setting/sys/data-object",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-setting-sys-knowledge-12",
-          "name": "知识库管理",
-          "url": "/setting-app/index.html#/app/:appId/setting/sys/knowledge",
-          "path": "/app/:appId/setting/sys/knowledge"
-        },
-        {
-          "id": "setting-app-setting-sys-plugin-13",
+          "id": "setting-app-setting-sys-plugin-12",
           "name": "插件管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/plugin",
-          "path": "/app/:appId/setting/sys/plugin"
+          "path": "/app/:appId/setting/sys/plugin",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-setting-sys-mention-14",
+          "id": "setting-app-setting-sys-mention-13",
           "name": "注入配置",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/mention",
-          "path": "/app/:appId/setting/sys/mention"
+          "path": "/app/:appId/setting/sys/mention",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-setting-sys-api-config-15",
+          "id": "setting-app-setting-sys-api-config-14",
           "name": "API配置管理",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/api-config",
-          "path": "/app/:appId/setting/sys/api-config"
+          "path": "/app/:appId/setting/sys/api-config",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-DataTableDetail-16",
+          "id": "setting-app-DataTableDetail-15",
           "name": "数据表详情",
           "url": "/setting-app/index.html#/app/:appId/dataTable/detail/:id",
-          "path": "/app/:appId/dataTable/detail/:id"
+          "path": "/app/:appId/dataTable/detail/:id",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": [],
+            ":id": []
+          }
         },
         {
-          "id": "setting-app-KnowledgeBaseDetail-17",
+          "id": "setting-app-KnowledgeBaseDetail-16",
           "name": "知识库详情",
           "url": "/setting-app/index.html#/app/:appId/knowledgeBase/detail/:id",
-          "path": "/app/:appId/knowledgeBase/detail/:id"
+          "path": "/app/:appId/knowledgeBase/detail/:id",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": [],
+            ":id": []
+          }
         },
         {
-          "id": "setting-app-AgentUserList-18",
+          "id": "setting-app-AgentUserList-17",
           "name": "智能体用户列表",
           "url": "/setting-app/index.html#/app/:appId/agent/user",
-          "path": "/app/:appId/agent/user"
+          "path": "/app/:appId/agent/user",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-AgentEditConversation-19",
+          "id": "setting-app-AgentEditConversation-18",
           "name": "编辑对话流智能体",
           "url": "/setting-app/index.html#/app/:appId/agent/edit-conversation",
-          "path": "/app/:appId/agent/edit-conversation"
+          "path": "/app/:appId/agent/edit-conversation",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
-          "id": "setting-app-AgentEditLLM-20",
+          "id": "setting-app-AgentEditLLM-19",
           "name": "编辑LLM智能体",
           "url": "/setting-app/index.html#/app/:appId/agent/edit-llm",
-          "path": "/app/:appId/agent/edit-llm"
+          "path": "/app/:appId/agent/edit-llm",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
+        },
+        {
+          "id": "setting-app-AgentConfigLLM-20",
+          "name": "配置LLM智能体",
+          "url": "/setting-app/index.html#/app/:appId/agent/config-llm",
+          "path": "/app/:appId/agent/config-llm",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-WorkflowDesign-21",
           "name": "流程设计",
           "url": "/setting-app/index.html#/app/:appId/workflow/design",
-          "path": "/app/:appId/workflow/design"
+          "path": "/app/:appId/workflow/design",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-SkillDetail-22",
           "name": "技能详情",
           "url": "/setting-app/index.html#/app/:appId/skill/detail",
-          "path": "/app/:appId/skill/detail"
+          "path": "/app/:appId/skill/detail",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-CompDesign-23",
           "name": "组件设计",
           "url": "/setting-app/index.html#/app/:appId/comp/design",
-          "path": "/app/:appId/comp/design"
+          "path": "/app/:appId/comp/design",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-AgentList-24",
           "name": "智能体列表",
           "url": "/setting-app/index.html#/app/:appId/agent",
-          "path": "/app/:appId/agent"
+          "path": "/app/:appId/agent",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-WorkflowList-25",
           "name": "流程列表",
           "url": "/setting-app/index.html#/app/:appId/workflow",
-          "path": "/app/:appId/workflow"
+          "path": "/app/:appId/workflow",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-PluginList-26",
           "name": "插件管理",
           "url": "/setting-app/index.html#/app/:appId/plugin",
-          "path": "/app/:appId/plugin"
+          "path": "/app/:appId/plugin",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-SkillList-27",
           "name": "技能列表",
           "url": "/setting-app/index.html#/app/:appId/skill",
-          "path": "/app/:appId/skill"
+          "path": "/app/:appId/skill",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-Analytics-28",
           "name": "会话监控分析",
           "url": "/setting-app/index.html#/app/:appId/analytics",
-          "path": "/app/:appId/analytics"
+          "path": "/app/:appId/analytics",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-AnalyticsDetail-29",
           "name": "统计分析详情",
           "url": "/setting-app/index.html#/app/:appId/analytics-detail",
-          "path": "/app/:appId/analytics-detail"
+          "path": "/app/:appId/analytics-detail",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-KnowledgeBase-30",
           "name": "知识库",
           "url": "/setting-app/index.html#/app/:appId/knowledgeBase",
-          "path": "/app/:appId/knowledgeBase"
+          "path": "/app/:appId/knowledgeBase",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-CompList-31",
           "name": "组件管理",
           "url": "/setting-app/index.html#/app/:appId/comp",
-          "path": "/app/:appId/comp"
+          "path": "/app/:appId/comp",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-AppSetting-32",
           "name": "AppSetting",
           "url": "/setting-app/index.html#/app/:appId/setting",
-          "path": "/app/:appId/setting"
+          "path": "/app/:appId/setting",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         },
         {
           "id": "setting-app-AppHome-33",
           "name": "应用首页",
           "url": "/setting-app/index.html#/app/:appId",
-          "path": "/app/:appId"
+          "path": "/app/:appId",
+          "hasDynamicParams": true,
+          "params": {
+            ":appId": []
+          }
         }
       ]
     },
@@ -440,7 +571,11 @@
           "id": "index-TestPage-0",
           "name": "组件测试",
           "url": "/index/index.html#/test/:name",
-          "path": "/test/:name"
+          "path": "/test/:name",
+          "hasDynamicParams": true,
+          "params": {
+            ":name": []
+          }
         },
         {
           "id": "index-__shallow__-1",
@@ -501,7 +636,7 @@
       ]
     }
   ],
-  "discoveredAt": "2026-06-01T08:59:34.922Z",
+  "discoveredAt": "2026-06-02T08:23:08.307Z",
   "totalPages": 66,
   "globalParams": {
     ":appId": [

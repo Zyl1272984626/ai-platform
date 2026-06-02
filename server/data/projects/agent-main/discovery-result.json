@@ -235,7 +235,7 @@
   "setting-app": {
     "title": "应用列表",
     "url": "http://localhost:5173/setting-app/index.html",
-    "routeCount": 39,
+    "routeCount": 38,
     "paramValues": {},
     "routes": [
       {
@@ -356,15 +356,6 @@
         "paramValues": {}
       },
       {
-        "path": "/app/:appId/setting/sys/knowledge",
-        "name": "setting-sys-knowledge",
-        "title": "知识库管理",
-        "layout": "",
-        "hasParams": true,
-        "concreteUrl": "/setting-app/index.html#/app/:appId/setting/sys/knowledge",
-        "paramValues": {}
-      },
-      {
         "path": "/app/:appId/setting/sys/plugin",
         "name": "setting-sys-plugin",
         "title": "插件管理",
@@ -434,6 +425,15 @@
         "layout": "",
         "hasParams": true,
         "concreteUrl": "/setting-app/index.html#/app/:appId/agent/edit-llm",
+        "paramValues": {}
+      },
+      {
+        "path": "/app/:appId/agent/config-llm",
+        "name": "AgentConfigLLM",
+        "title": "配置LLM智能体",
+        "layout": "",
+        "hasParams": true,
+        "concreteUrl": "/setting-app/index.html#/app/:appId/agent/config-llm",
         "paramValues": {}
       },
       {
@@ -560,15 +560,6 @@
         "layout": "",
         "hasParams": false,
         "concreteUrl": "/setting-app/index.html#/",
-        "paramValues": {}
-      },
-      {
-        "path": "/login",
-        "name": "Login",
-        "title": "登录",
-        "layout": "",
-        "hasParams": false,
-        "concreteUrl": "/setting-app/index.html#/login",
         "paramValues": {}
       },
       {

@@ -1,0 +1,186 @@
+{
+  "dimensions": [
+    {
+      "id": "security",
+      "name": "安全性",
+      "severity": "critical",
+      "enabled": true,
+      "rules": [
+        {
+          "id": "SEC001",
+          "title": "v-html / dangerouslyUseHTMLString XSS风险",
+          "description": "使用v-html或dangerouslyUseHTMLString渲染未经净化的内容会导致XSS攻击。项目中发现5个文件使用v-html、7处使用dangerouslyUseHTMLString，部分渲染后端返回的错误消息或AI回复内容，存在注入风险。重点关注：MarkdownViewer.vue(html:true启用原始HTML)、assistant-message.vue(v-html渲染AI内容)、config.ts/config2.js(错误消息直接拼接HTML)。",
+          "suggestion": "对所有v-html/dangerouslyUseHTMLString的内容使用DOMPurify进行净化；MarkdownViewer中设置html:false或使用白名单过滤；错误消息使用纯文本而非HTML字符串。"
+        },
+        {
+          "id": "SEC002",
+          "title": "AES使用ECB模式加密不安全",
+          "description": "frontend/src/api/axios/security/aes.js使用CryptoJS的ECB模式进行AES加密，ECB模式对相同明文产生相同密文，存在模式泄露风险。同时decrypt方法指定了iv参数但ECB模式不使用iv，属于配置矛盾。",
+          "suggestion": "将AES加密模式从ECB改为CBC或GCM，使用随机IV并将其与密文一起传输。"
+        },
+        {
+          "id": "SEC003",
+          "title": "RSA公钥硬编码及加密密钥明文传输",
+          "description": "RSA公钥硬编码在frontend/src/api/axios/security/constant.js中，且isProd被硬编码为false导致非生产环境完全跳过加密。security-flow.js的encryptPost方法返回对象中包含aesKey明文字段，攻击者可直接获取加密密钥。",
+          "suggestion": "通过API动态获取RSA公钥而非硬编码；移除isProd硬编码为false的配置；不要在返回对象中包含aesKey明文，仅传输rsaAesKey(已加密的AES密钥)。"
+        },
+        {
+          "id": "SEC004",
+          "title": "eval/Function动态代码执行",
+          "description": "项目中有3个文件使用eval()或new Function()执行动态代码：flow-design.vue、CompPreviewPage.vue、StartForm.vue。动态执行代码可能导致任意代码注入攻击。",
+          "suggestion": "移除eval/Function调用，使用安全的JSON.parse或沙箱环境执行动态逻辑。如必须使用，需对输入进行严格校验和净化。"
+        },
+        {
+          "id": "SEC005",
+          "title": "Token从URL参数读取存在泄露风险",
+          "description": "frontend/src/api/axios/config.ts第17行从URL查询参数(getParam('token'))读取认证token，URL参数会被记录在浏览器历史、服务器日志和Referer头中，存在token泄露风险。回退到localStorage虽然安全一些但仍有XSS窃取风险。",
+          "suggestion": "避免从URL参数读取token，使用HttpOnly Cookie或安全的token交换流程。"
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "name": "性能",
+      "severity": "high",
+      "enabled": true,
+      "rules": [
+        {
+          "id": "PERF001",
+          "title": "定时器/事件监听器未清理导致内存泄漏",
+          "description": "项目中56个文件使用setTimeout/setInterval，25个文件使用addEventListener，但仅24个组件有onUnmounted/onBeforeUnmount进行清理。常见模式包括：config.ts中的timer变量仅clearTimeout未清理引用、图表组件的resize监听器未在销毁时移除。",
+          "suggestion": "所有使用setInterval的组件必须在onUnmounted中调用clearInterval；所有addEventListener必须对应removeEventListener；使用useTimeoutFn/useIntervalFn等封装hook自动清理。"
+        },
+        {
+          "id": "PERF002",
+          "title": "大型组件未拆分导致性能瓶颈",
+          "description": "多个组件文件过大：StartForm.vue(928行)、useChatMsg.js(1417行)、assistant-message.vue(1420行)、useQueryList.ts(189行)。这些组件包含复杂的模板和逻辑，会导致初始化开销大、diff计算慢。",
+          "suggestion": "将大组件按功能拆分为子组件和composables；使用defineAsyncComponent实现懒加载；提取可复用逻辑到独立hook中。"
+        },
+        {
+          "id": "PERF003",
+          "title": "watch缺少deep/immediate优化导致不必要的计算",
+          "description": "102个Vue组件使用watch，部分watch监听复杂对象但未合理配置deep/immediate。例如assistant-message.vue中多个watch监听props对象，每次props变化都触发完整的思考内容重新计算。",
+          "suggestion": "对watch使用精确的getter函数代替监听整个对象；合理使用computed的缓存特性；对SSE流式更新的高频数据使用节流。"
+        },
+        {
+          "id": "PERF004",
+          "title": "Markdown渲染无节流导致高频DOM更新",
+          "description": "MarkdownViewer.vue在watch content变化时立即重新渲染全部markdown片段，SSE流式场景下content高频变化，每次都触发完整的parseFragments+md.render计算和DOM diff。",
+          "suggestion": "对SSE流式场景的content变化添加节流(如requestAnimationFrame或100ms debounce)；复用片段逻辑已部分实现，但可进一步优化为增量解析。"
+        }
+      ]
+    },
+    {
+      "id": "error-handling",
+      "name": "错误处理",
+      "severity": "high",
+      "enabled": true,
+      "rules": [
+        {
+          "id": "ERR001",
+          "title": "空catch块吞没异常",
+          "description": "项目中6个文件存在空catch块(catch(e) {} 或 catch(e) {// ignore})，异常被静默吞没，包括：api/axios/config.ts:29、useSSEStream.ts:113、assistant-message.vue:313、useChat.js:202等。这些空catch可能导致错误难以排查。",
+          "suggestion": "所有catch块至少添加console.error或上报到错误监控系统；对于预期的可忽略异常，添加注释说明原因。"
+        },
+        {
+          "id": "ERR002",
+          "title": "SSE JSON解析失败未通知用户",
+          "description": "useSSEStream.ts第83-85行，SSE消息JSON.parse失败时仅console.error，不通知用户。在流式对话场景中，解析失败意味着用户看到不完整的回复但不知道发生了错误。",
+          "suggestion": "JSON解析失败时应通过onError回调通知上层，由UI展示错误提示或重试机制。"
+        },
+        {
+          "id": "ERR003",
+          "title": "API响应拦截器未处理异常状态码边缘情况",
+          "description": "config.ts的响应拦截器(第63-113行)假设response.headers存在但未做空值检查；sessionstatus超时检查后调用location.reload()但不reject Promise，可能导致后续代码继续执行。config2.js同样存在此问题。",
+          "suggestion": "在sessionstatus/redirect处理后添加return Promise.reject()阻止后续逻辑执行；对所有headers访问添加空值保护。"
+        },
+        {
+          "id": "ERR004",
+          "title": "全局状态(state)无类型安全且空值未处理",
+          "description": "state.ts使用普通对象存储全局状态，get方法可能返回undefined但调用方(api/user.ts, api/permiss.ts)未做空值保护。如getUser()返回{}后备对象，但isLogin()直接返回state.get('isLogin')可能是undefined而非boolean。",
+          "suggestion": "为state添加类型定义；get方法提供默认值参数；所有state.get调用处添加空值检查或使用可选链。"
+        }
+      ]
+    },
+    {
+      "id": "framework",
+      "name": "框架最佳实践",
+      "severity": "medium",
+      "enabled": true,
+      "rules": [
+        {
+          "id": "FW001",
+          "title": "TypeScript中大量any类型绕过类型检查",
+          "description": "前端TypeScript文件中有59处any类型使用，分布在16个文件中。包括：api/request.ts(12处)、hooks/useSSEStream.ts(8处)、api/axios/config.ts(2处)等。any类型使TypeScript的类型保护完全失效。",
+          "suggestion": "为所有any添加具体类型定义；优先使用unknown代替any；开启tsconfig的noImplicitAny严格模式。"
+        },
+        {
+          "id": "FW002",
+          "title": "Pinia Store使用不充分",
+          "description": "项目依赖Pinia(^3.0.1)作为状态管理，但仅发现4处defineStore使用(stores/breadcrumb.js, stores/counter.js, store/plugin.js, auto-imports.d.ts)。大量状态管理使用模块级变量(useChat.js的chatList/activeChat、api/state.ts的valueHash)，绕过了Pinia的响应式和DevTools支持。",
+          "suggestion": "将会话列表、用户状态、认证信息等核心状态迁移到Pinia Store，利用DevTools进行调试和状态快照。"
+        },
+        {
+          "id": "FW003",
+          "title": "Composition API使用不规范",
+          "description": "useChat.js在模块顶层定义ref(chatList, activeChat)然后在工厂函数内使用，导致所有调用者共享同一个ref实例，可能引起意外的状态共享。useSSEStream.ts的sseClient同样为模块级ref，多页面使用会冲突。",
+          "suggestion": "将ref定义移入composable函数内部，确保每次调用创建独立实例；如需共享状态，使用Pinia Store或provide/inject。"
+        },
+        {
+          "id": "FW004",
+          "title": "双套Axios配置导致维护困难",
+          "description": "存在两套并行的axios配置：config.ts(TypeScript版，带加密拦截器)和config2.js(JavaScript版，无加密)，两者功能几乎相同但实现有差异。request.ts和request3.js也提供类似的API封装。这种重复增加了维护成本和不一致风险。",
+          "suggestion": "统一为单一的axios配置(推荐config.ts + request.ts)，移除config2.js和request3.js的重复代码。"
+        }
+      ]
+    },
+    {
+      "id": "maintainability",
+      "name": "可维护性",
+      "severity": "medium",
+      "enabled": true,
+      "rules": [
+        {
+          "id": "MNT001",
+          "title": "生产代码中遗留大量console.log",
+          "description": "155个文件包含console.log/warn/error/debug/info调用，这些日志在生产环境中会暴露内部逻辑和敏感信息，影响性能。",
+          "suggestion": "使用构建工具(vite-plugin-remove-console)在生产构建时移除console调用；开发调试使用条件编译或日志级别控制。"
+        },
+        {
+          "id": "MNT002",
+          "title": "模块重构不彻底导致新旧代码并存",
+          "description": "pages/index/目录下存在两套架构：旧版(views/pc/、views/mobile/直接组织)和新版(modules/chat/、modules/input/、modules/message/按功能模块组织)。例如useChat.js同时存在于hooks/chat/和pages/index/modules/chat/，功能重叠。useSSEStream.ts同样有两份(hooks/和modules/)。",
+          "suggestion": "制定重构计划，逐步迁移旧代码到新的modules架构，移除重复的hooks和composables。"
+        },
+        {
+          "id": "MNT003",
+          "title": "注释掉的代码块未清理",
+          "description": "多处存在大段注释掉的代码：useChat.js的toChatGroupList函数(85-125行)、permiss.ts的init方法(52-58行)、api/request.ts的upload方法等。这些注释代码增加阅读负担，且Git可追溯历史版本。",
+          "suggestion": "删除所有注释掉的代码，依赖Git版本控制保留历史；必要时添加TODO注释说明计划而非保留代码。"
+        },
+        {
+          "id": "MNT004",
+          "title": "SVG组件以数字ID命名难以维护",
+          "description": "pages/index/svg/和pages/setting-app/svg/目录中存在大量以数字ID命名的SVG组件(svg-39944.vue, svg-74579.vue等)，共约20+个文件，无法从文件名推断其用途。",
+          "suggestion": "将SVG图标重命名为语义化的名称(如icon-search.vue, icon-arrow-right.vue)，或使用统一的图标管理方案(iconify/unplugin-icons)。"
+        }
+      ]
+    }
+  ],
+  "ignore": {
+    "patterns": [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.git/**",
+      "**/auto-imports.d.ts",
+      "**/components.d.ts",
+      "**/*.min.js",
+      "**/assets/fonts/**",
+      "**/svg/*.vue"
+    ]
+  },
+  "fileLimits": {
+    "maxFilesPerReview": 30,
+    "maxLinesPerFile": 500
+  }
+}
