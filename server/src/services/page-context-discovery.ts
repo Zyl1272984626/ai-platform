@@ -5,10 +5,24 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getConfig, getProjectById } from './config.js';
+import { getConfig, getGlobalParams, getProjectById } from './config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../data');
+
+// 模块级 AbortController Map，用于中断发现任务
+const abortControllers = new Map<string, AbortController>();
+
+/** 中断指定项目的知识图谱发现任务 */
+export function abortContextDiscovery(projectId: string): boolean {
+  const controller = abortControllers.get(projectId);
+  if (controller) {
+    controller.abort();
+    abortControllers.delete(projectId);
+    return true;
+  }
+  return false;
+}
 
 // ========== 类型 ==========
 
@@ -60,6 +74,7 @@ export async function discoverPageContext(
   let fullOutput = '';
   const blocks: Array<{ type: string; content?: string; name?: string; input?: any; toolUseId?: string; result?: string; isError?: boolean }> = [];
   const abortController = new AbortController();
+  abortControllers.set(projectId, abortController);
   // 无超时限制，让 Claude Code 自然完成
   const timer = setTimeout(() => {}, 0);
 
@@ -95,7 +110,7 @@ export async function discoverPageContext(
     });
 
     for await (const msg of response) {
-      if (abortController.signal.aborted) throw new Error('知识图谱发现超时');
+      if (abortController.signal.aborted) throw new Error('知识图谱发现已中断');
 
       switch (msg.type) {
         case 'assistant': {
@@ -134,8 +149,10 @@ export async function discoverPageContext(
     }
 
     clearTimeout(timer);
+    abortControllers.delete(projectId);
   } catch (err: any) {
     clearTimeout(timer);
+    abortControllers.delete(projectId);
     onProgress?.({ type: 'error', message: `发现失败: ${err.message}` } as any);
     throw err;
   }
@@ -204,10 +221,24 @@ function loadSkillPrompt(skillName: string, project: any): string {
     content = `请分析项目 ${project.name} 的所有页面并生成知识图谱。`;
   }
 
+  const dataDir = path.resolve(config.aiPlatformRoot, 'server', 'data', 'projects', project.id);
+
+  // 构建动态参数提示
+  const globalParams = getGlobalParams(project.id);
+  let globalParamsHint = '  （无已配置参数）';
+  if (Object.keys(globalParams).length > 0) {
+    const lines = Object.entries(globalParams)
+      .filter(([, vals]) => vals && vals.length > 0)
+      .map(([key, vals]) => `  - ${key}: ${(vals as string[]).join(', ')}`);
+    globalParamsHint = lines.length > 0 ? lines.join('\n') : '  （无已配置参数）';
+  }
+
   // 替换模板变量
   return content
     .replace(/\{\{projectName\}\}/g, project.name)
     .replace(/\{\{projectId\}\}/g, project.id)
+    .replace(/\{\{dataDir\}\}/g, dataDir.replace(/\\/g, '/'))
+    .replace(/\{\{globalParamsHint\}\}/g, globalParamsHint)
     .replace(/\{\{baseUrl\}\}/g, project.baseUrl)
     .replace(/\{\{apiBaseUrl\}\}/g, project.apiBaseUrl)
     .replace(/\{\{loginUrl\}\}/g, project.loginUrl)

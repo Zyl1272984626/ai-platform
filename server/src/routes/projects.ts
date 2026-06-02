@@ -476,6 +476,47 @@ projectsRouter.post('/:id/check', async (req: Request, res: Response) => {
   res.json(results);
 });
 
+// ========== 发现任务中断 ==========
+
+/** 中断发现任务（通用） */
+projectsRouter.post('/:id/discover-abort', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { type } = req.body;
+
+  let aborted = false;
+  try {
+    switch (type) {
+      case 'api': {
+        const { abortApiDiscovery } = await import('../services/api-discovery.js');
+        aborted = abortApiDiscovery(id);
+        break;
+      }
+      case 'frontend': {
+        const { abortFrontendDiscovery } = await import('../services/frontend-discovery.js');
+        aborted = abortFrontendDiscovery(id);
+        break;
+      }
+      case 'review': {
+        const { abortReviewDiscovery } = await import('../services/review-discovery.js');
+        aborted = abortReviewDiscovery(id);
+        break;
+      }
+      case 'context': {
+        const { abortContextDiscovery } = await import('../services/page-context-discovery.js');
+        aborted = abortContextDiscovery(id);
+        break;
+      }
+      default:
+        res.status(400).json({ error: `不支持的任务类型: ${type}` });
+        return;
+    }
+  } catch {
+    aborted = false;
+  }
+
+  res.json({ success: aborted, message: aborted ? '已中断' : '未找到正在执行的任务' });
+});
+
 // ========== 页面发现（触发 + SSE） ==========
 
 /** 触发 API 接口发现 — SSE 流式返回进度 */

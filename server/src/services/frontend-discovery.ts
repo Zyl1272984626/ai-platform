@@ -10,6 +10,20 @@ import { getConfig, getProjectById } from './config.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '../../data');
 
+// 模块级 AbortController Map，用于中断发现任务
+const abortControllers = new Map<string, AbortController>();
+
+/** 中断指定项目的前端发现任务 */
+export function abortFrontendDiscovery(projectId: string): boolean {
+  const controller = abortControllers.get(projectId);
+  if (controller) {
+    controller.abort();
+    abortControllers.delete(projectId);
+    return true;
+  }
+  return false;
+}
+
 // ========== 类型 ==========
 
 export interface FrontendDiscoveryProgress {
@@ -84,6 +98,7 @@ export async function discoverFrontend(
   let fullOutput = '';
   const blocks: Array<{ type: string; content?: string; name?: string; input?: any; toolUseId?: string; result?: string; isError?: boolean }> = [];
   const abortController = new AbortController();
+  abortControllers.set(projectId, abortController);
   // 无超时限制，让 Claude Code 自然完成
   const timer = setTimeout(() => {}, 0);
 
@@ -100,7 +115,7 @@ export async function discoverFrontend(
     });
 
     for await (const msg of response) {
-      if (abortController.signal.aborted) throw new Error('前端发现超时');
+      if (abortController.signal.aborted) throw new Error('前端发现已中断');
 
       switch (msg.type) {
         case 'assistant': {
@@ -139,8 +154,10 @@ export async function discoverFrontend(
     }
 
     clearTimeout(timer);
+    abortControllers.delete(projectId);
   } catch (err: any) {
     clearTimeout(timer);
+    abortControllers.delete(projectId);
     onProgress?.({ type: 'error', message: `发现失败: ${err.message}` } as any);
     throw err;
   }

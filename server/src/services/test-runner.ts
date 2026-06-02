@@ -958,8 +958,118 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
     } catch { /* ignore */ }
   }
 
-  // 构建审查 prompt
-  const reviewPrompt = `你是一位资深代码审查专家。请对以下项目的源代码进行审查。
+  // 读取发现数据中的模块信息
+  const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json');
+  let modules: any[] = [];
+  if (fs.existsSync(discoveryPath)) {
+    try {
+      const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+      modules = discovery.modules || [];
+    } catch { /* ignore */ }
+  }
+
+  const selectedModuleIds = (config.modules as string[]) || [];
+
+  // 判断是否按模块审查
+  const isPerModule = suite.cases.length > 1 || (selectedModuleIds.length > 0 && modules.length > 0);
+
+  const abortController = new AbortController();
+  abortControllers.set(suite.id, abortController);
+
+  try {
+    if (isPerModule) {
+      // ====== 按模块逐个审查 ======
+      for (let i = 0; i < suite.cases.length; i++) {
+        if (abortController.signal.aborted) {
+          // 标记剩余 case 为中断
+          for (let j = i; j < suite.cases.length; j++) {
+            suite.cases[j].status = 'error';
+            suite.cases[j].error = '用户手动停止';
+          }
+          break;
+        }
+
+        const tc = suite.cases[i];
+        const moduleId = selectedModuleIds[i];
+        const mod = modules.find((m: any) => m.id === moduleId);
+
+        if (!mod) {
+          tc.status = 'skipped' as any;
+          tc.error = '未找到模块信息';
+          continue;
+        }
+
+        // 构建模块级审查 prompt
+        const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
+        const modulePrompt = `你是一位资深代码审查专家。请对以下项目中的特定模块进行深度审查。
+
+## 项目信息
+- 项目名称: ${project.name}
+- 源码路径: ${project.sourcePath}
+- 前端框架: ${(project as any).framework || 'Vue 3 + Vite + Pinia'}
+
+## 审查模块
+- 模块名称: ${mod.name}
+- 模块路径: ${mod.path}
+- 文件数量: ${mod.files}
+- 风险等级: ${mod.riskLevel || 'unknown'}
+- 已识别风险: ${mod.reason || '无'}
+
+## 模块关键文件
+${fileList}
+
+${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+
+## 审查范围
+请重点扫描上述关键文件，以及模块路径下的其他相关文件。
+
+## 输出格式
+请以 Markdown 格式输出审查报告，包含：
+
+### 模块评分（0-100）
+
+### 问题列表
+对每个发现的问题记录：
+- 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
+- 规则 ID（对应审查规则中的 ID）
+- 文件路径和行号
+- 问题描述
+- 修复建议
+
+### 总结
+该模块的整体评价和改进建议`;
+
+        await runSingleModuleReview(suite, tc, modulePrompt, project.sourcePath!, abortController, mod.name);
+      }
+
+      // 生成合并 HTML 报告
+      const allOutputs = suite.cases
+        .filter(c => c.output && c.output.length > 50)
+        .map(c => `---\n## ${c.name}\n\n${c.output}`)
+        .join('\n\n');
+      if (allOutputs.length > 100) {
+        try {
+          const reportsDir = path.join(DATA_DIR, 'reports');
+          if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+          const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
+          const totalDuration = suite.cases.reduce((s, c) => s + (c.duration || 0), 0);
+          fs.writeFileSync(reportFile, buildReviewHtml(project.name, allOutputs, totalDuration), 'utf-8');
+          suite.config.reportPath = reportFile;
+        } catch (err: any) {
+          console.error('[CodeReview] 生成HTML报告失败:', err.message);
+        }
+      }
+
+    } else {
+      // ====== 全量审查（单 case，兼容旧逻辑） ======
+      const mainCase = suite.cases[0];
+      if (mainCase) {
+        mainCase.name = `代码审查 (${project.name})`;
+        mainCase.status = 'running';
+        saveRun(suite);
+      }
+
+      const reviewPrompt = `你是一位资深代码审查专家。请对以下项目的源代码进行审查。
 
 ## 项目信息
 - 项目名称: ${project.name}
@@ -994,17 +1104,113 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 ### 总结
 总体评价和改进建议`;
 
-  const mainCase = suite.cases[0];
-  if (mainCase) {
-    mainCase.name = `代码审查 (${project.name})`;
-    mainCase.status = 'running';
-    saveRun(suite);
+      const startTime = Date.now();
+      let fullOutput = '';
+      const blocks: StreamBlock[] = [];
+
+      const response = query({
+        prompt: reviewPrompt,
+        options: {
+          cwd: project.sourcePath,
+          allowedTools: ['Read', 'Glob', 'Grep'],
+          maxTurns: 9999,
+          permissionMode: 'bypassPermissions',
+          abortController,
+        },
+      });
+
+      for await (const msg of response) {
+        if (abortController.signal.aborted) throw new Error('代码审查超时');
+
+        switch (msg.type) {
+          case 'assistant': {
+            if ((msg as any).message?.content) {
+              for (const block of (msg as any).message.content) {
+                if (block.type === 'text') {
+                  fullOutput += block.text;
+                  blocks.push({ type: 'text', content: block.text });
+                  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
+                } else if (block.type === 'tool_use') {
+                  blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+                  testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
+                }
+              }
+            }
+            break;
+          }
+          case 'user': {
+            if ('message' in msg && (msg as any).message?.content) {
+              for (const block of (msg as any).message.content) {
+                if (block.type === 'tool_result') {
+                  const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                  const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                  if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                  testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_result', toolUseId: block.tool_use_id, content: resultContent?.slice(0, 5000) });
+                }
+              }
+            }
+            break;
+          }
+          case 'result': {
+            const resultMsg = msg as any;
+            if (resultMsg.subtype === 'success' && resultMsg.result && !fullOutput) {
+              fullOutput = resultMsg.result;
+            }
+            break;
+          }
+        }
+      }
+
+      if (mainCase) {
+        mainCase.duration = Date.now() - startTime;
+        mainCase.output = fullOutput;
+        mainCase.blocks = blocks;
+        mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
+        if (mainCase.status === 'failed') mainCase.error = '审查输出内容不足';
+      }
+
+      // 生成 HTML 审查报告
+      if (fullOutput.length > 100) {
+        try {
+          const reportsDir = path.join(DATA_DIR, 'reports');
+          if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+          const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
+          fs.writeFileSync(reportFile, buildReviewHtml(project.name, fullOutput, mainCase?.duration || 0), 'utf-8');
+          suite.config.reportPath = reportFile;
+        } catch (err: any) {
+          console.error('[CodeReview] 生成HTML报告失败:', err.message);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[CodeReview] 审查出错:', err.message);
   }
 
-  const abortController = new AbortController();
-  abortControllers.set(suite.id, abortController);
-  // 无超时限制，让 Claude Code 自然完成
-  const timer = setTimeout(() => {}, 0);
+  abortControllers.delete(suite.id);
+  saveRun(suite);
+}
+
+/** 执行单个模块的审查 */
+async function runSingleModuleReview(
+  suite: TestSuite,
+  tc: TestCase,
+  modulePrompt: string,
+  cwd: string,
+  suiteAbortController: AbortController,
+  moduleName: string,
+): Promise<void> {
+  const { query } = await import('@anthropic-ai/claude-code');
+
+  tc.status = 'running';
+  // 发出 case 级进度事件，让前端知道当前在审查哪个模块
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## 🔍 开始审查: ${moduleName}\n\n` });
+  saveRun(suite);
+
+  const moduleAbortController = new AbortController();
+
+  // 如果 suite 被中断，也中断当前模块
+  const onSuiteAbort = () => moduleAbortController.abort();
+  suiteAbortController.signal.addEventListener('abort', onSuiteAbort);
 
   const startTime = Date.now();
   let fullOutput = '';
@@ -1012,18 +1218,18 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 
   try {
     const response = query({
-      prompt: reviewPrompt,
+      prompt: modulePrompt,
       options: {
-        cwd: project.sourcePath,
+        cwd,
         allowedTools: ['Read', 'Glob', 'Grep'],
         maxTurns: 9999,
         permissionMode: 'bypassPermissions',
-        abortController,
+        abortController: moduleAbortController,
       },
     });
 
     for await (const msg of response) {
-      if (abortController.signal.aborted) throw new Error('代码审查超时');
+      if (moduleAbortController.signal.aborted) throw new Error('审查被中断');
 
       switch (msg.type) {
         case 'assistant': {
@@ -1064,34 +1270,97 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
       }
     }
 
-    clearTimeout(timer);
+    tc.duration = Date.now() - startTime;
+    tc.output = fullOutput;
+    tc.blocks = blocks;
+    tc.status = fullOutput.length > 100 ? 'passed' : 'failed';
+    if (tc.status === 'failed') tc.error = '审查输出内容不足';
 
-    if (mainCase) {
-      mainCase.duration = Date.now() - startTime;
-      mainCase.output = fullOutput;
-      mainCase.blocks = blocks;
-      mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
-      if (mainCase.status === 'failed') mainCase.error = '审查输出内容不足';
-    }
+    // 模块完成事件
+    testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n${tc.status === 'passed' ? '✅' : '❌'} 模块审查完成: ${moduleName} (${(tc.duration / 1000).toFixed(1)}s)\n\n` });
 
-    // 标记其他 case
-    for (let i = 1; i < suite.cases.length; i++) {
-      suite.cases[i].status = 'passed' as any;
-      suite.cases[i].output = '(包含在代码审查主流程中)';
-    }
   } catch (err: any) {
-    clearTimeout(timer);
-    abortControllers.delete(suite.id);
-    if (mainCase) {
-      mainCase.duration = Date.now() - startTime;
-      mainCase.status = 'error';
-      mainCase.error = err.message;
-    }
+    tc.duration = Date.now() - startTime;
+    tc.status = 'error';
+    tc.error = err.message;
+    tc.blocks = blocks;
+    testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n💥 模块审查中断: ${moduleName} - ${err.message}\n\n` });
+  } finally {
+    suiteAbortController.signal.removeEventListener('abort', onSuiteAbort);
   }
 
-  abortControllers.delete(suite.id);
+  // 每个 case 完成后保存，确保中断时已完成的 case 不丢失
   saveRun(suite);
-  testBus.emit('test:update', { suiteId: suite.id, caseId: mainCase?.id, status: mainCase?.status, duration: mainCase?.duration });
+  testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
+}
+
+/** 将 Markdown 审查结果转为独立 HTML 报告 */
+function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
+  // 简易 Markdown → HTML 转换
+  let html = markdown
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^\*\*(.+?)\*\*/gm, '<strong>$1</strong>')
+    .replace(/^\- (.+)$/gm, '<li>$1</li>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+
+  // 用颜色标注严重等级
+  html = html
+    .replace(/🔴/g, '<span style="color:#e53e3e;font-size:16px">🔴</span>')
+    .replace(/🟡/g, '<span style="color:#d69e2e;font-size:16px">🟡</span>')
+    .replace(/🔵/g, '<span style="color:#3182ce;font-size:16px">🔵</span>');
+
+  const durationSec = (duration / 1000).toFixed(1);
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代码审查报告 - ${projectName}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7f8fc; color: #1a1a2e; line-height: 1.7; padding: 32px; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 28px 36px; border-radius: 12px 12px 0 0; }
+  .header h1 { font-size: 22px; margin-bottom: 8px; }
+  .header .meta { font-size: 13px; opacity: 0.85; }
+  .content { background: #fff; padding: 36px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .content h1 { font-size: 20px; color: #2d3748; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #667eea; }
+  .content h2 { font-size: 18px; color: #2d3748; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
+  .content h3 { font-size: 16px; color: #4a5568; margin: 16px 0 8px; }
+  .content p { margin: 8px 0; }
+  .content li { margin: 4px 0 4px 20px; }
+  .content code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #e53e3e; }
+  .content pre { background: #1a1a2e; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
+  .content pre code { background: none; color: #e2e8f0; padding: 0; }
+  .content strong { color: #2d3748; }
+  .score { display: inline-block; font-size: 36px; font-weight: 700; padding: 12px 24px; border-radius: 10px; margin: 12px 0; }
+  .score.high { background: #c6f6d5; color: #22543d; }
+  .score.medium { background: #fefcbf; color: #744210; }
+  .score.low { background: #fed7d7; color: #742a2a; }
+  .footer { text-align: center; margin-top: 24px; font-size: 12px; color: #a0aec0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>代码审查报告</h1>
+    <div class="meta">项目: ${projectName} | 耗时: ${durationSec}s | 生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+  </div>
+  <div class="content">
+    <p>${html}</p>
+  </div>
+  <div class="footer">由 AI Platform 自动生成</div>
+</div>
+</body>
+</html>`;
 }
 
 // ========== 主入口 ==========
@@ -1154,16 +1423,38 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
     }
     case 'codereview': {
       const projectId = config.projectId as string | undefined;
-      const project = projectId ? getProjectById(projectId) : undefined;
-      const label = project ? project.name : '全部';
-      cases.push({ id: uuid(), name: `代码审查 (${label})`, type, status: 'pending' });
+      if (projectId) {
+        const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+        const discoveryPath = path.join(DATA_DIR, 'projects', projectId, 'review-discovery.json');
+        if (fs.existsSync(discoveryPath)) {
+          try {
+            const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+            const allModules = discovery.modules || [];
+            const selectedIds = (config.modules as string[]) || allModules.map((m: any) => m.id);
+            for (const mod of allModules) {
+              if (!selectedIds.includes(mod.id)) continue;
+              const riskLabel = mod.riskLevel === 'high' ? '高风险' : mod.riskLevel === 'medium' ? '中风险' : mod.riskLevel === 'low' ? '低风险' : '';
+              cases.push({
+                id: uuid(),
+                name: `${mod.name} (${mod.files} 文件${riskLabel ? ', ' + riskLabel : ''})`,
+                type,
+                status: 'pending',
+              });
+            }
+          } catch { /* fallback below */ }
+        }
+      }
+      if (cases.length === 0) {
+        const project = projectId ? getProjectById(projectId) : undefined;
+        cases.push({ id: uuid(), name: `代码审查 (${project ? project.name : '全部'})`, type, status: 'pending' });
+      }
       break;
     }
   }
 
   const suite: TestSuite = {
     id: uuid(),
-    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : type === 'codereview' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `代码审查(${p ? p.name : '全部'})`; })() : 'API接口'}测试`,
+    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : type === 'codereview' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; const mc = cases.length; return `代码审查(${p ? p.name : '全部'}${mc > 1 ? `, ${mc}模块` : ''})`; })() : 'API接口'}测试`,
     type,
     status: 'pending',
     cases,

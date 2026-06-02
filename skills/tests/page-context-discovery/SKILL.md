@@ -18,12 +18,14 @@ tags: ["e2e", "discovery", "knowledge", "page-context"]
 - 登录页: {{baseUrl}}{{loginUrl}}
 - 登录凭据: {{username}} / {{password}}
 - 待分析页面列表（从项目 pageSets 读取）
+- 动态参数值（页面 URL 中含动态参数时可直接替换，无需探索）:
+{{globalParamsHint}}
 
 ## 执行流程
 
 ### 第 1 步：读取项目页面列表
 
-读取项目配置文件 `server/data/projects/{{projectId}}/project.json`，从中获取所有 pageSets 和页面信息。
+读取项目配置文件 `{{dataDir}}/project.json`，从中获取所有 pageSets 和页面信息。
 提取每个页面的 id、name、url（完整访问地址 = baseUrl + url）。
 
 ### 第 2 步：登录系统
@@ -64,7 +66,7 @@ tags: ["e2e", "discovery", "knowledge", "page-context"]
 
 ### 第 4 步：输出结果
 
-所有页面分析完成后，将结果写入 `server/data/projects/{{projectId}}/page-context.json`。
+所有页面分析完成后，将结果写入 `{{dataDir}}/page-context.json`。
 
 **输出格式（严格按照以下 JSON 结构）：**
 

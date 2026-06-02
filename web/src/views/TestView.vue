@@ -113,7 +113,7 @@
             </select>
           </div>
         </div>
-        <!-- 代码审查：项目选择 -->
+        <!-- 代码审查：项目选择 + 模块勾选 -->
         <div v-if="activeType === 'codereview'" class="agent-params">
           <div class="param-row">
             <label>目标项目</label>
@@ -130,9 +130,24 @@
           <div v-else-if="selectedProjectId && !apiLoading" class="no-discovery-hint">
             未发现审查规则，请前往设置页面点击「发现审查点」
           </div>
+          <div v-if="reviewModules.length > 0" class="module-select">
+            <div class="module-check module-check-all">
+              <label>
+                <input type="checkbox" :checked="selectedReviewModules.length === reviewModules.length" @change="toggleAllReviewModules" />
+                <strong>全选 ({{ selectedReviewModules.length }}/{{ reviewModules.length }})</strong>
+              </label>
+            </div>
+            <div v-for="mod in reviewModules" :key="mod.id" class="module-check">
+              <label>
+                <input type="checkbox" :value="mod.id" v-model="selectedReviewModules" />
+                <span :class="'risk-' + mod.riskLevel">{{ mod.riskLevel === 'high' ? '🔴' : mod.riskLevel === 'medium' ? '🟡' : '🔵' }}</span>
+                {{ mod.name }} ({{ mod.files }} 文件)
+              </label>
+            </div>
+          </div>
         </div>
       </div>
-      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'codereview' && !selectedProjectId)" @click="startTest">
+      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'codereview' && (!selectedProjectId || selectedReviewModules.length === 0))" @click="startTest">
         ▶ 开始测试
       </button>
     </div>
@@ -221,7 +236,7 @@
             <div v-if="tc.error" class="detail-error">{{ tc.error }}</div>
           </div>
           <div class="detail-actions">
-            <div v-if="run.type === 'e2e' && run.config?.reportPath" class="report-info">
+            <div v-if="(run.type === 'e2e' || run.type === 'codereview') && run.config?.reportPath" class="report-info">
               <span class="report-path">{{ run.config.reportPath }}</span>
               <button class="btn-report" @click.stop="openReport(run.id)">查看报告</button>
             </div>
@@ -314,6 +329,8 @@ const apiLoading = ref(false)
 
 // 代码审查参数
 const reviewRulesInfo = ref<any>(null)
+const reviewModules = ref<any[]>([])
+const selectedReviewModules = ref<string[]>([])
 
 const currentType = computed(() => testTypes.value.find(t => t.type === activeType.value))
 const filteredRuns = computed(() => runs.value.filter(r => r.type === activeType.value))
@@ -518,6 +535,7 @@ async function startTest() {
   }
   if (activeType.value === 'codereview') {
     config.projectId = selectedProjectId.value
+    config.modules = selectedReviewModules.value
   }
 
   try {
@@ -636,15 +654,25 @@ async function onApiProjectChange() {
 
 async function onReviewProjectChange() {
   reviewRulesInfo.value = null
+  reviewModules.value = []
+  selectedReviewModules.value = []
   if (!selectedProjectId.value) return
 
   apiLoading.value = true
   try {
-    const rulesRes = await getReviewRules(selectedProjectId.value).catch(() => ({ data: null }))
+    const [rulesRes, discoveryRes] = await Promise.all([
+      getReviewRules(selectedProjectId.value).catch(() => ({ data: null })),
+      getReviewDiscovery(selectedProjectId.value).catch(() => ({ data: null })),
+    ])
     if (rulesRes.data?.dimensions) {
       const dims = rulesRes.data.dimensions
       const ruleCount = dims.reduce((s: number, d: any) => s + (d.rules?.length || 0), 0)
       reviewRulesInfo.value = { dimensionCount: dims.length, ruleCount }
+    }
+    if (discoveryRes.data?.modules) {
+      reviewModules.value = discoveryRes.data.modules
+      // 默认全选
+      selectedReviewModules.value = discoveryRes.data.modules.map((m: any) => m.id)
     }
   } catch { /* ignore */ }
   apiLoading.value = false
@@ -652,6 +680,14 @@ async function onReviewProjectChange() {
 
 function openReport(runId: string) {
   window.open(getReportUrl(runId), '_blank')
+}
+
+function toggleAllReviewModules() {
+  if (selectedReviewModules.value.length === reviewModules.value.length) {
+    selectedReviewModules.value = []
+  } else {
+    selectedReviewModules.value = reviewModules.value.map((m: any) => m.id)
+  }
 }
 
 // 页面加载：初始化 + 恢复运行中的测试
@@ -1138,6 +1174,18 @@ select.param-input { cursor: pointer; appearance: auto; }
 .module-check input[type="checkbox"] {
   accent-color: #667eea;
 }
+.module-check-all {
+  width: 100%;
+}
+.module-check-all label {
+  background: #f0f0ff;
+  border-color: #c0c0e0;
+  font-size: 12px;
+  color: #667eea;
+}
+.risk-high { color: #e53e3e; }
+.risk-medium { color: #d69e2e; }
+.risk-low { color: #3182ce; }
 .no-discovery-hint {
   font-size: 12px;
   color: #faad14;

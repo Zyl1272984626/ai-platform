@@ -154,6 +154,17 @@ export function deletePage(projectId: string, pageId: string) {
   return api.post(`/projects/${projectId}/pages/delete`, { pageId })
 }
 
+// ========== 发现任务中断 ==========
+
+/** 中断发现任务 */
+export function abortDiscovery(projectId: string, type: string) {
+  return fetch(`/api/projects/${projectId}/discover-abort`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type }),
+  }).then(res => res.json())
+}
+
 // ========== 页面发现 ==========
 
 /** 触发页面发现 — SSE 流式返回进度 */
@@ -161,12 +172,14 @@ export function discoverProject(
   id: string,
   mode: 'runtime' | 'source' | 'both' = 'runtime',
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+  signal?: AbortSignal,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
     fetch(`/api/projects/${id}/discover`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         reject(new Error(`HTTP ${response.status}`))
@@ -215,11 +228,13 @@ export function discoverProject(
 export function discoverApi(
   id: string,
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+  signal?: AbortSignal,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
     fetch(`/api/projects/${id}/discover-api`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         reject(new Error(`HTTP ${response.status}`))
@@ -278,11 +293,13 @@ export function getApiTests(id: string) {
 export function discoverFrontend(
   id: string,
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+  signal?: AbortSignal,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
     fetch(`/api/projects/${id}/discover-frontend`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         reject(new Error(`HTTP ${response.status}`))
@@ -336,11 +353,13 @@ export function getFrontendDiscovery(id: string) {
 export function discoverReview(
   id: string,
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+  signal?: AbortSignal,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
     fetch(`/api/projects/${id}/discover-review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         reject(new Error(`HTTP ${response.status}`))
@@ -404,11 +423,13 @@ export function getDiscoveryLogByType(id: string, type: string) {
 export function discoverPageContext(
   id: string,
   onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+  signal?: AbortSignal,
 ): Promise<{ stage: string; message: string }> {
   return new Promise((resolve, reject) => {
     fetch(`/api/projects/${id}/discover-context`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal,
     }).then(async (response) => {
       if (!response.ok) {
         reject(new Error(`HTTP ${response.status}`))

@@ -375,8 +375,9 @@ export function updateProjectPages(id: string, pageSets: PageSet[], discoveryRes
   const now = new Date().toISOString();
   const totalPages = pageSets.reduce((s, ps) => s + ps.pages.length, 0);
 
-  // 写入独立文件
-  saveProjectPages(id, { pageSets, discoveredAt: now, totalPages });
+  // 写入独立文件（保留已有的 globalParams）
+  const existingData = loadProjectPages(id);
+  saveProjectPages(id, { pageSets, discoveredAt: now, totalPages, globalParams: existingData.globalParams });
   if (discoveryResult) {
     saveDiscoveryResult(id, discoveryResult);
   }
@@ -399,6 +400,7 @@ export function saveProjectPageSets(id: string, pageSets: PageSet[]): PageSet[] 
     pageSets,
     discoveredAt: existing.discoveredAt,
     totalPages,
+    globalParams: existing.globalParams,
   });
 
   return pageSets;

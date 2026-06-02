@@ -111,7 +111,11 @@
               <div class="discover-stream-header">
                 <span>{{ discoveryLabel(dtype as string) }}进度</span>
                 <span class="discover-stage">{{ discoveryStreams[`${project.id}-${dtype}`].stage }}</span>
-                <button class="btn btn-xs" style="margin-left:auto;" @click="delete discoveryStreams[`${project.id}-${dtype}`]">关闭</button>
+                <button class="btn btn-xs" style="margin-left:auto;background:#dc3545;color:#fff;border-color:#dc3545;"
+                  :disabled="discoveryStreams[`${project.id}-${dtype}`]?.aborting"
+                  @click="abortDiscoveryTask(project.id, dtype as string)">
+                  {{ discoveryStreams[`${project.id}-${dtype}`]?.aborting ? '中断中...' : '中断' }}
+                </button>
               </div>
               <div class="discover-stream-body">
                 <template v-for="(block, idx) in discoveryStreams[`${project.id}-${dtype}`].blocks" :key="idx">
@@ -819,7 +823,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, type Ref } from 'vue'
 import { marked } from 'marked'
 import { getSettings, updateSettings, checkSettings, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
@@ -834,6 +838,7 @@ import {
   discoverApi as apiDiscoverApi,
   discoverFrontend as apiDiscoverFrontend,
   discoverReview as apiDiscoverReview,
+  abortDiscovery as apiAbortDiscovery,
   getProjectPages,
   getDiscoveryLog as getE2EDiscoveryLog,
   saveProjectPages,
@@ -906,6 +911,8 @@ interface StreamState {
   stage: string
   parseWarning?: boolean
   rawOutputPreview?: string
+  fetchAbort?: AbortController
+  aborting?: boolean
 }
 const discoveryStreams = reactive<Record<string, StreamState>>({})
 
@@ -1286,7 +1293,9 @@ function confirmDiscover() {
 async function doDiscover(id: string) {
   discoveringProject.value = id
   const key = `${id}-e2e`
+  const fetchAbort = new AbortController()
   initStream(key, `开始页面发现（模式: ${discoverMode.value}）...\n`)
+  discoveryStreams[key].fetchAbort = fetchAbort
   message.value = null
 
   try {
@@ -1301,7 +1310,7 @@ async function doDiscover(id: string) {
         handleStreamEvent(key, { type: 'text', content: progress.message + '\n' })
         handleStreamEvent(key, { type: 'stage', message: progress.stage })
       }
-    })
+    }, fetchAbort.signal)
 
     // 刷新项目列表
     const projectsRes = await fetchProjects()
@@ -1309,6 +1318,7 @@ async function doDiscover(id: string) {
 
     message.value = { type: 'success', text: '页面发现完成' }
   } catch (e: any) {
+    if (e.name === 'AbortError') return
     message.value = { type: 'error', text: '发现失败: ' + e.message }
     handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
@@ -1319,16 +1329,19 @@ async function doDiscover(id: string) {
 async function doDiscoverApi(id: string) {
   discoveringApiProject.value = id
   const key = `${id}-api`
+  const fetchAbort = new AbortController()
   initStream(key, '开始 API 接口发现...\n')
+  discoveryStreams[key].fetchAbort = fetchAbort
   message.value = null
 
   try {
     await apiDiscoverApi(id, (progress) => {
       handleStreamEvent(key, progress)
-    })
+    }, fetchAbort.signal)
 
     message.value = { type: 'success', text: 'API 接口发现完成' }
   } catch (e: any) {
+    if (e.name === 'AbortError') return
     message.value = { type: 'error', text: 'API 发现失败: ' + e.message }
     handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
@@ -1339,16 +1352,19 @@ async function doDiscoverApi(id: string) {
 async function doDiscoverFrontend(id: string) {
   discoveringFrontendProject.value = id
   const key = `${id}-frontend`
+  const fetchAbort = new AbortController()
   initStream(key, '开始前端组件发现...\n')
+  discoveryStreams[key].fetchAbort = fetchAbort
   message.value = null
 
   try {
     await apiDiscoverFrontend(id, (progress) => {
       handleStreamEvent(key, progress)
-    })
+    }, fetchAbort.signal)
 
     message.value = { type: 'success', text: '前端组件发现完成' }
   } catch (e: any) {
+    if (e.name === 'AbortError') return
     message.value = { type: 'error', text: '前端发现失败: ' + e.message }
     handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
@@ -1359,16 +1375,19 @@ async function doDiscoverFrontend(id: string) {
 async function doDiscoverReview(id: string) {
   discoveringReviewProject.value = id
   const key = `${id}-review`
+  const fetchAbort = new AbortController()
   initStream(key, '开始代码审查点发现...\n')
+  discoveryStreams[key].fetchAbort = fetchAbort
   message.value = null
 
   try {
     await apiDiscoverReview(id, (progress) => {
       handleStreamEvent(key, progress)
-    })
+    }, fetchAbort.signal)
 
     message.value = { type: 'success', text: '审查点发现完成' }
   } catch (e: any) {
+    if (e.name === 'AbortError') return
     message.value = { type: 'error', text: '审查点发现失败: ' + e.message }
     handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
@@ -1379,21 +1398,54 @@ async function doDiscoverReview(id: string) {
 async function doDiscoverContext(id: string) {
   discoveringContextProject.value = id
   const key = `${id}-context`
+  const fetchAbort = new AbortController()
   initStream(key, '开始知识图谱生成...\n')
+  discoveryStreams[key].fetchAbort = fetchAbort
   message.value = null
 
   try {
     await apiDiscoverPageContext(id, (progress) => {
       handleStreamEvent(key, progress)
-    })
+    }, fetchAbort.signal)
 
     message.value = { type: 'success', text: '知识图谱生成完成' }
   } catch (e: any) {
+    if (e.name === 'AbortError') return
     message.value = { type: 'error', text: '知识图谱生成失败: ' + e.message }
     handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringContextProject.value = null
   }
+}
+
+/** 中断发现任务 */
+async function abortDiscoveryTask(projectId: string, type: string) {
+  const key = `${projectId}-${type}`
+  const stream = discoveryStreams[key]
+  if (!stream) return
+
+  stream.aborting = true
+
+  try {
+    // 通知后端中断
+    await apiAbortDiscovery(projectId, type)
+  } catch { /* 忽略中断请求的错误 */ }
+
+  // 中断前端 SSE 连接
+  stream.fetchAbort?.abort()
+
+  // 重置发现状态
+  const stateMap: Record<string, Ref<string | null>> = {
+    e2e: discoveringProject,
+    api: discoveringApiProject,
+    frontend: discoveringFrontendProject,
+    review: discoveringReviewProject,
+    context: discoveringContextProject,
+  }
+  if (stateMap[type]) stateMap[type].value = null
+
+  // 隐藏进度面板
+  delete discoveryStreams[key]
 }
 
 // ========== 管理弹窗 ==========
