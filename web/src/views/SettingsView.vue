@@ -33,51 +33,60 @@
                 {{ project.status === 'active' ? '活跃' : '停用' }}
               </span>
             </div>
-            <div class="project-action-groups">
-              <div class="action-group">
-                <span class="action-group-label label-e2e">E2E</span>
-                <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
-                  {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
-                </button>
-                <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
-                  管理页面
-                </button>
-              </div>
-              <div class="action-group">
-                <span class="action-group-label label-frontend">前端</span>
-                <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
-                  {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
-                </button>
-                <button class="btn btn-sm btn-manage-frontend" @click="openFrontendManager(project)">
-                  管理组件
-                </button>
-              </div>
-              <div class="action-group">
-                <span class="action-group-label label-api">API</span>
-                <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
-                  {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
-                </button>
-                <button class="btn btn-sm btn-manage-api" @click="openApiManager(project)">
-                  管理接口
-                </button>
-              </div>
-              <div class="action-group">
-                <span class="action-group-label label-review">审查</span>
-                <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
-                  {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
-                </button>
-                <button class="btn btn-sm btn-manage-review" @click="openReviewManager(project)">
-                  管理审查点
-                </button>
-              </div>
-              <div class="action-group action-group-tools">
-                <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
-                <button class="btn btn-sm" @click="editProject(project)">编辑</button>
-                <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
-                  {{ checkingProject === project.id ? '检测中...' : '检测' }}
-                </button>
-                <button class="btn btn-sm btn-danger" @click="doDeleteProject(project.id)">删除</button>
-              </div>
+            <div class="project-tool-actions">
+              <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
+              <button class="btn btn-sm" @click="editProject(project)">编辑</button>
+              <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
+                {{ checkingProject === project.id ? '检测中...' : '检测' }}
+              </button>
+              <button class="btn btn-sm btn-danger" @click="doDeleteProject(project.id)">删除</button>
+            </div>
+          </div>
+          <div class="project-action-grid">
+            <div class="action-group">
+              <span class="action-group-label label-e2e">E2E</span>
+              <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
+                {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
+              </button>
+              <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
+                管理页面
+              </button>
+            </div>
+            <div class="action-group">
+              <span class="action-group-label label-frontend">前端</span>
+              <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
+                {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
+              </button>
+              <button class="btn btn-sm btn-manage-frontend" @click="openFrontendManager(project)">
+                管理组件
+              </button>
+            </div>
+            <div class="action-group">
+              <span class="action-group-label label-api">API</span>
+              <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
+                {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
+              </button>
+              <button class="btn btn-sm btn-manage-api" @click="openApiManager(project)">
+                管理接口
+              </button>
+            </div>
+            <div class="action-group">
+              <span class="action-group-label label-review">审查</span>
+              <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
+                {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
+              </button>
+              <button class="btn btn-sm btn-manage-review" @click="openReviewManager(project)">
+                管理审查点
+              </button>
+            </div>
+            <div class="action-group">
+              <span class="action-group-label label-context">知识</span>
+              <button class="btn btn-sm btn-discover-context" @click="doDiscoverContext(project.id)" :disabled="discoveringContextProject === project.id">
+                {{ discoveringContextProject === project.id ? '生成中...' : '生成图谱' }}
+              </button>
+              <button class="btn btn-sm btn-manage-context" @click="openContextManager(project)">
+                查看图谱
+              </button>
             </div>
           </div>
           <div class="project-detail">
@@ -133,6 +142,16 @@
               <span class="discover-stage">{{ reviewDiscoverLogs[project.id].stage }}</span>
             </div>
             <div v-for="(log, idx) in reviewDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
+              {{ log }}
+            </div>
+          </div>
+          <!-- 知识图谱生成进度面板 -->
+          <div v-if="contextDiscoverLogs[project.id]" class="discover-progress">
+            <div class="discover-progress-header">
+              <span>知识图谱生成进度</span>
+              <span class="discover-stage">{{ contextDiscoverLogs[project.id].stage }}</span>
+            </div>
+            <div v-for="(log, idx) in contextDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
               {{ log }}
             </div>
           </div>
@@ -693,6 +712,75 @@
         </div>
       </div>
     </div>
+
+    <!-- 查看知识图谱弹窗 -->
+    <div v-if="showContextManager" class="modal-overlay" @click.self="showContextManager = false">
+      <div class="modal-content modal-wide">
+        <h3>知识图谱 — {{ contextManagerProjectName }}</h3>
+        <div v-if="contextManagerLoading" class="loading" style="padding:20px;">加载中...</div>
+        <template v-else>
+          <div v-if="!contextManagerData || !contextPages.length" class="empty-projects">
+            暂无知识图谱数据，请先点击「生成图谱」
+          </div>
+          <template v-else>
+            <div class="manager-summary">
+              <span>生成于 {{ formatDate(contextManagerData._meta?.generatedAt) }}</span>
+              <span>{{ contextPages.length }} 个页面</span>
+            </div>
+            <div class="manager-section">
+              <div v-for="page in contextPages" :key="page.id" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('context', page.id)">
+                  <span class="expand-icon">{{ expandedManagerIds.context.has(page.id) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ page.pageName }}</span>
+                  <code class="manager-block-path">{{ page.url }}</code>
+                </div>
+                <div v-if="expandedManagerIds.context.has(page.id)" class="manager-block-body context-detail">
+                  <div v-if="page.description" class="context-field">
+                    <label>功能描述</label>
+                    <span>{{ page.description }}</span>
+                  </div>
+                  <div v-if="page.expectedElements?.length" class="context-field">
+                    <label>预期元素</label>
+                    <div class="context-tags">
+                      <span v-for="el in page.expectedElements" :key="el" class="context-tag">{{ el }}</span>
+                    </div>
+                  </div>
+                  <div v-if="page.apiEndpoints?.length" class="context-field">
+                    <label>API 接口</label>
+                    <div class="context-api-list">
+                      <div v-for="ep in page.apiEndpoints" :key="ep.path" class="context-api-item">
+                        <span class="method-badge" :class="ep.method?.toLowerCase()">{{ ep.method }}</span>
+                        <code class="ep-path">{{ ep.path }}</code>
+                        <span class="ep-name">{{ ep.description }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="page.interactions?.length" class="context-field">
+                    <label>交互操作</label>
+                    <div class="context-interaction-list">
+                      <div v-for="inter in page.interactions" :key="inter.action" class="context-interaction-item">
+                        <span class="interaction-action">{{ inter.action }}</span>
+                        <span class="interaction-arrow">→</span>
+                        <span class="interaction-expected">{{ inter.expected }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="page.commonIssues?.length" class="context-field">
+                    <label>常见问题</label>
+                    <div class="context-tags">
+                      <span v-for="issue in page.commonIssues" :key="issue" class="context-tag context-tag-warn">{{ issue }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showContextManager = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -726,6 +814,8 @@ import {
   getFrontendDiscovery,
   getReviewDiscovery,
   getReviewRules,
+  discoverPageContext as apiDiscoverPageContext,
+  getPageContext as apiGetPageContext,
   type TestProject,
   type ProjectCheckResult,
   type PageSet,
@@ -760,11 +850,13 @@ const discoveringProject = ref<string | null>(null)
 const discoveringApiProject = ref<string | null>(null)
 const discoveringFrontendProject = ref<string | null>(null)
 const discoveringReviewProject = ref<string | null>(null)
+const discoveringContextProject = ref<string | null>(null)
 const projectChecks = reactive<Record<string, ProjectCheckResult>>({})
 const discoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 const apiDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 const frontendDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 const reviewDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+const contextDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 
 // 页面管理弹窗
 const showPageManager = ref(false)
@@ -823,7 +915,14 @@ const expandedManagerIds = reactive<Record<string, Set<string>>>({
   frontend: new Set(),
   review: new Set(),
   'review-rule': new Set(),
+  context: new Set(),
 })
+
+// 管理弹窗 — 知识图谱
+const showContextManager = ref(false)
+const contextManagerProjectName = ref('')
+const contextManagerLoading = ref(false)
+const contextManagerData = ref<any>(null)
 
 /** 详情页面的展开后实际 URL 列表 */
 const detailPageResolvedUrls = computed(() => {
@@ -1143,6 +1242,29 @@ async function doDiscoverReview(id: string) {
   }
 }
 
+async function doDiscoverContext(id: string) {
+  discoveringContextProject.value = id
+  contextDiscoverLogs[id] = { stage: 'init', logs: ['开始知识图谱生成...'] }
+  message.value = null
+
+  try {
+    await apiDiscoverPageContext(id, (progress) => {
+      if (!contextDiscoverLogs[id]) contextDiscoverLogs[id] = { stage: '', logs: [] }
+      contextDiscoverLogs[id].stage = progress.stage
+      contextDiscoverLogs[id].logs.push(progress.message)
+    })
+
+    message.value = { type: 'success', text: '知识图谱生成完成' }
+  } catch (e: any) {
+    message.value = { type: 'error', text: '知识图谱生成失败: ' + e.message }
+    if (contextDiscoverLogs[id]) {
+      contextDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
+    }
+  } finally {
+    discoveringContextProject.value = null
+  }
+}
+
 // ========== 管理弹窗 ==========
 
 function toggleManagerExpand(category: string, id: string) {
@@ -1202,6 +1324,27 @@ async function openReviewManager(project: TestProject) {
   } catch { /* ignore */ }
   reviewManagerLoading.value = false
 }
+
+async function openContextManager(project: TestProject) {
+  showContextManager.value = true
+  contextManagerProjectName.value = project.name
+  contextManagerLoading.value = true
+  contextManagerData.value = null
+  expandedManagerIds.context.clear()
+  try {
+    const res = await apiGetPageContext(project.id).catch(() => ({ data: null }))
+    contextManagerData.value = res.data
+  } catch { /* ignore */ }
+  contextManagerLoading.value = false
+}
+
+/** 从知识图谱数据中提取页面列表（排除 _meta） */
+const contextPages = computed(() => {
+  if (!contextManagerData.value) return []
+  return Object.entries(contextManagerData.value)
+    .filter(([key]) => key !== '_meta')
+    .map(([id, data]) => ({ id, ...(data as any) }))
+})
 
 // ========== 基础配置操作 ==========
 
@@ -1493,7 +1636,7 @@ function showPageDetail(page: PageConfig) {
 <style scoped>
 .settings-page {
   padding: 24px 32px;
-  max-width: 900px;
+  max-width: 1100px;
 }
 .page-header {
   margin-bottom: 28px;
@@ -1708,13 +1851,14 @@ function showPageDetail(page: PageConfig) {
 /* 项目卡片 */
 .project-card {
   border: 1px solid #f0f0f0;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
+  border-radius: 10px;
+  padding: 18px 22px;
+  margin-bottom: 14px;
   transition: border-color 0.2s;
 }
 .project-card:hover {
   border-color: #d9d9d9;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .project-card.default {
   border-color: #667eea;
@@ -1724,7 +1868,7 @@ function showPageDetail(page: PageConfig) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 14px;
 }
 .project-info {
   display: flex;
@@ -1732,9 +1876,13 @@ function showPageDetail(page: PageConfig) {
   gap: 8px;
 }
 .project-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #1a1a2e;
+}
+.project-tool-actions {
+  display: flex;
+  gap: 6px;
 }
 .project-actions {
   display: flex;
@@ -1742,7 +1890,8 @@ function showPageDetail(page: PageConfig) {
   flex-wrap: wrap;
 }
 .project-detail {
-  margin-bottom: 4px;
+  margin-bottom: 0;
+  padding-top: 6px;
 }
 .project-url {
   font-size: 13px;
@@ -1754,6 +1903,7 @@ function showPageDetail(page: PageConfig) {
   gap: 16px;
   font-size: 12px;
   color: #888;
+  margin-top: 4px;
 }
 .text-muted {
   color: #bbb;
@@ -2373,28 +2523,33 @@ function showPageDetail(page: PageConfig) {
   color: #999;
 }
 
-/* 按钮分组 */
-.project-action-groups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  align-items: center;
+/* 按钮分组 — 2x2 网格 */
+.project-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+  padding: 12px 0 4px;
+  border-top: 1px solid #f5f5f5;
 }
 .action-group {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-.action-group-tools {
-  margin-left: auto;
+  gap: 8px;
 }
 .action-group-label {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 3px;
-  min-width: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  min-width: 40px;
   text-align: center;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.action-group .btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .label-e2e { background: #667eea; color: #fff; }
 .label-frontend { background: #fa8c16; color: #fff; }
@@ -2669,5 +2824,77 @@ function showPageDetail(page: PageConfig) {
   font-size: 11px;
   color: #52c41a;
   padding-left: 60px;
+}
+
+/* 知识图谱 */
+.label-context { background: #eb2f96; color: #fff; }
+.btn-discover-context {
+  background: #eb2f96 !important;
+  color: #fff !important;
+}
+.btn-discover-context:hover:not(:disabled) {
+  background: #f759ab !important;
+}
+.btn-manage-context {
+  background: #fff0f6 !important;
+  color: #eb2f96 !important;
+}
+.btn-manage-context:hover:not(:disabled) {
+  background: #ffd6e7 !important;
+}
+.context-detail {
+  font-size: 13px;
+}
+.context-field {
+  margin-bottom: 10px;
+}
+.context-field label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.context-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.context-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: #f0f0f0;
+  color: #333;
+}
+.context-tag-warn {
+  background: #fffbe6;
+  color: #faad14;
+}
+.context-api-list,
+.context-interaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.context-api-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.context-interaction-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+.interaction-action {
+  color: #333;
+}
+.interaction-arrow {
+  color: #999;
+}
+.interaction-expected {
+  color: #888;
 }
 </style>

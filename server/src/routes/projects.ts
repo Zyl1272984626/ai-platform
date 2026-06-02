@@ -673,3 +673,53 @@ projectsRouter.get('/:id/review-rules', async (req: Request, res: Response) => {
   const result = getReviewRules(req.params.id);
   res.json(result || { dimensions: [] });
 });
+
+// ========== 知识图谱发现 ==========
+
+/** 触发知识图谱发现 — SSE 流式返回进度 */
+projectsRouter.post('/:id/discover-context', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+
+  // 设置 SSE 响应头
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch { /* client disconnected */ }
+  };
+
+  try {
+    const { discoverPageContext } = await import('../services/page-context-discovery.js');
+    await discoverPageContext(project.id, (progress) => { sendSSE(progress); });
+    sendSSE({ stage: 'complete', message: '知识图谱生成完成' });
+  } catch (err: any) {
+    sendSSE({ stage: 'error', message: err.message });
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
+  }
+});
+
+/** 获取知识图谱 */
+projectsRouter.get('/:id/page-context', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getPageContext } = await import('../services/page-context-discovery.js');
+  const result = getPageContext(req.params.id);
+  if (!result) {
+    res.json({ _meta: { totalPages: 0 }, pages: [] });
+    return;
+  }
+  res.json(result);
+});
