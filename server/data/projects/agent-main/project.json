@@ -192,7 +192,15 @@
           "id": "setting-app-setting-sys-table-data-0",
           "name": "表数据",
           "url": "/setting-app/index.html#/app/:appId/setting/sys/table/data/:id",
-          "path": "/app/:appId/setting/sys/table/data/:id"
+          "path": "/app/:appId/setting/sys/table/data/:id",
+          "params": {
+            ":appId": [
+              "base_app"
+            ],
+            ":id": [
+              "1"
+            ]
+          }
         },
         {
           "id": "setting-app-setting-sys-table-column-metadata-1",
@@ -494,5 +502,10 @@
     }
   ],
   "discoveredAt": "2026-06-01T08:59:34.922Z",
-  "totalPages": 66
+  "totalPages": 66,
+  "globalParams": {
+    ":appId": [
+      "base_app"
+    ]
+  }
 }

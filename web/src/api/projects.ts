@@ -208,3 +208,187 @@ export function discoverProject(
     }).catch(reject)
   })
 }
+
+// ========== API 接口发现 ==========
+
+/** 触发 API 接口发现 — SSE 流式返回进度 */
+export function discoverApi(
+  id: string,
+  onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+): Promise<{ stage: string; message: string }> {
+  return new Promise((resolve, reject) => {
+    fetch(`/api/projects/${id}/discover-api`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (response) => {
+      if (!response.ok) {
+        reject(new Error(`HTTP ${response.status}`))
+        return
+      }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        reject(new Error('No response body'))
+        return
+      }
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              onProgress?.(data)
+              if (data.stage === 'complete' || data.stage === 'done') {
+                resolve(data)
+              } else if (data.stage === 'error') {
+                reject(new Error(data.message))
+                return
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+
+      resolve({ stage: 'complete', message: 'API 接口发现完成' })
+    }).catch(reject)
+  })
+}
+
+/** 获取 API 发现结果 */
+export function getApiDiscovery(id: string) {
+  return api.get(`/projects/${id}/api-discovery`)
+}
+
+/** 获取 API 测试定义 */
+export function getApiTests(id: string) {
+  return api.get(`/projects/${id}/api-tests`)
+}
+
+// ========== 前端单元测试发现 ==========
+
+/** 触发前端组件发现 — SSE 流式返回进度 */
+export function discoverFrontend(
+  id: string,
+  onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+): Promise<{ stage: string; message: string }> {
+  return new Promise((resolve, reject) => {
+    fetch(`/api/projects/${id}/discover-frontend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (response) => {
+      if (!response.ok) {
+        reject(new Error(`HTTP ${response.status}`))
+        return
+      }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        reject(new Error('No response body'))
+        return
+      }
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              onProgress?.(data)
+              if (data.stage === 'complete' || data.stage === 'done') {
+                resolve(data)
+              } else if (data.stage === 'error') {
+                reject(new Error(data.message))
+                return
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+
+      resolve({ stage: 'complete', message: '前端组件发现完成' })
+    }).catch(reject)
+  })
+}
+
+/** 获取前端发现结果 */
+export function getFrontendDiscovery(id: string) {
+  return api.get(`/projects/${id}/frontend-discovery`)
+}
+
+// ========== 代码审查发现 ==========
+
+/** 触发代码审查发现 — SSE 流式返回进度 */
+export function discoverReview(
+  id: string,
+  onProgress?: (progress: { stage: string; message: string; detail?: any }) => void,
+): Promise<{ stage: string; message: string }> {
+  return new Promise((resolve, reject) => {
+    fetch(`/api/projects/${id}/discover-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (response) => {
+      if (!response.ok) {
+        reject(new Error(`HTTP ${response.status}`))
+        return
+      }
+      const reader = response.body?.getReader()
+      if (!reader) {
+        reject(new Error('No response body'))
+        return
+      }
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              onProgress?.(data)
+              if (data.stage === 'complete' || data.stage === 'done') {
+                resolve(data)
+              } else if (data.stage === 'error') {
+                reject(new Error(data.message))
+                return
+              }
+            } catch { /* skip malformed */ }
+          }
+        }
+      }
+
+      resolve({ stage: 'complete', message: '审查点发现完成' })
+    }).catch(reject)
+  })
+}
+
+/** 获取代码审查发现结果 */
+export function getReviewDiscovery(id: string) {
+  return api.get(`/projects/${id}/review-discovery`)
+}
+
+/** 获取审查规则 */
+export function getReviewRules(id: string) {
+  return api.get(`/projects/${id}/review-rules`)
+}

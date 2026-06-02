@@ -56,7 +56,8 @@ export interface PlatformConfig {
   // 基础配置
   projectRoot: string;          // 兼容旧配置
   aiPlatformRoot: string;
-  e2eDataDir: string;
+  e2eDataDir: string;           // 已废弃，兼容保留
+  testDataDir: string;          // 统一测试数据目录（替代 e2eDataDir）
   mainFrontendPort: number;     // 兼容旧配置
   mainBackendPort: number;      // 兼容旧配置
   apiTestBaseUrl: string;
@@ -88,6 +89,7 @@ const DEFAULT_CONFIG: PlatformConfig = {
   projectRoot: process.env.PROJECT_ROOT || 'C:/FengSuKeJi/agent',
   aiPlatformRoot: process.env.AI_PLATFORM_ROOT || 'C:/FengSuKeJi/ai-platform',
   e2eDataDir: 'F:/e2e-test-data',
+  testDataDir: 'F:/e2e-test-data',
   mainFrontendPort: 5173,
   mainBackendPort: 9998,
   apiTestBaseUrl: 'http://localhost:3100',
@@ -166,6 +168,10 @@ export function saveDiscoveryResult(projectId: string, discoveryResult: any): vo
 function migrateConfig(saved: any): PlatformConfig {
   // 已有 projects 字段 → 新格式，直接用
   if (saved.projects && Array.isArray(saved.projects)) {
+    // 迁移 e2eDataDir → testDataDir
+    if (saved.e2eDataDir && !saved.testDataDir) {
+      saved.testDataDir = saved.e2eDataDir;
+    }
     return {
       ...DEFAULT_CONFIG,
       ...saved,
@@ -181,6 +187,11 @@ function migrateConfig(saved: any): PlatformConfig {
     apiBaseUrl: `http://localhost:${saved.mainBackendPort || 9998}`,
     sourcePath: saved.projectRoot || DEFAULT_CONFIG.projectRoot,
   });
+
+  // 迁移 e2eDataDir → testDataDir
+  if (saved.e2eDataDir && !saved.testDataDir) {
+    saved.testDataDir = saved.e2eDataDir;
+  }
 
   return {
     ...DEFAULT_CONFIG,
@@ -254,9 +265,12 @@ function saveConfig(): void {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-    // 同步到 process.env，让 E2E 子进程也能读到
+    // 同步到 process.env，让子进程也能读到
     if (config.e2eDataDir) {
       process.env.E2E_DATA_DIR = config.e2eDataDir;
+    }
+    if (config.testDataDir) {
+      process.env.TEST_DATA_DIR = config.testDataDir;
     }
     console.log('[Config] 配置已保存');
   } catch (e: any) {
@@ -400,6 +414,7 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
   for (const [key, dirPath] of [
     ['aiPlatformRoot', config.aiPlatformRoot],
     ['e2eDataDir', config.e2eDataDir],
+    ['testDataDir', config.testDataDir || config.e2eDataDir],
   ] as [string, string][]) {
     try {
       results[key] = {

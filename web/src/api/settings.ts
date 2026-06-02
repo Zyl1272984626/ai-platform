@@ -3,6 +3,7 @@ import api from './client'
 export interface PlatformConfig {
   aiPlatformRoot: string
   e2eDataDir: string
+  testDataDir: string
   apiTestBaseUrl: string
 }
 

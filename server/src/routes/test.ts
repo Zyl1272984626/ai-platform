@@ -24,8 +24,9 @@ testRouter.get('/types', (_req: Request, res: Response) => {
   res.json([
     { type: 'agent', name: 'Agent 智能体测试', description: '测试 AI Agent 的对话响应、工具调用、代码理解能力', icon: '🤖' },
     { type: 'e2e', name: 'E2E 页面测试', description: 'Playwright 真实浏览器测试，覆盖主系统88个页面，支持 quick/standard/deep 三种模式', icon: '🌐' },
-    { type: 'frontend', name: '前端单元测试', description: '运行 vitest 前端测试用例，收集通过率', icon: '🧪' },
-    { type: 'api', name: 'API 接口测试', description: '自动检测所有后端 API 端点的可用性和响应状态', icon: '🔌' },
+    { type: 'frontend', name: '前端单元测试', description: 'Claude Code 发现可测试单元，生成 vitest 测试用例并执行', icon: '🧪' },
+    { type: 'api', name: 'API 接口测试', description: 'Claude Code 扫描源码发现接口，自动生成测试用例并验证响应', icon: '🔌' },
+    { type: 'codereview', name: '代码审查', description: 'Claude Code 扫描源码，按安全/性能/规范等维度生成审查报告', icon: '🔍' },
   ]);
 });
 

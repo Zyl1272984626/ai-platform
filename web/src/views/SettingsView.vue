@@ -39,6 +39,15 @@
               <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
                 {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
               </button>
+              <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
+                {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
+              </button>
+              <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
+                {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
+              </button>
+              <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
+                {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
+              </button>
               <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
                 管理页面
               </button>
@@ -74,6 +83,36 @@
               {{ log }}
             </div>
           </div>
+          <!-- API 发现进度面板 -->
+          <div v-if="apiDiscoverLogs[project.id]" class="discover-progress">
+            <div class="discover-progress-header">
+              <span>API 接口发现进度</span>
+              <span class="discover-stage">{{ apiDiscoverLogs[project.id].stage }}</span>
+            </div>
+            <div v-for="(log, idx) in apiDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
+              {{ log }}
+            </div>
+          </div>
+          <!-- 前端发现进度面板 -->
+          <div v-if="frontendDiscoverLogs[project.id]" class="discover-progress">
+            <div class="discover-progress-header">
+              <span>前端组件发现进度</span>
+              <span class="discover-stage">{{ frontendDiscoverLogs[project.id].stage }}</span>
+            </div>
+            <div v-for="(log, idx) in frontendDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
+              {{ log }}
+            </div>
+          </div>
+          <!-- 审查点发现进度面板 -->
+          <div v-if="reviewDiscoverLogs[project.id]" class="discover-progress">
+            <div class="discover-progress-header">
+              <span>审查点发现进度</span>
+              <span class="discover-stage">{{ reviewDiscoverLogs[project.id].stage }}</span>
+            </div>
+            <div v-for="(log, idx) in reviewDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
+              {{ log }}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -92,12 +131,12 @@
         </div>
 
         <div class="form-group">
-          <label>E2E 数据目录</label>
-          <p class="field-desc">E2E 测试运行数据存放路径</p>
+          <label>测试数据目录</label>
+          <p class="field-desc">所有测试类型（E2E/API/前端/代码审查）的运行数据统一存放目录</p>
           <div class="input-row">
-            <input v-model="form.e2eDataDir" placeholder="例如: F:/e2e-test-data" />
-            <span v-if="checks.e2eDataDir" class="check-badge" :class="checks.e2eDataDir.ok ? 'ok' : 'err'">
-              {{ checks.e2eDataDir.msg }}
+            <input v-model="form.testDataDir" placeholder="例如: F:/e2e-test-data" />
+            <span v-if="checks.testDataDir" class="check-badge" :class="checks.testDataDir.ok ? 'ok' : 'err'">
+              {{ checks.testDataDir.msg }}
             </span>
           </div>
         </div>
@@ -456,6 +495,9 @@ import {
   setDefaultProject as apiSetDefault,
   checkProject as apiCheckProject,
   discoverProject as apiDiscoverProject,
+  discoverApi as apiDiscoverApi,
+  discoverFrontend as apiDiscoverFrontend,
+  discoverReview as apiDiscoverReview,
   getProjectPages,
   getDiscoveryLog,
   saveProjectPages,
@@ -482,6 +524,7 @@ const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 const form = reactive<PlatformConfig>({
   aiPlatformRoot: '',
   e2eDataDir: '',
+  testDataDir: '',
   apiTestBaseUrl: '',
 })
 
@@ -497,8 +540,14 @@ const editingProject = ref<TestProject | null>(null)
 const savingProject = ref(false)
 const checkingProject = ref<string | null>(null)
 const discoveringProject = ref<string | null>(null)
+const discoveringApiProject = ref<string | null>(null)
+const discoveringFrontendProject = ref<string | null>(null)
+const discoveringReviewProject = ref<string | null>(null)
 const projectChecks = reactive<Record<string, ProjectCheckResult>>({})
 const discoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+const apiDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+const frontendDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+const reviewDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
 
 // 页面管理弹窗
 const showPageManager = ref(false)
@@ -776,6 +825,75 @@ async function doDiscover(id: string) {
     }
   } finally {
     discoveringProject.value = null
+  }
+}
+
+async function doDiscoverApi(id: string) {
+  discoveringApiProject.value = id
+  apiDiscoverLogs[id] = { stage: 'init', logs: ['开始 API 接口发现...'] }
+  message.value = null
+
+  try {
+    await apiDiscoverApi(id, (progress) => {
+      if (!apiDiscoverLogs[id]) apiDiscoverLogs[id] = { stage: '', logs: [] }
+      apiDiscoverLogs[id].stage = progress.stage
+      apiDiscoverLogs[id].logs.push(progress.message)
+    })
+
+    message.value = { type: 'success', text: 'API 接口发现完成' }
+  } catch (e: any) {
+    message.value = { type: 'error', text: 'API 发现失败: ' + e.message }
+    if (apiDiscoverLogs[id]) {
+      apiDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
+    }
+  } finally {
+    discoveringApiProject.value = null
+  }
+}
+
+async function doDiscoverFrontend(id: string) {
+  discoveringFrontendProject.value = id
+  frontendDiscoverLogs[id] = { stage: 'init', logs: ['开始前端组件发现...'] }
+  message.value = null
+
+  try {
+    await apiDiscoverFrontend(id, (progress) => {
+      if (!frontendDiscoverLogs[id]) frontendDiscoverLogs[id] = { stage: '', logs: [] }
+      frontendDiscoverLogs[id].stage = progress.stage
+      frontendDiscoverLogs[id].logs.push(progress.message)
+    })
+
+    message.value = { type: 'success', text: '前端组件发现完成' }
+  } catch (e: any) {
+    message.value = { type: 'error', text: '前端发现失败: ' + e.message }
+    if (frontendDiscoverLogs[id]) {
+      frontendDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
+    }
+  } finally {
+    discoveringFrontendProject.value = null
+  }
+}
+
+async function doDiscoverReview(id: string) {
+  discoveringReviewProject.value = id
+  reviewDiscoverLogs[id] = { stage: 'init', logs: ['开始代码审查点发现...'] }
+  message.value = null
+
+  try {
+    await apiDiscoverReview(id, (progress) => {
+      if (!reviewDiscoverLogs[id]) reviewDiscoverLogs[id] = { stage: '', logs: [] }
+      reviewDiscoverLogs[id].stage = progress.stage
+      reviewDiscoverLogs[id].logs.push(progress.message)
+    })
+
+    message.value = { type: 'success', text: '审查点发现完成' }
+  } catch (e: any) {
+    message.value = { type: 'error', text: '审查点发现失败: ' + e.message }
+    if (reviewDiscoverLogs[id]) {
+      reviewDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
+    }
+  } finally {
+    discoveringReviewProject.value = null
   }
 }
 
@@ -1376,6 +1494,27 @@ function showPageDetail(page: PageConfig) {
 }
 .btn-discover:hover:not(:disabled) {
   background: #5a6fd6 !important;
+}
+.btn-discover-api {
+  background: #13c2c2 !important;
+  color: #fff !important;
+}
+.btn-discover-api:hover:not(:disabled) {
+  background: #36cfc9 !important;
+}
+.btn-discover-frontend {
+  background: #fa8c16 !important;
+  color: #fff !important;
+}
+.btn-discover-frontend:hover:not(:disabled) {
+  background: #ffa940 !important;
+}
+.btn-discover-review {
+  background: #722ed1 !important;
+  color: #fff !important;
+}
+.btn-discover-review:hover:not(:disabled) {
+  background: #9254de !important;
 }
 .empty-projects {
   text-align: center;

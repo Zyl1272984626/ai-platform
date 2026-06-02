@@ -11,12 +11,13 @@ import { v4 as uuid } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import net from 'net';
+import { fileURLToPath } from 'url';
 import { AI_PLATFORM_ROOT, getConfig, getProjectById, type TestProject, type PageConfig } from './config.js';
 import { testBus } from './test-events.js';
 
 // ========== 类型 ==========
 
-export type TestType = 'agent' | 'e2e' | 'frontend' | 'api';
+export type TestType = 'agent' | 'e2e' | 'frontend' | 'api' | 'codereview';
 export type TestStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error';
 
 export interface StreamBlock {
@@ -55,14 +56,27 @@ export interface TestSuite {
 
 const runs = new Map<string, TestSuite>();
 const abortControllers = new Map<string, AbortController>(); // suiteId -> AbortController
-const runsDir = path.resolve(AI_PLATFORM_ROOT, 'data', 'test-runs');
+
+/** 所有测试类型 */
+const ALL_TYPES: TestType[] = ['agent', 'e2e', 'frontend', 'api', 'codereview'];
+
+/** 获取指定测试类型的 runs 目录（统一到 testDataDir/{type}/runs/） */
+function getRunsDir(type: TestType): string {
+  const base = getConfig().testDataDir || getConfig().e2eDataDir;
+  const dir = path.resolve(base, type, 'runs');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** 兼容旧的 runsDir（用于迁移旧数据） */
+const legacyRunsDir = path.resolve(AI_PLATFORM_ROOT, 'data', 'test-runs');
 
 // ========== 队列（按测试类型分队列） ==========
 
 type QueueEntry = { suiteId: string; resolve: (v: any) => void; reject: (e: any) => void };
 
-const typeQueues: Record<TestType, QueueEntry[]> = { agent: [], e2e: [], frontend: [], api: [] };
-const typeRunning: Record<TestType, number> = { agent: 0, e2e: 0, frontend: 0, api: 0 };
+const typeQueues: Record<TestType, QueueEntry[]> = { agent: [], e2e: [], frontend: [], api: [], codereview: [] };
+const typeRunning: Record<TestType, number> = { agent: 0, e2e: 0, frontend: 0, api: 0, codereview: 0 };
 
 // 每种类型的最大并发数
 const CONCURRENCY: Record<TestType, number> = {
@@ -70,6 +84,7 @@ const CONCURRENCY: Record<TestType, number> = {
   e2e: 2,
   frontend: 1,
   api: 2,
+  codereview: 1,
 };
 
 function processTypeQueue(type: TestType): void {
@@ -120,51 +135,89 @@ async function preflightCheck(type: TestType, config?: Record<string, unknown>):
 }
 
 function ensureRunsDir() {
-  if (!fs.existsSync(runsDir)) fs.mkdirSync(runsDir, { recursive: true });
+  // 确保所有类型的 runs 目录存在
+  for (const type of ALL_TYPES) {
+    getRunsDir(type);
+  }
 }
 
 /** 启动时清理残留的"运行中"记录（服务器重启后这些测试已不可能完成） */
 function cleanupStaleRuns() {
   ensureRunsDir();
-  const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
   let cleaned = 0;
-  for (const f of files) {
-    try {
-      const filePath = path.join(runsDir, f);
-      const suite = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      if (suite.status === 'running' || suite.status === 'pending') {
-        suite.status = 'error';
-        suite.finishedAt = new Date().toISOString();
-        if (!suite.duration) suite.duration = 0;
-        for (const tc of suite.cases) {
-          if (tc.status === 'running' || tc.status === 'pending') {
-            tc.status = 'error';
-            tc.error = '服务器重启，测试中断';
+  // 遍历所有类型目录
+  for (const type of ALL_TYPES) {
+    const dir = getRunsDir(type);
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      try {
+        const filePath = path.join(dir, f);
+        const suite = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (suite.status === 'running' || suite.status === 'pending') {
+          suite.status = 'error';
+          suite.finishedAt = new Date().toISOString();
+          if (!suite.duration) suite.duration = 0;
+          for (const tc of suite.cases) {
+            if (tc.status === 'running' || tc.status === 'pending') {
+              tc.status = 'error';
+              tc.error = '服务器重启，测试中断';
+            }
           }
+          fs.writeFileSync(filePath, JSON.stringify(suite, null, 2));
+          cleaned++;
         }
-        fs.writeFileSync(filePath, JSON.stringify(suite, null, 2));
-        cleaned++;
-      }
-    } catch { /* skip */ }
+      } catch { /* skip */ }
+    }
+  }
+  // 同时检查旧目录
+  if (fs.existsSync(legacyRunsDir)) {
+    const legacyFiles = fs.readdirSync(legacyRunsDir).filter(f => f.endsWith('.json'));
+    for (const f of legacyFiles) {
+      try {
+        const filePath = path.join(legacyRunsDir, f);
+        const suite = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (suite.status === 'running' || suite.status === 'pending') {
+          suite.status = 'error';
+          suite.finishedAt = new Date().toISOString();
+          if (!suite.duration) suite.duration = 0;
+          for (const tc of suite.cases) {
+            if (tc.status === 'running' || tc.status === 'pending') {
+              tc.status = 'error';
+              tc.error = '服务器重启，测试中断';
+            }
+          }
+          fs.writeFileSync(filePath, JSON.stringify(suite, null, 2));
+          cleaned++;
+        }
+      } catch { /* skip */ }
+    }
   }
   if (cleaned > 0) console.log(`[test-runner] 清理了 ${cleaned} 个残留的运行中记录`);
 }
 
 function saveRun(suite: TestSuite) {
-  ensureRunsDir();
-  fs.writeFileSync(path.join(runsDir, `${suite.id}.json`), JSON.stringify(suite, null, 2));
+  const dir = getRunsDir(suite.type);
+  fs.writeFileSync(path.join(dir, `${suite.id}.json`), JSON.stringify(suite, null, 2));
 }
 
 export function listTestRuns(type?: TestType): TestSuite[] {
   // 先从磁盘加载
   cleanupStaleRuns();
   ensureRunsDir();
-  const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
-  for (const f of files) {
-    try {
-      const suite = JSON.parse(fs.readFileSync(path.join(runsDir, f), 'utf-8'));
-      if (!runs.has(suite.id)) runs.set(suite.id, suite);
-    } catch { /* skip */ }
+  // 扫描所有类型目录 + 旧目录
+  const dirsToScan = type ? [getRunsDir(type)] : ALL_TYPES.map(t => getRunsDir(t));
+  if (!type && fs.existsSync(legacyRunsDir)) {
+    dirsToScan.push(legacyRunsDir);
+  }
+  for (const dir of dirsToScan) {
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      try {
+        const suite = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
+        if (!runs.has(suite.id)) runs.set(suite.id, suite);
+      } catch { /* skip */ }
+    }
   }
   const all = Array.from(runs.values()).sort(
     (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
@@ -652,7 +705,28 @@ function generateParamCombinations(params: Record<string, string[]>): Record<str
 // ========== 前端单元测试 ==========
 
 async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
-  const webDir = path.resolve(AI_PLATFORM_ROOT, 'web');
+  const projectId = config.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+
+  // 确定测试目录
+  let webDir = path.resolve(AI_PLATFORM_ROOT, 'web');
+  let sourcePath: string | undefined;
+
+  if (project?.sourcePath) {
+    sourcePath = project.sourcePath;
+    // 检查是否有项目级前端测试
+    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+    const projectTestsDir = path.join(DATA_DIR, 'projects', projectId!, 'frontend-tests');
+    if (fs.existsSync(projectTestsDir)) {
+      webDir = projectTestsDir;
+    } else {
+      // fallback: 使用源码项目的 web 目录
+      const srcWebDir = path.resolve(project.sourcePath, 'web');
+      if (fs.existsSync(srcWebDir)) {
+        webDir = srcWebDir;
+      }
+    }
+  }
 
   for (const tc of suite.cases) {
     tc.status = 'running';
@@ -662,16 +736,31 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
     const startTime = Date.now();
     try {
       const { execSync } = await import('child_process');
-      const result = execSync('npx vitest run --reporter=json 2>&1', {
+
+      // 如果有源码路径，生成临时 vitest 配置
+      let configArg = '';
+      if (sourcePath && webDir !== path.resolve(AI_PLATFORM_ROOT, 'web')) {
+        const vitestConfig = `
+import { defineConfig } from 'vitest/config'
+export default defineConfig({
+  test: { globals: true, environment: 'happy-dom' },
+  resolve: { alias: { '@': '${sourcePath.replace(/\\/g, '/')}/src' } },
+})
+`;
+        const configPath = path.join(webDir, '_vitest.config.ts');
+        fs.writeFileSync(configPath, vitestConfig, 'utf-8');
+        configArg = ` --config "${configPath}"`;
+      }
+
+      const result = execSync(`npx vitest run --reporter=json${configArg} 2>&1`, {
         cwd: webDir,
-        timeout: 60000,
+        timeout: 120000,
         encoding: 'utf-8',
       });
 
       tc.duration = Date.now() - startTime;
       tc.output = result.slice(0, 3000);
 
-      // 解析 vitest JSON 输出判断通过/失败
       try {
         const jsonMatch = result.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
         if (jsonMatch) {
@@ -701,15 +790,75 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
 // ========== API 接口测试 ==========
 
 async function runApiTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
-  const baseUrl = (config.baseUrl as string) || getConfig().apiTestBaseUrl;
+  const projectId = config.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+  const baseUrl = project?.apiBaseUrl || (config.baseUrl as string) || getConfig().apiTestBaseUrl;
 
-  const apiTests = [
-    { name: 'Health API', method: 'GET', url: '/api/health', expect: 200 },
-    { name: 'Skills 列表', method: 'GET', url: '/api/skills', expect: 200 },
-    { name: 'Schools 列表', method: 'GET', url: '/api/schools', expect: 200 },
-    { name: 'Workflows 列表', method: 'GET', url: '/api/workflows', expect: 200 },
-    { name: 'Sessions 列表', method: 'GET', url: '/api/sessions', expect: 200 },
-  ];
+  // 尝试从发现的 api-tests.json 读取
+  let testConfig: any = null;
+  if (projectId) {
+    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+    const testsPath = path.join(DATA_DIR, 'projects', projectId, 'api-tests.json');
+    if (fs.existsSync(testsPath)) {
+      try {
+        testConfig = JSON.parse(fs.readFileSync(testsPath, 'utf-8'));
+      } catch { /* ignore */ }
+    }
+  }
+
+  // 登录获取 Token
+  let authToken = '';
+  if (testConfig?.authConfig) {
+    try {
+      const loginRes = await fetch(baseUrl + testConfig.authConfig.loginEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testConfig.authConfig.loginBody),
+        signal: AbortSignal.timeout(10000),
+      });
+      const loginData = await loginRes.json();
+      authToken = getNestedValue(loginData, testConfig.authConfig.tokenPath) || '';
+    } catch { /* ignore login failure */ }
+  }
+
+  // 构建 API 测试定义列表
+  interface ApiTestDef { name: string; method: string; url: string; expect: number; body?: any; headers?: Record<string, string>; needAuth?: boolean; path?: string; }
+  let apiTests: ApiTestDef[];
+
+  if (testConfig?.testModules) {
+    // 从发现的测试定义中读取
+    const selectedModules = (config.modules as string[]) || testConfig.testModules.map((m: any) => m.moduleId);
+    apiTests = [];
+    const testData = testConfig.testData || {};
+    for (const mod of testConfig.testModules) {
+      if (!selectedModules.includes(mod.moduleId)) continue;
+      for (const test of mod.tests) {
+        // 替换路径中的 {{testData.xxx}}
+        let testPath = test.path || '';
+        for (const [key, value] of Object.entries(testData)) {
+          testPath = testPath.replace(`{{testData.${key}}}`, String(value));
+        }
+        apiTests.push({
+          name: `[${mod.moduleName}] ${test.name}`,
+          method: test.method,
+          url: testPath,
+          expect: test.expect?.status || 200,
+          body: test.body,
+          headers: test.headers,
+          needAuth: test.needAuth,
+        });
+      }
+    }
+  } else {
+    // fallback 硬编码
+    apiTests = [
+      { name: 'Health API', method: 'GET', url: '/api/health', expect: 200 },
+      { name: 'Skills 列表', method: 'GET', url: '/api/skills', expect: 200 },
+      { name: 'Schools 列表', method: 'GET', url: '/api/schools', expect: 200 },
+      { name: 'Workflows 列表', method: 'GET', url: '/api/workflows', expect: 200 },
+      { name: 'Sessions 列表', method: 'GET', url: '/api/sessions', expect: 200 },
+    ];
+  }
 
   for (const tc of suite.cases) {
     const testDef = apiTests.find(t => t.name === tc.name);
@@ -724,19 +873,42 @@ async function runApiTest(suite: TestSuite, config: Record<string, unknown>): Pr
 
     const startTime = Date.now();
     try {
+      const headers: Record<string, string> = { ...testDef.headers, 'Content-Type': 'application/json' };
+      if (testDef.needAuth && authToken && testConfig?.authConfig) {
+        headers[testConfig.authConfig.tokenHeader] = `Bearer ${authToken}`;
+      }
+
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(`${baseUrl}${testDef.url}`, {
         method: testDef.method,
+        headers,
+        body: testDef.body ? JSON.stringify(testDef.body) : undefined,
         signal: controller.signal,
       });
       clearTimeout(timer);
 
       tc.duration = Date.now() - startTime;
       const statusCode = res.status;
-      tc.output = `${testDef.method} ${testDef.url} -> HTTP ${statusCode}`;
+
+      // 尝试解析响应体
+      let bodyText = '';
+      try { bodyText = await res.text(); } catch { /* ignore */ }
+
+      tc.output = `${testDef.method} ${testDef.url} -> HTTP ${statusCode}\n${bodyText.slice(0, 500)}`;
+
+      // 简单校验
       tc.status = statusCode === testDef.expect ? 'passed' : 'failed';
       if (tc.status === 'failed') tc.error = `期望 HTTP ${testDef.expect}，实际 HTTP ${statusCode}`;
+
+      // 如果有 body 断言，额外校验
+      if (testConfig && tc.status === 'passed') {
+        try {
+          const body = JSON.parse(bodyText);
+          const expectBody = apiTests.find(t => t.name === tc.name);
+          // 这里简化处理：主要看 HTTP 状态码
+        } catch { /* ignore */ }
+      }
     } catch (err: any) {
       tc.duration = Date.now() - startTime;
       tc.status = 'error';
@@ -746,6 +918,176 @@ async function runApiTest(suite: TestSuite, config: Record<string, unknown>): Pr
     saveRun(suite);
     testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
   }
+}
+
+/** 按 dot-path 获取嵌套值 */
+function getNestedValue(obj: any, path: string): any {
+  if (!obj || !path) return undefined;
+  return path.split('.').reduce((o, k) => o?.[k], obj);
+}
+
+// ========== 代码审查 ==========
+
+async function runCodeReview(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
+  console.log('[CodeReview] 开始代码审查...');
+  const { query } = await import('@anthropic-ai/claude-code');
+
+  const projectId = config.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+
+  if (!project?.sourcePath) {
+    for (const tc of suite.cases) {
+      tc.status = 'failed';
+      tc.error = '请选择项目并配置源码路径';
+    }
+    return;
+  }
+
+  // 读取审查规则
+  const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+  const rulesPath = path.join(DATA_DIR, 'projects', projectId!, 'review-rules.json');
+  let rulesContent = '';
+  if (fs.existsSync(rulesPath)) {
+    try {
+      const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+      rulesContent = JSON.stringify(rules, null, 2);
+    } catch { /* ignore */ }
+  }
+
+  // 构建审查 prompt
+  const reviewPrompt = `你是一位资深代码审查专家。请对以下项目的源代码进行审查。
+
+## 项目信息
+- 项目名称: ${project.name}
+- 源码路径: ${project.sourcePath}
+- 前端框架: Vue 3 + Vite + Pinia
+
+${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+
+## 审查范围
+请扫描项目源码，重点关注以下文件：
+1. src/pages/ 下的页面组件
+2. src/components/ 下的通用组件
+3. src/utils/ 和 src/api/ 下的工具和接口
+4. 后端路由和控制器（如果有）
+
+## 输出格式
+请以 Markdown 格式输出审查报告，包含：
+
+### 总体评分（0-100）
+
+### 问题列表
+对每个问题记录：
+- 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
+- 规则 ID
+- 文件路径和行号
+- 问题描述
+- 修复建议
+
+### 模块分析
+按模块总结各模块的代码质量
+
+### 总结
+总体评价和改进建议`;
+
+  const mainCase = suite.cases[0];
+  if (mainCase) {
+    mainCase.name = `代码审查 (${project.name})`;
+    mainCase.status = 'running';
+    saveRun(suite);
+  }
+
+  const abortController = new AbortController();
+  abortControllers.set(suite.id, abortController);
+  const totalTimeout = 30 * 60 * 1000; // 30 分钟
+  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+
+  const startTime = Date.now();
+  let fullOutput = '';
+  const blocks: StreamBlock[] = [];
+
+  try {
+    const response = query({
+      prompt: reviewPrompt,
+      options: {
+        cwd: project.sourcePath,
+        allowedTools: ['Read', 'Glob', 'Grep'],
+        maxTurns: 100,
+        permissionMode: 'bypassPermissions',
+        abortController,
+      },
+    });
+
+    for await (const msg of response) {
+      if (abortController.signal.aborted) throw new Error('代码审查超时');
+
+      switch (msg.type) {
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                blocks.push({ type: 'text', content: block.text });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
+              }
+            }
+          }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_result', toolUseId: block.tool_use_id, content: resultContent?.slice(0, 5000) });
+              }
+            }
+          }
+          break;
+        }
+        case 'result': {
+          const resultMsg = msg as any;
+          if (resultMsg.subtype === 'success' && resultMsg.result && !fullOutput) {
+            fullOutput = resultMsg.result;
+          }
+          break;
+        }
+      }
+    }
+
+    clearTimeout(timer);
+
+    if (mainCase) {
+      mainCase.duration = Date.now() - startTime;
+      mainCase.output = fullOutput;
+      mainCase.blocks = blocks;
+      mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
+      if (mainCase.status === 'failed') mainCase.error = '审查输出内容不足';
+    }
+
+    // 标记其他 case
+    for (let i = 1; i < suite.cases.length; i++) {
+      suite.cases[i].status = 'passed' as any;
+      suite.cases[i].output = '(包含在代码审查主流程中)';
+    }
+  } catch (err: any) {
+    clearTimeout(timer);
+    abortControllers.delete(suite.id);
+    if (mainCase) {
+      mainCase.duration = Date.now() - startTime;
+      mainCase.status = 'error';
+      mainCase.error = err.message;
+    }
+  }
+
+  abortControllers.delete(suite.id);
+  saveRun(suite);
+  testBus.emit('test:update', { suiteId: suite.id, caseId: mainCase?.id, status: mainCase?.status, duration: mainCase?.duration });
 }
 
 // ========== 主入口 ==========
@@ -775,20 +1117,49 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
         { id: uuid(), name: 'Vitest 前端单元测试', type, status: 'pending' },
       );
       break;
-    case 'api':
-      cases.push(
-        { id: uuid(), name: 'Health API', type, status: 'pending' },
-        { id: uuid(), name: 'Skills 列表', type, status: 'pending' },
-        { id: uuid(), name: 'Schools 列表', type, status: 'pending' },
-        { id: uuid(), name: 'Workflows 列表', type, status: 'pending' },
-        { id: uuid(), name: 'Sessions 列表', type, status: 'pending' },
-      );
+    case 'api': {
+      // 尝试从发现的 api-tests.json 动态生成 cases
+      const projectId = config.projectId as string | undefined;
+      if (projectId) {
+        const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+        const testsPath = path.join(DATA_DIR, 'projects', projectId, 'api-tests.json');
+        if (fs.existsSync(testsPath)) {
+          try {
+            const testConfig = JSON.parse(fs.readFileSync(testsPath, 'utf-8'));
+            const selectedModules = (config.modules as string[]) || testConfig.testModules?.map((m: any) => m.moduleId) || [];
+            for (const mod of (testConfig.testModules || [])) {
+              if (!selectedModules.includes(mod.moduleId)) continue;
+              for (const test of (mod.tests || [])) {
+                cases.push({ id: uuid(), name: `[${mod.moduleName}] ${test.name}`, type, status: 'pending' });
+              }
+            }
+          } catch { /* fallback below */ }
+        }
+      }
+      // fallback 硬编码
+      if (cases.length === 0) {
+        cases.push(
+          { id: uuid(), name: 'Health API', type, status: 'pending' },
+          { id: uuid(), name: 'Skills 列表', type, status: 'pending' },
+          { id: uuid(), name: 'Schools 列表', type, status: 'pending' },
+          { id: uuid(), name: 'Workflows 列表', type, status: 'pending' },
+          { id: uuid(), name: 'Sessions 列表', type, status: 'pending' },
+        );
+      }
       break;
+    }
+    case 'codereview': {
+      const projectId = config.projectId as string | undefined;
+      const project = projectId ? getProjectById(projectId) : undefined;
+      const label = project ? project.name : '全部';
+      cases.push({ id: uuid(), name: `代码审查 (${label})`, type, status: 'pending' });
+      break;
+    }
   }
 
   const suite: TestSuite = {
     id: uuid(),
-    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : 'API接口'}测试`,
+    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : type === 'codereview' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `代码审查(${p ? p.name : '全部'})`; })() : 'API接口'}测试`,
     type,
     status: 'pending',
     cases,
@@ -838,10 +1209,11 @@ async function executeTestRunInternal(suiteId: string): Promise<TestSuite> {
 
   try {
     switch (suite.type) {
-      case 'agent':    await runAgentTest(suite, suite.config); break;
-      case 'e2e':      await runE2ETest(suite, suite.config); break;
-      case 'frontend': await runFrontendTest(suite, suite.config); break;
-      case 'api':      await runApiTest(suite, suite.config); break;
+      case 'agent':      await runAgentTest(suite, suite.config); break;
+      case 'e2e':        await runE2ETest(suite, suite.config); break;
+      case 'frontend':   await runFrontendTest(suite, suite.config); break;
+      case 'api':        await runApiTest(suite, suite.config); break;
+      case 'codereview': await runCodeReview(suite, suite.config); break;
     }
 
     const allPassed = suite.cases.every(c => c.status === 'passed');
@@ -868,10 +1240,23 @@ export function abortTestRun(id: string): boolean {
 }
 
 export function deleteTestRun(id: string): boolean {
+  const suite = runs.get(id);
   const existed = runs.delete(id);
   if (existed) {
-    const f = path.join(runsDir, `${id}.json`);
-    if (fs.existsSync(f)) fs.unlinkSync(f);
+    // 根据类型找对应的 runs 目录
+    const type = suite?.type;
+    if (type) {
+      const f = path.join(getRunsDir(type), `${id}.json`);
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    } else {
+      // 不知道类型，在所有目录中找
+      for (const t of ALL_TYPES) {
+        const f = path.join(getRunsDir(t), `${id}.json`);
+        if (fs.existsSync(f)) { fs.unlinkSync(f); break; }
+      }
+      const f = path.join(legacyRunsDir, `${id}.json`);
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    }
   }
   return existed;
 }

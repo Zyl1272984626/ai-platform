@@ -478,6 +478,66 @@ projectsRouter.post('/:id/check', async (req: Request, res: Response) => {
 
 // ========== 页面发现（触发 + SSE） ==========
 
+/** 触发 API 接口发现 — SSE 流式返回进度 */
+projectsRouter.post('/:id/discover-api', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+
+  // 设置 SSE 响应头
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch { /* client disconnected */ }
+  };
+
+  try {
+    const { discoverApi } = await import('../services/api-discovery.js');
+
+    await discoverApi(project.id, (progress) => {
+      sendSSE(progress);
+    });
+
+    sendSSE({ stage: 'complete', message: 'API 接口发现完成' });
+  } catch (err: any) {
+    sendSSE({ stage: 'error', message: err.message });
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
+  }
+});
+
+/** 获取 API 发现结果 */
+projectsRouter.get('/:id/api-discovery', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getApiDiscovery } = await import('../services/api-discovery.js');
+  const result = getApiDiscovery(req.params.id);
+  res.json(result || { modules: [], summary: { totalModules: 0, totalEndpoints: 0 } });
+});
+
+/** 获取 API 测试定义 */
+projectsRouter.get('/:id/api-tests', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getApiTests } = await import('../services/api-discovery.js');
+  const result = getApiTests(req.params.id);
+  res.json(result || { testModules: [] });
+});
+
 /** 触发页面发现 — 直接开始，通过 SSE 实时推送进度 */
 projectsRouter.post('/:id/discover', async (req: Request, res: Response) => {
   const project = getProjectById(req.params.id);
@@ -514,4 +574,102 @@ projectsRouter.post('/:id/discover', async (req: Request, res: Response) => {
   } finally {
     try { res.end(); } catch { /* already closed */ }
   }
+});
+
+// ========== 前端单元测试发现 ==========
+
+/** 触发前端发现 — SSE 流式返回进度 */
+projectsRouter.post('/:id/discover-frontend', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+  };
+
+  try {
+    const { discoverFrontend } = await import('../services/frontend-discovery.js');
+    await discoverFrontend(project.id, (progress) => { sendSSE(progress); });
+    sendSSE({ stage: 'complete', message: '前端发现完成' });
+  } catch (err: any) {
+    sendSSE({ stage: 'error', message: err.message });
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
+  }
+});
+
+/** 获取前端发现结果 */
+projectsRouter.get('/:id/frontend-discovery', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getFrontendDiscovery } = await import('../services/frontend-discovery.js');
+  const result = getFrontendDiscovery(req.params.id);
+  res.json(result || { modules: [], summary: { totalModules: 0, totalTestTargets: 0 } });
+});
+
+// ========== 代码审查发现 ==========
+
+/** 触发代码审查发现 — SSE 流式返回进度 */
+projectsRouter.post('/:id/discover-review', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSSE = (data: any) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+  };
+
+  try {
+    const { discoverReview } = await import('../services/review-discovery.js');
+    await discoverReview(project.id, (progress) => { sendSSE(progress); });
+    sendSSE({ stage: 'complete', message: '审查点发现完成' });
+  } catch (err: any) {
+    sendSSE({ stage: 'error', message: err.message });
+  } finally {
+    try { res.end(); } catch { /* already closed */ }
+  }
+});
+
+/** 获取代码审查发现结果 */
+projectsRouter.get('/:id/review-discovery', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getReviewDiscovery } = await import('../services/review-discovery.js');
+  const result = getReviewDiscovery(req.params.id);
+  res.json(result || { modules: [], summary: {} });
+});
+
+/** 获取审查规则 */
+projectsRouter.get('/:id/review-rules', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const { getReviewRules } = await import('../services/review-discovery.js');
+  const result = getReviewRules(req.params.id);
+  res.json(result || { dimensions: [] });
 });

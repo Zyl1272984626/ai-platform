@@ -74,6 +74,32 @@
             </select>
           </div>
         </div>
+        <!-- API 测试：项目选择 + 模块勾选 -->
+        <div v-if="activeType === 'api'" class="agent-params">
+          <div class="param-row">
+            <label>目标项目</label>
+            <select v-model="selectedProjectId" @change="onApiProjectChange" class="param-input">
+              <option value="">请选择项目</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+          <div v-if="apiDiscoverySummary" class="api-discovery-info">
+            <span class="discovery-info-text">
+              已发现: {{ apiDiscoverySummary.totalModules || 0 }} 模块 {{ apiDiscoverySummary.totalEndpoints || 0 }} 接口
+            </span>
+          </div>
+          <div v-if="apiModules.length > 0" class="module-select">
+            <div v-for="mod in apiModules" :key="mod.moduleId" class="module-check">
+              <label>
+                <input type="checkbox" :value="mod.moduleId" v-model="selectedApiModules" />
+                {{ mod.moduleName }} ({{ mod.tests?.length || 0 }} 个)
+              </label>
+            </div>
+          </div>
+          <div v-else-if="selectedProjectId && !apiLoading" class="no-discovery-hint">
+            未发现接口数据，请前往设置页面点击「发现接口」
+          </div>
+        </div>
         <!-- 并发控制（所有类型通用） -->
         <div v-if="activeType === 'agent' || activeType === 'e2e'" class="agent-params" style="margin-top:8px;">
           <div class="param-row">
@@ -87,8 +113,26 @@
             </select>
           </div>
         </div>
+        <!-- 代码审查：项目选择 -->
+        <div v-if="activeType === 'codereview'" class="agent-params">
+          <div class="param-row">
+            <label>目标项目</label>
+            <select v-model="selectedProjectId" @change="onReviewProjectChange" class="param-input">
+              <option value="">请选择项目</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+          <div v-if="reviewRulesInfo" class="api-discovery-info">
+            <span class="discovery-info-text">
+              审查规则: {{ reviewRulesInfo.dimensionCount || 0 }} 维度 {{ reviewRulesInfo.ruleCount || 0 }} 条规则
+            </span>
+          </div>
+          <div v-else-if="selectedProjectId && !apiLoading" class="no-discovery-hint">
+            未发现审查规则，请前往设置页面点击「发现审查点」
+          </div>
+        </div>
       </div>
-      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId)" @click="startTest">
+      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'codereview' && !selectedProjectId)" @click="startTest">
         ▶ 开始测试
       </button>
     </div>
@@ -206,6 +250,11 @@ import {
 import {
   getProjects as fetchProjects,
   getProjectPages,
+  getApiTests,
+  getApiDiscovery,
+  getFrontendDiscovery,
+  getReviewDiscovery,
+  getReviewRules,
   type TestProject,
   type PageSet,
 } from '../api/projects'
@@ -256,6 +305,15 @@ const loadingPages = ref(false)
 
 // 并发控制
 const concurrencyVal = ref(2)
+
+// API 测试参数
+const apiModules = ref<any[]>([])
+const selectedApiModules = ref<string[]>([])
+const apiDiscoverySummary = ref<any>(null)
+const apiLoading = ref(false)
+
+// 代码审查参数
+const reviewRulesInfo = ref<any>(null)
 
 const currentType = computed(() => testTypes.value.find(t => t.type === activeType.value))
 const filteredRuns = computed(() => runs.value.filter(r => r.type === activeType.value))
@@ -454,6 +512,13 @@ async function startTest() {
     config.scope = e2eScope.value
     config.projectId = selectedProjectId.value
   }
+  if (activeType.value === 'api') {
+    config.projectId = selectedProjectId.value
+    config.modules = selectedApiModules.value
+  }
+  if (activeType.value === 'codereview') {
+    config.projectId = selectedProjectId.value
+  }
 
   try {
     const { suiteId } = await runTest(activeType.value, config)
@@ -544,6 +609,45 @@ async function onProjectChange() {
     currentPageSets.value = res.data || []
   } catch { /* ignore */ }
   loadingPages.value = false
+}
+
+async function onApiProjectChange() {
+  apiModules.value = []
+  selectedApiModules.value = []
+  apiDiscoverySummary.value = null
+  if (!selectedProjectId.value) return
+
+  apiLoading.value = true
+  try {
+    const [discoveryRes, testsRes] = await Promise.all([
+      getApiDiscovery(selectedProjectId.value).catch(() => ({ data: null })),
+      getApiTests(selectedProjectId.value).catch(() => ({ data: null })),
+    ])
+    if (discoveryRes.data) {
+      apiDiscoverySummary.value = discoveryRes.data.summary
+    }
+    if (testsRes.data?.testModules) {
+      apiModules.value = testsRes.data.testModules
+      selectedApiModules.value = testsRes.data.testModules.map((m: any) => m.moduleId)
+    }
+  } catch { /* ignore */ }
+  apiLoading.value = false
+}
+
+async function onReviewProjectChange() {
+  reviewRulesInfo.value = null
+  if (!selectedProjectId.value) return
+
+  apiLoading.value = true
+  try {
+    const rulesRes = await getReviewRules(selectedProjectId.value).catch(() => ({ data: null }))
+    if (rulesRes.data?.dimensions) {
+      const dims = rulesRes.data.dimensions
+      const ruleCount = dims.reduce((s: number, d: any) => s + (d.rules?.length || 0), 0)
+      reviewRulesInfo.value = { dimensionCount: dims.length, ruleCount }
+    }
+  } catch { /* ignore */ }
+  apiLoading.value = false
 }
 
 function openReport(runId: string) {
@@ -989,6 +1093,53 @@ select.param-input { cursor: pointer; appearance: auto; }
   cursor: pointer;
 }
 .btn-report:hover { background: #f0f0ff; }
+
+/* API 发现信息 */
+.api-discovery-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f0f0ff;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #667eea;
+  width: 100%;
+}
+.discovery-info-text {
+  font-weight: 500;
+}
+.module-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  width: 100%;
+}
+.module-check label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  background: #fafafa;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #e8e8e8;
+}
+.module-check input[type="checkbox"] {
+  accent-color: #667eea;
+}
+.no-discovery-hint {
+  font-size: 12px;
+  color: #faad14;
+  background: #fffbe6;
+  padding: 6px 10px;
+  border-radius: 4px;
+  width: 100%;
+}
+
 .report-info {
   display: flex;
   align-items: center;
