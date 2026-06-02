@@ -1,6 +1,6 @@
 ---
 name: review-discovery
-description: 扫描源码分析项目架构和模块结构，按业务模块标注风险等级，生成安全/性能/错误处理等维度的审查规则
+description: 扫描源码分析项目架构和模块结构，按业务模块标注风险等级，生成安全/性能/错误处理等维度的审查筛查规则
 allowed-tools: ["Read", "Glob", "Grep", "Write"]
 tags: ["review", "discovery", "test", "security"]
 ---
@@ -41,6 +41,19 @@ tags: ["review", "discovery", "test", "security"]
 
 **充分扫描，不要遗漏，直到分析完成再写入结果。**
 
+## 重要原则：规则是筛查清单，不是审查结论
+
+**规则必须写成通用的检查指引，不要包含具体文件的审查结论。**
+
+正确示例：
+- checkMethod: "搜索所有 v-html 和 dangerouslyUseHTMLString 的使用，检查渲染内容是否经过 DOMPurify 净化"
+- goodPattern: "所有动态 HTML 内容在渲染前经过 DOMPurify.sanitize() 处理"
+
+错误示例（不要这样写）：
+- checkMethod: "assistant-message.vue 第 752 行使用 innerHTML 渲染格式化输出存在 XSS" ← 这是具体发现，不是筛查规则
+
+规则的作用：告诉审查阶段"按这个方法去查"，而不是"这里有问题"。
+
 ## 输出格式
 
 ### 文件 1: {{outputDir}}/review-discovery.json
@@ -67,7 +80,7 @@ tags: ["review", "discovery", "test", "security"]
       "files": 24,
       "keyFiles": ["关键文件路径"],
       "riskLevel": "high/medium/low",
-      "reason": "风险原因"
+      "riskIndicators": ["该模块涉及哪些敏感操作，如：用户输入渲染、加密通信、文件上传等"]
     }
   ]
 }
@@ -85,9 +98,9 @@ tags: ["review", "discovery", "test", "security"]
       "rules": [
         {
           "id": "SEC001",
-          "title": "规则标题",
-          "description": "规则描述",
-          "suggestion": "修复建议"
+          "title": "动态 HTML 渲染的 XSS 防护",
+          "checkMethod": "搜索所有 v-html、innerHTML、dangerouslyUseHTMLString 的使用，检查渲染的内容是否经过净化处理（如 DOMPurify）",
+          "goodPattern": "所有动态 HTML 内容在渲染前经过 DOMPurify.sanitize() 或类似库净化；错误提示使用纯文本而非 HTML"
         }
       ]
     }
@@ -103,10 +116,15 @@ tags: ["review", "discovery", "test", "security"]
 ```
 
 审查规则必须覆盖以下 5 个维度，每个维度至少 3 条规则：
-1. **security**（安全性）— XSS、注入、鉴权等
-2. **performance**（性能）— 重复渲染、内存泄漏、大列表等
-3. **error-handling**（错误处理）— 异步异常、空值、边界情况等
+1. **security**（安全性）— XSS、注入、鉴权、敏感信息泄露等
+2. **performance**（性能）— 重复渲染、内存泄漏、大列表、定时器清理等
+3. **error-handling**（错误处理）— 异步异常、空值保护、边界情况等
 4. **framework**（框架最佳实践）— Vue 3 / Pinia / TypeScript 规范
-5. **maintainability**（可维护性）— 代码复杂度、命名、注释等
+5. **maintainability**（可维护性）— 代码复杂度、命名、重复代码等
+
+每条规则的字段说明：
+- `title`: 简明扼要的规则名称（不要包含具体文件名）
+- `checkMethod`: 告诉审查者"怎么查"——用什么搜索模式、关注什么场景
+- `goodPattern`: 告诉审查者"合格的标准"——符合规范的代码应该长什么样
 
 请立即开始分析。

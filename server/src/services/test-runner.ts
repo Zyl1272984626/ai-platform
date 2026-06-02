@@ -1001,6 +1001,8 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
 
         // 构建模块级审查 prompt
         const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
+        const riskIndicators = (mod as any).riskIndicators || (mod.reason ? [mod.reason] : []);
+        const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
         const modulePrompt = `你是一位资深代码审查专家。请对以下项目中的特定模块进行深度审查。
 
 ## 项目信息
@@ -1013,12 +1015,18 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
 - 模块路径: ${mod.path}
 - 文件数量: ${mod.files}
 - 风险等级: ${mod.riskLevel || 'unknown'}
-- 已识别风险: ${mod.reason || '无'}
+- 关注方向:
+${riskText}
 
 ## 模块关键文件
 ${fileList}
 
-${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+
+## 审查原则
+1. **实际代码分析为主** — Read 关键文件的真实内容，基于你看到的具体代码给出结论
+2. **规则是筛查指引** — 按 checkMethod 的方法去检查，但结论必须来自实际代码，不是复述规则
+3. **好代码也要认可** — 如果某条规则检查后未发现问题，标注为"通过"而非跳过
 
 ## 审查范围
 请重点扫描上述关键文件，以及模块路径下的其他相关文件。
@@ -1031,10 +1039,13 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 ### 问题列表
 对每个发现的问题记录：
 - 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
-- 规则 ID（对应审查规则中的 ID）
+- 规则 ID（对应审查规则中匹配的 ID）
 - 文件路径和行号
-- 问题描述
+- 问题描述（基于实际代码分析）
 - 修复建议
+
+### 规则覆盖情况
+简要说明每条规则在该模块中的检查结果（通过/发现问题）
 
 ### 总结
 该模块的整体评价和改进建议`;
@@ -1049,7 +1060,7 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
         .join('\n\n');
       if (allOutputs.length > 100) {
         try {
-          const reportsDir = path.join(DATA_DIR, 'reports');
+          const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports');
           if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
           const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
           const totalDuration = suite.cases.reduce((s, c) => s + (c.duration || 0), 0);
@@ -1076,7 +1087,12 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 - 源码路径: ${project.sourcePath}
 - 前端框架: Vue 3 + Vite + Pinia
 
-${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+
+## 审查原则
+1. **实际代码分析为主** — Read 文件的真实内容，基于具体代码给出结论
+2. **规则是筛查指引** — 按 checkMethod 的方法去检查，但结论必须来自实际代码
+3. **好代码也要认可** — 如果某条规则检查后未发现问题，标注为"通过"而非跳过
 
 ## 审查范围
 请扫描项目源码，重点关注以下文件：
@@ -1095,11 +1111,11 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 - 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
 - 规则 ID
 - 文件路径和行号
-- 问题描述
+- 问题描述（基于实际代码分析）
 - 修复建议
 
-### 模块分析
-按模块总结各模块的代码质量
+### 规则覆盖情况
+简要说明每条规则的检查结果
 
 ### 总结
 总体评价和改进建议`;
@@ -1172,7 +1188,7 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
       // 生成 HTML 审查报告
       if (fullOutput.length > 100) {
         try {
-          const reportsDir = path.join(DATA_DIR, 'reports');
+          const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports');
           if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
           const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
           fs.writeFileSync(reportFile, buildReviewHtml(project.name, fullOutput, mainCase?.duration || 0), 'utf-8');
@@ -1296,26 +1312,8 @@ async function runSingleModuleReview(
 
 /** 将 Markdown 审查结果转为独立 HTML 报告 */
 function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
-  // 简易 Markdown → HTML 转换
-  let html = markdown
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="lang-$1">$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/^\*\*(.+?)\*\*/gm, '<strong>$1</strong>')
-    .replace(/^\- (.+)$/gm, '<li>$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br>');
-
-  // 用颜色标注严重等级
-  html = html
-    .replace(/🔴/g, '<span style="color:#e53e3e;font-size:16px">🔴</span>')
-    .replace(/🟡/g, '<span style="color:#d69e2e;font-size:16px">🟡</span>')
-    .replace(/🔵/g, '<span style="color:#3182ce;font-size:16px">🔵</span>');
-
+  // 将 markdown 转义为 JSON 字符串，供前端 JS 使用 marked 渲染
+  const mdEscaped = JSON.stringify(markdown);
   const durationSec = (duration / 1000).toFixed(1);
 
   return `<!DOCTYPE html>
@@ -1324,41 +1322,179 @@ function buildReviewHtml(projectName: string, markdown: string, duration: number
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>代码审查报告 - ${projectName}</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7f8fc; color: #1a1a2e; line-height: 1.7; padding: 32px; }
-  .container { max-width: 1000px; margin: 0 auto; }
-  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 28px 36px; border-radius: 12px 12px 0 0; }
-  .header h1 { font-size: 22px; margin-bottom: 8px; }
-  .header .meta { font-size: 13px; opacity: 0.85; }
-  .content { background: #fff; padding: 36px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-  .content h1 { font-size: 20px; color: #2d3748; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #667eea; }
-  .content h2 { font-size: 18px; color: #2d3748; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
-  .content h3 { font-size: 16px; color: #4a5568; margin: 16px 0 8px; }
-  .content p { margin: 8px 0; }
-  .content li { margin: 4px 0 4px 20px; }
-  .content code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #e53e3e; }
-  .content pre { background: #1a1a2e; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
-  .content pre code { background: none; color: #e2e8f0; padding: 0; }
-  .content strong { color: #2d3748; }
-  .score { display: inline-block; font-size: 36px; font-weight: 700; padding: 12px 24px; border-radius: 10px; margin: 12px 0; }
-  .score.high { background: #c6f6d5; color: #22543d; }
-  .score.medium { background: #fefcbf; color: #744210; }
-  .score.low { background: #fed7d7; color: #742a2a; }
-  .footer { text-align: center; margin-top: 24px; font-size: 12px; color: #a0aec0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 24px 32px; }
+  .header h1 { font-size: 24px; margin-bottom: 4px; }
+  .header .meta { font-size: 14px; opacity: 0.8; }
+  .header .engine-tag { display: inline-block; background: #667eea; color: white; padding: 2px 10px; border-radius: 4px; font-size: 12px; margin-left: 8px; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 32px; background: white; border-bottom: 1px solid #e8e8e8; }
+  .summary-card { text-align: center; padding: 16px; border-radius: 8px; background: #f9fafb; }
+  .summary-card .value { font-size: 32px; font-weight: 700; }
+  .summary-card .label { font-size: 13px; color: #666; margin-top: 4px; }
+  .pass { color: #52c41a; } .warn { color: #faad14; } .fail { color: #ff4d4f; } .info { color: #3182ce; }
+  .container { display: flex; min-height: calc(100vh - 260px); }
+  .sidebar { width: 280px; background: white; border-right: 1px solid #e8e8e8; overflow-y: auto; }
+  .sidebar-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .sidebar-item:hover { background: #f5f5f5; }
+  .sidebar-item.active { background: #e6f7ff; border-left: 3px solid #1890ff; }
+  .sidebar-item .score { font-size: 12px; color: #999; margin-left: auto; font-weight: 600; }
+  .sidebar-item .risk { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+  .sidebar-item .risk.high { background: #fff1f0; color: #cf1322; }
+  .sidebar-item .risk.medium { background: #fffbe6; color: #d48806; }
+  .sidebar-item .risk.low { background: #e6f7ff; color: #1890ff; }
+  .content { flex: 1; padding: 24px 32px; overflow-y: auto; }
+  .module-section { display: none; }
+  .module-section.active { display: block; }
+  .module-section h1 { font-size: 20px; color: #1a1a2e; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #667eea; }
+  .module-section h2 { font-size: 17px; color: #2d3748; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
+  .module-section h3 { font-size: 15px; color: #4a5568; margin: 16px 0 8px; }
+  .module-section p { margin: 6px 0; line-height: 1.8; font-size: 14px; }
+  .module-section ul, .module-section ol { padding-left: 20px; margin: 6px 0; }
+  .module-section li { margin: 3px 0; font-size: 14px; line-height: 1.7; }
+  .module-section code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #e53e3e; }
+  .module-section pre { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
+  .module-section pre code { background: none; color: #cdd6f4; padding: 0; }
+  .module-section strong { color: #2d3748; }
+  .module-section table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .module-section th { background: #f7f8fc; padding: 8px 12px; text-align: left; border: 1px solid #e8e8e8; font-weight: 600; }
+  .module-section td { padding: 8px 12px; border: 1px solid #e8e8e8; }
+  .module-section blockquote { border-left: 4px solid #667eea; padding: 8px 16px; background: #f0f0ff; margin: 12px 0; border-radius: 0 6px 6px 0; }
+  .module-section hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+  .footer { text-align: center; padding: 16px; font-size: 12px; color: #a0aec0; background: white; border-top: 1px solid #e8e8e8; }
+  .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: #999; font-size: 14px; }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <h1>代码审查报告</h1>
-    <div class="meta">项目: ${projectName} | 耗时: ${durationSec}s | 生成时间: ${new Date().toLocaleString('zh-CN')}</div>
-  </div>
-  <div class="content">
-    <p>${html}</p>
-  </div>
-  <div class="footer">由 AI Platform 自动生成</div>
+
+<div class="header">
+  <h1>代码审查报告 <span class="engine-tag">Claude Code AI</span></h1>
+  <div class="meta">项目: ${projectName} | 耗时: ${durationSec}s | 生成时间: ${new Date().toLocaleString('zh-CN')}</div>
 </div>
+
+<div class="summary" id="summary">
+  <div class="summary-card">
+    <div class="value" id="stat-modules">-</div>
+    <div class="label">审查模块</div>
+  </div>
+  <div class="summary-card">
+    <div class="value fail" id="stat-critical">-</div>
+    <div class="label">严重问题</div>
+  </div>
+  <div class="summary-card">
+    <div class="value warn" id="stat-warning">-</div>
+    <div class="label">警告问题</div>
+  </div>
+  <div class="summary-card">
+    <div class="value info" id="stat-info">-</div>
+    <div class="label">建议改进</div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="content" id="content">
+    <div class="loading">正在解析报告...</div>
+  </div>
+</div>
+
+<div class="footer">由 AI Platform 自动生成</div>
+
+<script>
+(function() {
+  const md = ${mdEscaped};
+
+  // 按 "---\\n## 模块名" 分割模块
+  const moduleRegex = /^---\s*\n##\s+(.+)$/gm;
+  const modules = [];
+  let match;
+  const splits = [];
+  while ((match = moduleRegex.exec(md)) !== null) {
+    splits.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+  }
+
+  if (splits.length === 0) {
+    // 无模块分割，整篇作为单个模块
+    modules.push({ title: '完整审查报告', content: md });
+  } else {
+    for (let i = 0; i < splits.length; i++) {
+      const start = splits[i].end;
+      const end = i + 1 < splits.length ? splits[i + 1].index : md.length;
+      modules.push({ title: splits[i].title, content: md.substring(start, end).trim() });
+    }
+  }
+
+  // 统计严重等级
+  let criticalCount = 0, warningCount = 0, infoCount = 0;
+  for (const m of modules) {
+    const c = (m.content.match(/🔴/g) || []).length;
+    const w = (m.content.match(/🟡/g) || []).length;
+    const i = (m.content.match(/🔵/g) || []).length;
+    criticalCount += c; warningCount += w; infoCount += i;
+  }
+
+  document.getElementById('stat-modules').textContent = modules.length;
+  document.getElementById('stat-critical').textContent = criticalCount;
+  document.getElementById('stat-warning').textContent = warningCount;
+  document.getElementById('stat-info').textContent = infoCount;
+
+  // 提取每个模块的评分
+  function extractScore(content) {
+    const scoreMatch = content.match(/模块评分[：:]\s*(\d+)/);
+    if (scoreMatch) return parseInt(scoreMatch[1]);
+    const ratingMatch = content.match(/总体评分[：:]\s*(\d+)/);
+    if (ratingMatch) return parseInt(ratingMatch[1]);
+    return null;
+  }
+
+  function extractRisk(title) {
+    if (/高风险/.test(title)) return 'high';
+    if (/中风险/.test(title)) return 'medium';
+    if (/低风险/.test(title)) return 'low';
+    return '';
+  }
+
+  // 构建侧边栏
+  const sidebar = document.getElementById('sidebar');
+  modules.forEach((m, i) => {
+    const item = document.createElement('div');
+    item.className = 'sidebar-item' + (i === 0 ? ' active' : '');
+    const score = extractScore(m.content);
+    const risk = extractRisk(m.title);
+    item.innerHTML = (risk ? '<span class="risk ' + risk + '">' + (risk === 'high' ? '高' : risk === 'medium' ? '中' : '低') + '</span>' : '')
+      + '<span class="name">' + m.title + '</span>'
+      + (score !== null ? '<span class="score">' + score + '</span>' : '');
+    item.onclick = function() {
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      document.querySelectorAll('.module-section').forEach(el => el.classList.remove('active'));
+      document.getElementById('module-' + i).classList.add('active');
+    };
+    sidebar.appendChild(item);
+  });
+
+  // 渲染内容
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  modules.forEach((m, i) => {
+    const section = document.createElement('div');
+    section.className = 'module-section' + (i === 0 ? ' active' : '');
+    section.id = 'module-' + i;
+
+    const heading = document.createElement('h1');
+    heading.textContent = m.title;
+    section.appendChild(heading);
+
+    const body = document.createElement('div');
+    body.innerHTML = marked.parse(m.content);
+    section.appendChild(body);
+
+    content.appendChild(section);
+  });
+})();
+</script>
 </body>
 </html>`;
 }

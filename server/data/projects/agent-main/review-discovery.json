@@ -1,252 +1,317 @@
 {
   "discoveredAt": "2026-06-02T10:00:00.000Z",
-  "projectId": "agent-main",
+  "projectId": "agent",
   "summary": {
-    "totalFiles": 650,
+    "totalFiles": 320,
     "totalModules": 15,
-    "keyFiles": 42,
+    "keyFiles": 35,
     "scanDuration": 0
   },
   "projectStructure": {
     "framework": "Vue 3 + Vite + Pinia + Element Plus",
     "language": "TypeScript / JavaScript",
     "buildTool": "Vite",
-    "backendFramework": "Spring Boot (Java)",
-    "uiLibrary": "Element Plus",
-    "flowLibrary": "@vue-flow/core",
-    "chartLibrary": "ECharts",
-    "stateManagement": "Pinia + plain reactive objects",
-    "httpClients": "Axios (dual config: config.ts / config2.js)",
-    "securityStack": "AES (ECB) + RSA encryption via CryptoJS/jsencrypt"
+    "uiLibrary": "Element Plus + Tailwind CSS",
+    "stateManagement": "Pinia",
+    "router": "Vue Router 4 (Hash Mode)",
+    "chartLibrary": "ECharts + vue-echarts",
+    "http": "Axios (with RSA/AES encryption)",
+    "realtime": "SSE (Server-Sent Events via fetch API)",
+    "backend": "Java Spring Boot (JPA + MyBatis)"
   },
   "modules": [
     {
       "id": "api-security",
-      "name": "API安全与加密层",
-      "path": "frontend/src/api/axios/security/",
-      "files": 9,
+      "name": "API 安全与加密封装",
+      "path": "frontend/src/api/",
+      "files": 19,
       "keyFiles": [
+        "frontend/src/api/axios/config.ts",
         "frontend/src/api/axios/security/aes.js",
         "frontend/src/api/axios/security/rsa.js",
         "frontend/src/api/axios/security/security-flow.js",
         "frontend/src/api/axios/security/constant.js",
         "frontend/src/api/axios/security/axios-handler.js",
-        "frontend/src/api/axios/security/interceptors/admin.js",
-        "frontend/src/api/axios/security/interceptors/simple.js"
+        "frontend/src/api/request.ts"
       ],
       "riskLevel": "high",
-      "reason": "RSA公钥硬编码在源码中(constant.js)；AES使用ECB模式(aes.js)不安全；非生产环境跳过加密(isProd判断)；加密密钥随请求明文传输(security-flow.js返回aesKey字段)"
+      "riskIndicators": [
+        "RSA 公钥硬编码在前端源码中",
+        "AES 使用 ECB 模式（不安全）",
+        "加密在生产环境启用但开发环境明文传输",
+        "token 通过 URL 参数和 localStorage 传递",
+        "dangerouslyUseHTMLString 用于错误消息通知",
+        "isProd 硬编码为 false"
+      ]
     },
     {
-      "id": "api-axios-config",
-      "name": "Axios请求配置层",
-      "path": "frontend/src/api/axios/",
-      "files": 5,
+      "id": "chat-core",
+      "name": "对话核心模块",
+      "path": "frontend/src/pages/index/modules/chat/",
+      "files": 8,
       "keyFiles": [
-        "frontend/src/api/axios/config.ts",
-        "frontend/src/api/axios/config2.js",
-        "frontend/src/api/axios/request3.js"
+        "frontend/src/pages/index/modules/chat/useChat.js",
+        "frontend/src/pages/index/modules/message/useMessageList.js",
+        "frontend/src/pages/index/modules/message/current/useCurrentMessages.js",
+        "frontend/src/pages/index/modules/message/current/useLlmStrategy.js",
+        "frontend/src/pages/index/modules/message/current/useFlowStrategy.js"
       ],
       "riskLevel": "high",
-      "reason": "存在两套重复的axios配置(config.ts和config2.js)；错误通知使用dangerouslyUseHTMLString渲染未经净化的后端错误消息，存在XSS风险(config.ts:132-133, config2.js:97-98)；token从URL参数或localStorage读取可能被窃取(config.ts:17-31)"
+      "riskIndicators": [
+        "全局状态通过模块级变量共享（非 Pinia store）",
+        "会话管理涉及用户 ID 和权限校验",
+        "消息列表可能包含大数组操作"
+      ]
     },
     {
-      "id": "api-request",
-      "name": "API请求封装层",
-      "path": "frontend/src/api/",
-      "files": 18,
+      "id": "sse-stream",
+      "name": "SSE 流式通信",
+      "path": "frontend/src/pages/index/modules/message/utils/useSSEStream.js",
+      "files": 3,
       "keyFiles": [
-        "frontend/src/api/request.ts",
-        "frontend/src/api/state.ts",
-        "frontend/src/api/user.ts",
-        "frontend/src/api/permiss.ts",
-        "frontend/src/api/config.ts",
-        "frontend/src/api/constant.ts"
-      ],
-      "riskLevel": "medium",
-      "reason": "全局状态(state.ts)使用内存对象无持久化，页面刷新丢失鉴权信息；权限系统(permiss.ts)的init方法被注释掉，实际未执行；TypeScript类型大量使用any(59处)"
-    },
-    {
-      "id": "chat-sse",
-      "name": "聊天SSE流式通信",
-      "path": "frontend/src/hooks/chat/",
-      "files": 4,
-      "keyFiles": [
+        "frontend/src/pages/index/modules/message/utils/useSSEStream.js",
         "frontend/src/hooks/chat/useSSEStream.ts",
-        "frontend/src/hooks/chat/useChat.js",
         "frontend/src/hooks/chat/useChatMsg.js"
       ],
       "riskLevel": "medium",
-      "reason": "SSE使用fetch+ReadableStream手动解析，未处理重连和背压；JSON解析失败仅console.error不通知用户；全局sseClient单例可能导致多页面冲突"
+      "riskIndicators": [
+        "存在两套 SSE 实现（单例模式和 Hook 模式）",
+        "SSE 连接未携带认证 token",
+        "重连逻辑可能导致内存泄漏",
+        "AbortController 清理时机"
+      ]
     },
     {
-      "id": "message-display",
-      "name": "消息渲染与展示",
-      "path": "frontend/src/pages/index/views/pc/message/",
-      "files": 10,
-      "keyFiles": [
-        "frontend/src/pages/index/views/pc/message/components/assistant-message.vue",
-        "frontend/src/pages/index/views/common/message/assistant-message.vue"
-      ],
-      "riskLevel": "high",
-      "reason": "PC版assistant-message.vue使用innerHTML渲染格式化输出(第752行)，虽有escapeHtml函数但部分路径(formatOutput的递归对象解析)可能遗漏；common版assistant-message.vue直接用v-html渲染未净化的服务端内容(第20行)；TopNavBar.vue使用v-html渲染导航图标(第31行)"
-    },
-    {
-      "id": "markdown-renderer",
-      "name": "Markdown渲染组件",
-      "path": "frontend/src/components/common/",
+      "id": "markdown-render",
+      "name": "Markdown 渲染与动态组件",
+      "path": "frontend/src/markdown/",
       "files": 3,
       "keyFiles": [
-        "frontend/src/components/common/MarkdownViewer.vue",
         "frontend/src/markdown/plugins/markdown-it-vue3/index.js",
-        "frontend/src/markdown/plugins/markdown-it-component/index.js"
+        "frontend/src/markdown/plugins/markdown-it-component/index.js",
+        "frontend/src/components/common/MarkdownViewer.vue"
       ],
       "riskLevel": "high",
-      "reason": "MarkdownViewer启用html:true(MarkdownViewer.vue:58)允许原始HTML标签；v-html直接渲染markdown-it输出(MarkdownViewer.vue:10)未做DOMPurify净化；markdown-it-component插件支持动态组件渲染，可能被注入恶意组件"
+      "riskIndicators": [
+        "markdown-it 启用 html: true，允许原始 HTML 标签",
+        "通过 v-html 渲染 Markdown 内容（AI 产出）",
+        "动态 Vue 组件加载（vue3Plugin）",
+        "innerHTML 直接赋值",
+        "无 DOMPurify 等净化处理"
+      ]
     },
     {
-      "id": "flow-editor",
-      "name": "流程编辑器(Flow)",
+      "id": "user-portal",
+      "name": "用户门户页面",
+      "path": "frontend/src/pages/index/views/user-portal/",
+      "files": 12,
+      "keyFiles": [
+        "frontend/src/pages/index/views/user-portal/index.vue",
+        "frontend/src/pages/index/views/user-portal/sections/chat/index.vue",
+        "frontend/src/pages/index/views/user-portal/sections/agents/index.vue",
+        "frontend/src/pages/index/views/user-portal/TopNavBar.vue"
+      ],
+      "riskLevel": "medium",
+      "riskIndicators": [
+        "v-html 渲染 AI 回复内容",
+        "用户输入通过 URL 参数传递 agentId",
+        "addEventListener 用于窗口事件监听"
+      ]
+    },
+    {
+      "id": "pc-chat",
+      "name": "PC 端对话界面",
+      "path": "frontend/src/pages/index/views/pc/",
+      "files": 20,
+      "keyFiles": [
+        "frontend/src/pages/index/views/pc/index.vue",
+        "frontend/src/pages/index/views/pc/chat-main.vue",
+        "frontend/src/pages/index/views/pc/message/components/assistant-message.vue",
+        "frontend/src/pages/index/views/pc/message/hooks/ui/useMessageScroll.js",
+        "frontend/src/pages/index/views/pc/input/hooks/ui/useChatInput.js"
+      ],
+      "riskLevel": "medium",
+      "riskIndicators": [
+        "innerHTML 用于消息渲染",
+        "大量 setInterval/setTimeout 用于轮询和防抖",
+        "消息滚动和加载涉及频繁 DOM 操作",
+        "文件上传功能"
+      ]
+    },
+    {
+      "id": "mobile-chat",
+      "name": "移动端对话界面",
+      "path": "frontend/src/pages/index/views/mobile/",
+      "files": 10,
+      "keyFiles": [
+        "frontend/src/pages/index/views/mobile/index.vue",
+        "frontend/src/pages/index/views/mobile/input/index.vue",
+        "frontend/src/pages/index/views/mobile/message/index.vue"
+      ],
+      "riskLevel": "medium",
+      "riskIndicators": [
+        "语音录制功能（MediaRecorder）",
+        "触摸事件处理",
+        "企微 OAuth 授权流程",
+        "移动端内存管理"
+      ]
+    },
+    {
+      "id": "flow-design",
+      "name": "工作流设计器",
       "path": "frontend/src/flow/",
-      "files": 85,
+      "files": 45,
       "keyFiles": [
         "frontend/src/flow/Flow.vue",
         "frontend/src/flow/FlowBar.vue",
-        "frontend/src/flow/StartForm.vue",
-        "frontend/src/flow/useFlow.js",
-        "frontend/src/flow/useFlowNode.js",
-        "frontend/src/flow/useFlowNodeSync.js",
-        "frontend/src/flow/workflowValidation.js"
+        "frontend/src/flow/node/Node.vue",
+        "frontend/src/flow/install.js",
+        "frontend/src/flow/useFlowNode.js"
       ],
       "riskLevel": "medium",
-      "reason": "流程编辑器模块文件量大(85个文件)，组件间耦合度高；StartForm.vue文件达928行，复杂度高；使用eval/Function执行代码(StartForm.vue, flow-design.vue, CompPreviewPage.vue)存在代码注入风险"
+      "riskIndicators": [
+        "大量 provide/inject 用于组件通信",
+        "复杂节点状态管理",
+        "文件上传（StartForm）",
+        "动态组件加载",
+        "代码编辑器集成"
+      ]
     },
     {
-      "id": "pages-index",
-      "name": "用户端页面(PC/移动端/门户)",
-      "path": "frontend/src/pages/index/",
-      "files": 120,
-      "keyFiles": [
-        "frontend/src/pages/index/main.js",
-        "frontend/src/pages/index/App.vue",
-        "frontend/src/pages/index/permission.js",
-        "frontend/src/pages/index/views/pc/index.vue",
-        "frontend/src/pages/index/views/pc/chat-main.vue",
-        "frontend/src/pages/index/views/mobile/index.vue",
-        "frontend/src/pages/index/views/login/index.vue",
-        "frontend/src/pages/index/modules/chat/useChat.js",
-        "frontend/src/pages/index/modules/message/useMessageList.js"
-      ],
-      "riskLevel": "medium",
-      "reason": "模块化重构进行中(modules/目录)，新旧代码并存；21个文件使用localStorage/sessionStorage存储token和用户信息；56个文件包含定时器(setTimeout/setInterval)但仅24个组件有onUnmounted/onBeforeUnmount清理逻辑，存在内存泄漏风险"
-    },
-    {
-      "id": "pages-setting-app",
-      "name": "应用设置管理页",
+      "id": "setting-app",
+      "name": "应用设置管理",
       "path": "frontend/src/pages/setting-app/",
-      "files": 180,
+      "files": 80,
       "keyFiles": [
-        "frontend/src/pages/setting-app/main.js",
-        "frontend/src/pages/setting-app/router/index.js",
-        "frontend/src/pages/setting-app/permission.js",
         "frontend/src/pages/setting-app/views/app/agent/edit.vue",
         "frontend/src/pages/setting-app/views/app/workflow/flow-design.vue",
         "frontend/src/pages/setting-app/views/app/knowledge-base/index.vue",
-        "frontend/src/pages/setting-app/views/app/analytics-detail/index.vue"
+        "frontend/src/pages/setting-app/views/setting/permission/"
       ],
       "riskLevel": "medium",
-      "reason": "文件数量最多(约180个)，路由和权限逻辑复杂；flow-design.vue使用eval执行代码；多个知识库上传组件处理文件操作"
+      "riskIndicators": [
+        "权限管理（角色、用户组、资源授权）",
+        "知识库文件上传和解析",
+        "工作流导入导出",
+        "大量表单和弹窗操作"
+      ]
     },
     {
-      "id": "pages-setting-system",
-      "name": "系统设置管理页",
+      "id": "setting-system",
+      "name": "系统设置管理",
       "path": "frontend/src/pages/setting-system/",
-      "files": 60,
+      "files": 30,
       "keyFiles": [
-        "frontend/src/pages/setting-system/main.js",
-        "frontend/src/pages/setting-system/router/index.js",
-        "frontend/src/pages/setting-system/permission.js",
         "frontend/src/pages/setting-system/views/model/model-edit.vue",
+        "frontend/src/pages/setting-system/views/datasource/edit.vue",
         "frontend/src/pages/setting-system/views/knowledge/index.vue",
-        "frontend/src/pages/setting-system/views/datasource/edit.vue"
+        "frontend/src/pages/setting-system/views/storage/"
       ],
-      "riskLevel": "low",
-      "reason": "系统配置模块，包含数据源、模型、知识库等配置页面，使用标准CRUD模式"
+      "riskLevel": "high",
+      "riskIndicators": [
+        "密码/密钥表单字段",
+        "数据源配置含连接字符串",
+        "知识库配置含 API 密钥",
+        "文件存储管理",
+        "Milvus 向量数据库配置"
+      ]
+    },
+    {
+      "id": "permission-auth",
+      "name": "权限与认证",
+      "path": "frontend/src/pages/index/permission.js",
+      "files": 3,
+      "keyFiles": [
+        "frontend/src/pages/index/permission.js",
+        "frontend/src/pages/setting-system/permission.js",
+        "frontend/src/api/permiss.ts"
+      ],
+      "riskLevel": "high",
+      "riskIndicators": [
+        "路由守卫中的鉴权逻辑",
+        "白名单路由配置",
+        "localStorage/sessionStorage 存储认证状态",
+        "企微 OAuth 重定向",
+        "URL 参数中的 token 传递"
+      ]
+    },
+    {
+      "id": "voice-recorder",
+      "name": "语音录制与识别",
+      "path": "frontend/src/pages/index/modules/voice/",
+      "files": 3,
+      "keyFiles": [
+        "frontend/src/pages/index/modules/voice/VoiceRecorder.js",
+        "frontend/src/pages/index/modules/voice/AudioUtils.js",
+        "frontend/src/pages/index/modules/voice/useVoiceRecorder.js"
+      ],
+      "riskLevel": "medium",
+      "riskIndicators": [
+        "MediaRecorder API 和麦克风权限",
+        "音频文件上传到后端",
+        "资源清理（stream tracks）",
+        "Blob 内存管理"
+      ]
+    },
+    {
+      "id": "file-upload",
+      "name": "文件上传模块",
+      "path": "frontend/src/pages/index/modules/input/file/",
+      "files": 6,
+      "keyFiles": [
+        "frontend/src/pages/index/modules/input/file/useFileUpload.js",
+        "frontend/src/pages/index/modules/input/file/useFile.js",
+        "frontend/src/pages/index/views/pc/input/file-upload/file-list.vue",
+        "frontend/src/pages/setting-app/views/app/knowledge-base/UploadDialog.vue"
+      ],
+      "riskLevel": "medium",
+      "riskIndicators": [
+        "FormData 文件上传",
+        "文件类型和大小校验",
+        "上传进度管理",
+        "setInterval 用于上传状态轮询"
+      ]
     },
     {
       "id": "message-components",
-      "name": "消息组件系统",
+      "name": "消息动态组件系统",
       "path": "frontend/src/components/message-components/",
-      "files": 30,
+      "files": 35,
       "keyFiles": [
-        "frontend/src/components/message-components/views/MessageRenderer.vue",
+        "frontend/src/components/message-components/core/renderer/RenderEngine.js",
         "frontend/src/components/message-components/core/parser/ConfigParser.js",
-        "frontend/src/components/message-components/core/parser/ConfigValidator.js",
-        "frontend/src/components/message-components/components/preset/chart/index.vue",
-        "frontend/src/components/message-components/components/preset/table/index.vue"
+        "frontend/src/components/message-components/views/MessageRenderer.vue",
+        "frontend/src/components/message-components/core/registry/MessageComponentRegistry.js"
       ],
       "riskLevel": "medium",
-      "reason": "动态组件渲染系统，支持运行时加载和渲染图表、表格等组件；ECharts图表组件中存在setInterval但清理依赖onBeforeUnmount"
+      "riskIndicators": [
+        "动态组件注册和加载机制",
+        "JSON 配置驱动的渲染引擎",
+        "provide/inject 跨层级通信",
+        "ECharts 图表实例的创建和销毁"
+      ]
     },
     {
-      "id": "hooks-common",
-      "name": "通用Hooks",
-      "path": "frontend/src/hooks/",
-      "files": 16,
-      "keyFiles": [
-        "frontend/src/hooks/useQueryList.ts",
-        "frontend/src/hooks/useAxios.ts",
-        "frontend/src/hooks/useDelete.ts",
-        "frontend/src/hooks/useUpdate.ts",
-        "frontend/src/hooks/login/useLoginTo.ts"
-      ],
-      "riskLevel": "low",
-      "reason": "通用CRUD hooks，TypeScript类型标注中any使用较多(59处)；useLoginTo.ts涉及登录跳转和token处理"
-    },
-    {
-      "id": "backend-agent",
-      "name": "后端Agent核心",
-      "path": "backend/src/main/java/cn/topspeeder/ai/agent/",
-      "files": 25,
-      "keyFiles": [
-        "backend/src/main/java/cn/topspeeder/ai/agent/web/AgentCtl.java",
-        "backend/src/main/java/cn/topspeeder/ai/agent/web/AgentTestCtl.java",
-        "backend/src/main/java/cn/topspeeder/ai/agent/flow/web/FlowCtl.java",
-        "backend/src/main/java/cn/topspeeder/ai/agent/flow/web/McpCtl.java"
-      ],
-      "riskLevel": "medium",
-      "reason": "Agent核心控制器，涉及对话流执行、MCP协议、沙箱测试等敏感功能"
-    },
-    {
-      "id": "backend-mgt",
-      "name": "后端管理模块",
-      "path": "backend/src/main/java/cn/topspeeder/ai/mgt/",
-      "files": 70,
+      "id": "backend-api",
+      "name": "后端 API 层",
+      "path": "backend/src/main/java/cn/topspeeder/ai/",
+      "files": 90,
       "keyFiles": [
         "backend/src/main/java/cn/topspeeder/ai/mgt/web/AiChatCtl.java",
         "backend/src/main/java/cn/topspeeder/ai/mgt/web/AiFileCtl.java",
-        "backend/src/main/java/cn/topspeeder/ai/mgt/web/AiAgentCtl.java",
-        "backend/src/main/java/cn/topspeeder/ai/mgt/web/AiFlowCtl.java",
+        "backend/src/main/java/cn/topspeeder/ai/api/web/ClientApiCtl.java",
         "backend/src/main/java/cn/topspeeder/ai/mgt/service/UnifiedMessageProcessorService.java",
-        "backend/src/main/java/cn/topspeeder/ai/mgt/web/AnalyticsCtl.java"
+        "backend/src/main/java/cn/topspeeder/ai/mgt/service/chatmemory/ChatMemoryService.java"
       ],
-      "riskLevel": "medium",
-      "reason": "包含80+个Controller，覆盖聊天、文件、Agent、流程、分析等管理功能；文件上传下载接口(AiFileCtl, AiFileStorageCtl)需关注安全性"
-    },
-    {
-      "id": "backend-common",
-      "name": "后端公共模块(权限/同步/系统)",
-      "path": "backend/src/main/java/cn/topspeeder/common/",
-      "files": 30,
-      "keyFiles": [
-        "backend/src/main/java/cn/topspeeder/common/permission/web/FsQxUserCtl.java",
-        "backend/src/main/java/cn/topspeeder/common/permission/web/FsQxRoleCtl.java",
-        "backend/src/main/java/cn/topspeeder/common/auth/ClientAuthCtl.java",
-        "backend/src/main/java/cn/topspeeder/common/auth/AgentAuthCtl.java",
-        "backend/src/main/java/cn/topspeeder/common/task/FsUserStuSyncTask.java"
-      ],
-      "riskLevel": "low",
-      "reason": "权限管理、用户同步、系统配置等标准CRUD模块"
+      "riskLevel": "high",
+      "riskIndicators": [
+        "AI 聊天消息处理",
+        "文件上传和存储",
+        "客户端 API 接口",
+        "用户关注分析数据处理",
+        "定时任务调度",
+        "IP 地址解析"
+      ]
     }
   ]
 }
