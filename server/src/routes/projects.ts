@@ -659,7 +659,7 @@ projectsRouter.get('/:id/review-discovery', async (req: Request, res: Response) 
   }
   const { getReviewDiscovery } = await import('../services/review-discovery.js');
   const result = getReviewDiscovery(req.params.id);
-  res.json(result || { modules: [], summary: {} });
+  res.json(result || { modules: [], summary: {}, discoveredAt: null });
 });
 
 /** 获取审查规则 */
@@ -722,4 +722,32 @@ projectsRouter.get('/:id/page-context', async (req: Request, res: Response) => {
     return;
   }
   res.json(result);
+});
+
+// ========== 发现日志 ==========
+
+/** 获取发现日志（通用） */
+projectsRouter.get('/:id/discovery-log/:type', async (req: Request, res: Response) => {
+  const project = getProjectById(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: '项目不存在' });
+    return;
+  }
+  const allowedTypes = ['api', 'frontend', 'review', 'context'];
+  const logType = req.params.type;
+  if (!allowedTypes.includes(logType)) {
+    res.status(400).json({ error: '不支持的日志类型' });
+    return;
+  }
+  const fs = await import('fs');
+  const filePath = path.join(DATA_DIR, 'projects', req.params.id, `discovery-log-${logType}.json`);
+  if (!fs.existsSync(filePath)) {
+    res.json(null);
+    return;
+  }
+  try {
+    res.json(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
+  } catch {
+    res.json(null);
+  }
 });

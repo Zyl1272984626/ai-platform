@@ -51,11 +51,17 @@ export async function discoverPageContext(
   const projectDir = path.join(DATA_DIR, 'projects', projectId);
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
 
+  // 清理旧文件，避免 Claude Code 多读一轮旧数据
+  for (const f of ['page-context.json', 'discovery-log-context.json']) {
+    try { fs.unlinkSync(path.join(projectDir, f)); } catch { /* 文件不存在 */ }
+  }
+
   // 调用 Claude Code
   let fullOutput = '';
+  const blocks: Array<{ type: string; content?: string; name?: string; input?: any; toolUseId?: string; result?: string; isError?: boolean }> = [];
   const abortController = new AbortController();
-  const totalTimeout = 15 * 60 * 1000; // 15 分钟（页面多时需要更长时间）
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   onProgress?.({ stage: 'analyzing', message: '正在启动 Claude Code 分析页面...' });
 
@@ -75,7 +81,7 @@ export async function discoverPageContext(
           'mcp__playwright__browser_click',
           'mcp__playwright__browser_close',
         ],
-        maxTurns: 200,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
         mcpServers: {
@@ -91,12 +97,38 @@ export async function discoverPageContext(
     for await (const msg of response) {
       if (abortController.signal.aborted) throw new Error('知识图谱发现超时');
 
-      if (msg.type === 'assistant' && (msg as any).message?.content) {
-        for (const block of (msg as any).message.content) {
-          if (block.type === 'text') {
-            fullOutput += block.text;
-            detectProgress(fullOutput, onProgress);
+      switch (msg.type) {
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                onProgress?.({ type: 'text', content: block.text } as any);
+                const last = blocks[blocks.length - 1];
+                if (last?.type === 'text') last.content += block.text;
+                else blocks.push({ type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                onProgress?.({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id } as any);
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+              }
+            }
           }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string'
+                  ? block.content : JSON.stringify(block.content);
+                const truncated = resultContent?.slice(0, 3000);
+                onProgress?.({ type: 'tool_result', toolUseId: block.tool_use_id, result: truncated, isError: block.is_error } as any);
+                const toolBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (toolBlock) { toolBlock.result = truncated; toolBlock.isError = block.is_error; }
+              }
+            }
+          }
+          break;
         }
       }
     }
@@ -104,12 +136,12 @@ export async function discoverPageContext(
     clearTimeout(timer);
   } catch (err: any) {
     clearTimeout(timer);
-    onProgress?.({ stage: 'error', message: `发现失败: ${err.message}` });
+    onProgress?.({ type: 'error', message: `发现失败: ${err.message}` } as any);
     throw err;
   }
 
   // 尝试读取生成的文件（Claude Code 会直接写入）
-  onProgress?.({ stage: 'saving', message: '正在保存知识图谱...' });
+  onProgress?.({ type: 'stage', stage: 'saving', message: '正在保存知识图谱...' } as any);
 
   const contextPath = path.join(projectDir, 'page-context.json');
 
@@ -135,15 +167,24 @@ export async function discoverPageContext(
     extractAndSaveContext(fullOutput, projectId, contextPath);
   }
 
+  // 保存发现日志（只保留最新）
+  fs.writeFileSync(path.join(projectDir, 'discovery-log-context.json'), JSON.stringify({
+    savedAt: new Date().toISOString(),
+    blocks,
+  }), 'utf-8');
+
   const duration = Date.now() - startTime;
   const result = JSON.parse(fs.readFileSync(contextPath, 'utf-8'));
   const totalPages = result._meta?.totalPages || Object.keys(result).filter(k => k !== '_meta').length;
 
   onProgress?.({
+    type: 'done',
     stage: 'done',
     message: `知识图谱生成完成: ${totalPages} 个页面, 耗时 ${Math.round(duration / 1000)}s`,
     detail: { totalPages, analyzedPages: totalPages },
-  });
+    parseWarning: totalPages === 0,
+    rawOutputPreview: totalPages === 0 ? fullOutput.slice(0, 2000) : undefined,
+  } as any);
 
   return result;
 }

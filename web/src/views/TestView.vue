@@ -711,6 +711,13 @@ watch(activeType, async (newType) => {
       concurrencyVal.value = (concurrency as any)[newType]
     }
   } catch { /* ignore */ }
+
+  // 切换类型时，如果已有选中项目，自动加载对应数据
+  if (selectedProjectId.value) {
+    if (newType === 'e2e') onProjectChange()
+    else if (newType === 'api') onApiProjectChange()
+    else if (newType === 'codereview') onReviewProjectChange()
+  }
 })
 
 onUnmounted(() => {

@@ -105,54 +105,24 @@
               {{ key }}: {{ result.msg }}
             </span>
           </div>
-          <!-- 发现进度面板 -->
-          <div v-if="discoverLogs[project.id]" class="discover-progress">
-            <div class="discover-progress-header">
-              <span>页面发现进度</span>
-              <span class="discover-stage">{{ discoverLogs[project.id].stage }}</span>
-            </div>
-            <div v-for="(log, idx) in discoverLogs[project.id].logs" :key="idx" class="discover-log">
-              {{ log }}
-            </div>
-          </div>
-          <!-- API 发现进度面板 -->
-          <div v-if="apiDiscoverLogs[project.id]" class="discover-progress">
-            <div class="discover-progress-header">
-              <span>API 接口发现进度</span>
-              <span class="discover-stage">{{ apiDiscoverLogs[project.id].stage }}</span>
-            </div>
-            <div v-for="(log, idx) in apiDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
-              {{ log }}
-            </div>
-          </div>
-          <!-- 前端发现进度面板 -->
-          <div v-if="frontendDiscoverLogs[project.id]" class="discover-progress">
-            <div class="discover-progress-header">
-              <span>前端组件发现进度</span>
-              <span class="discover-stage">{{ frontendDiscoverLogs[project.id].stage }}</span>
-            </div>
-            <div v-for="(log, idx) in frontendDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
-              {{ log }}
-            </div>
-          </div>
-          <!-- 审查点发现进度面板 -->
-          <div v-if="reviewDiscoverLogs[project.id]" class="discover-progress">
-            <div class="discover-progress-header">
-              <span>审查点发现进度</span>
-              <span class="discover-stage">{{ reviewDiscoverLogs[project.id].stage }}</span>
-            </div>
-            <div v-for="(log, idx) in reviewDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
-              {{ log }}
-            </div>
-          </div>
-          <!-- 知识图谱生成进度面板 -->
-          <div v-if="contextDiscoverLogs[project.id]" class="discover-progress">
-            <div class="discover-progress-header">
-              <span>知识图谱生成进度</span>
-              <span class="discover-stage">{{ contextDiscoverLogs[project.id].stage }}</span>
-            </div>
-            <div v-for="(log, idx) in contextDiscoverLogs[project.id].logs" :key="idx" class="discover-log">
-              {{ log }}
+          <!-- 发现进度面板（统一实时流） -->
+          <div v-for="dtype in ['e2e','api','frontend','review','context']" :key="dtype">
+            <div v-if="discoveryStreams[`${project.id}-${dtype}`]" class="discover-stream-panel">
+              <div class="discover-stream-header">
+                <span>{{ discoveryLabel(dtype as string) }}进度</span>
+                <span class="discover-stage">{{ discoveryStreams[`${project.id}-${dtype}`].stage }}</span>
+                <button class="btn btn-xs" style="margin-left:auto;" @click="delete discoveryStreams[`${project.id}-${dtype}`]">关闭</button>
+              </div>
+              <div class="discover-stream-body">
+                <template v-for="(block, idx) in discoveryStreams[`${project.id}-${dtype}`].blocks" :key="idx">
+                  <div v-if="block.type === 'text'" class="stream-text" v-html="renderMarkdown(block.content || '')"></div>
+                  <ToolCallBlock v-else :name="block.name || ''" :input="block.input" :result="block.result" :done="!!block.result || !!block.isError" />
+                </template>
+                <div v-if="discoveryStreams[`${project.id}-${dtype}`].parseWarning" class="stream-warning">
+                  解析未获得有效结果，可能是 Skill 输出格式不匹配。原始输出预览：
+                  <pre class="stream-raw-preview">{{ discoveryStreams[`${project.id}-${dtype}`].rawOutputPreview }}</pre>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -536,7 +506,7 @@
           <template v-else>
             <!-- 摘要 -->
             <div v-if="apiManagerDiscovery?.summary" class="manager-summary">
-              <span>发现于 {{ formatDate(apiManagerDiscovery.discoveredAt) }}</span>
+              <span v-if="apiManagerDiscovery.discoveredAt">发现于 {{ formatDate(apiManagerDiscovery.discoveredAt) }}</span>
               <span>{{ apiManagerDiscovery.summary.totalModules || 0 }} 模块</span>
               <span>{{ apiManagerDiscovery.summary.totalEndpoints || 0 }} 接口</span>
             </div>
@@ -579,8 +549,24 @@
             </div>
           </template>
         </template>
+        <div class="manager-log-section">
+          <div class="manager-log-header" @click="showManagerLog && managerLogBlocks.length ? null : loadDiscoveryLog(apiManagerProjectId, 'api')">
+            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <button class="btn btn-xs" @click.stop="showManagerLog ? showManagerLog = false : loadDiscoveryLog(apiManagerProjectId, 'api')">
+              {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
+            </button>
+          </div>
+          <div v-if="showManagerLog && managerLogLoading" style="padding:10px;color:#999;">加载中...</div>
+          <div v-else-if="showManagerLog && managerLogBlocks.length" class="manager-log-body">
+            <div v-if="managerLogTime" class="manager-log-time">保存于 {{ formatDate(managerLogTime) }}</div>
+            <template v-for="(block, idx) in managerLogBlocks" :key="idx">
+              <div v-if="block.type === 'text'" class="stream-text" v-html="renderMarkdown(block.content || '')"></div>
+              <ToolCallBlock v-else :name="block.name || ''" :input="block.input" :result="block.result" :done="!!block.result || !!block.isError" />
+            </template>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showApiManager = false">关闭</button>
+          <button class="btn btn-cancel" @click="showApiManager = false; showManagerLog = false">关闭</button>
         </div>
       </div>
     </div>
@@ -596,7 +582,7 @@
           </div>
           <template v-else>
             <div class="manager-summary">
-              <span>发现于 {{ formatDate(frontendManagerData.discoveredAt) }}</span>
+              <span v-if="frontendManagerData.discoveredAt">发现于 {{ formatDate(frontendManagerData.discoveredAt) }}</span>
               <span>{{ frontendManagerData.summary?.totalModules || 0 }} 类</span>
               <span>{{ frontendManagerData.summary?.totalTestTargets || 0 }} 个可测试目标</span>
             </div>
@@ -634,8 +620,24 @@
             </div>
           </template>
         </template>
+        <div class="manager-log-section">
+          <div class="manager-log-header" @click.stop>
+            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(frontendManagerProjectId, 'frontend')">
+              {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
+            </button>
+          </div>
+          <div v-if="showManagerLog && managerLogLoading" style="padding:10px;color:#999;">加载中...</div>
+          <div v-else-if="showManagerLog && managerLogBlocks.length" class="manager-log-body">
+            <div v-if="managerLogTime" class="manager-log-time">保存于 {{ formatDate(managerLogTime) }}</div>
+            <template v-for="(block, idx) in managerLogBlocks" :key="idx">
+              <div v-if="block.type === 'text'" class="stream-text" v-html="renderMarkdown(block.content || '')"></div>
+              <ToolCallBlock v-else :name="block.name || ''" :input="block.input" :result="block.result" :done="!!block.result || !!block.isError" />
+            </template>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showFrontendManager = false">关闭</button>
+          <button class="btn btn-cancel" @click="showFrontendManager = false; showManagerLog = false">关闭</button>
         </div>
       </div>
     </div>
@@ -652,7 +654,7 @@
           <template v-else>
             <!-- 项目结构 -->
             <div v-if="reviewManagerDiscovery" class="manager-summary">
-              <span>发现于 {{ formatDate(reviewManagerDiscovery.discoveredAt) }}</span>
+              <span v-if="reviewManagerDiscovery.discoveredAt">发现于 {{ formatDate(reviewManagerDiscovery.discoveredAt) }}</span>
               <span>{{ reviewManagerDiscovery.modules?.length || 0 }} 模块</span>
               <span>{{ reviewManagerDiscovery.summary?.keyFiles || 0 }} 关键文件</span>
             </div>
@@ -707,8 +709,24 @@
             </div>
           </template>
         </template>
+        <div class="manager-log-section">
+          <div class="manager-log-header" @click.stop>
+            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(reviewManagerProjectId, 'review')">
+              {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
+            </button>
+          </div>
+          <div v-if="showManagerLog && managerLogLoading" style="padding:10px;color:#999;">加载中...</div>
+          <div v-else-if="showManagerLog && managerLogBlocks.length" class="manager-log-body">
+            <div v-if="managerLogTime" class="manager-log-time">保存于 {{ formatDate(managerLogTime) }}</div>
+            <template v-for="(block, idx) in managerLogBlocks" :key="idx">
+              <div v-if="block.type === 'text'" class="stream-text" v-html="renderMarkdown(block.content || '')"></div>
+              <ToolCallBlock v-else :name="block.name || ''" :input="block.input" :result="block.result" :done="!!block.result || !!block.isError" />
+            </template>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showReviewManager = false">关闭</button>
+          <button class="btn btn-cancel" @click="showReviewManager = false; showManagerLog = false">关闭</button>
         </div>
       </div>
     </div>
@@ -776,8 +794,24 @@
             </div>
           </template>
         </template>
+        <div class="manager-log-section">
+          <div class="manager-log-header" @click.stop>
+            <span>{{ showManagerLog ? '▼' : '▶' }} 上次生成日志</span>
+            <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(contextManagerProjectId, 'context')">
+              {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
+            </button>
+          </div>
+          <div v-if="showManagerLog && managerLogLoading" style="padding:10px;color:#999;">加载中...</div>
+          <div v-else-if="showManagerLog && managerLogBlocks.length" class="manager-log-body">
+            <div v-if="managerLogTime" class="manager-log-time">保存于 {{ formatDate(managerLogTime) }}</div>
+            <template v-for="(block, idx) in managerLogBlocks" :key="idx">
+              <div v-if="block.type === 'text'" class="stream-text" v-html="renderMarkdown(block.content || '')"></div>
+              <ToolCallBlock v-else :name="block.name || ''" :input="block.input" :result="block.result" :done="!!block.result || !!block.isError" />
+            </template>
+          </div>
+        </div>
         <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showContextManager = false">关闭</button>
+          <button class="btn btn-cancel" @click="showContextManager = false; showManagerLog = false">关闭</button>
         </div>
       </div>
     </div>
@@ -785,8 +819,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { marked } from 'marked'
 import { getSettings, updateSettings, checkSettings, type PlatformConfig, type CheckResult } from '../api/settings'
+import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import {
   getProjects as fetchProjects,
   addProject as apiAddProject,
@@ -799,7 +835,7 @@ import {
   discoverFrontend as apiDiscoverFrontend,
   discoverReview as apiDiscoverReview,
   getProjectPages,
-  getDiscoveryLog,
+  getDiscoveryLog as getE2EDiscoveryLog,
   saveProjectPages,
   createPageSet as apiCreatePageSet,
   updatePageSet as apiUpdatePageSet,
@@ -814,6 +850,7 @@ import {
   getFrontendDiscovery,
   getReviewDiscovery,
   getReviewRules,
+  getDiscoveryLogByType,
   discoverPageContext as apiDiscoverPageContext,
   getPageContext as apiGetPageContext,
   type TestProject,
@@ -852,11 +889,87 @@ const discoveringFrontendProject = ref<string | null>(null)
 const discoveringReviewProject = ref<string | null>(null)
 const discoveringContextProject = ref<string | null>(null)
 const projectChecks = reactive<Record<string, ProjectCheckResult>>({})
-const discoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
-const apiDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
-const frontendDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
-const reviewDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
-const contextDiscoverLogs = reactive<Record<string, { stage: string; logs: string[] }>>({})
+
+
+// 统一的实时流状态（key: `${projectId}-${type}`）
+interface StreamBlock {
+  type: 'text' | 'tool_use'
+  content?: string
+  name?: string
+  input?: any
+  toolUseId?: string
+  result?: string
+  isError?: boolean
+}
+interface StreamState {
+  blocks: StreamBlock[]
+  stage: string
+  parseWarning?: boolean
+  rawOutputPreview?: string
+}
+const discoveryStreams = reactive<Record<string, StreamState>>({})
+
+function initStream(key: string, initialMsg: string) {
+  discoveryStreams[key] = { blocks: [{ type: 'text', content: initialMsg }], stage: 'init' }
+}
+
+function handleStreamEvent(key: string, event: any) {
+  if (!discoveryStreams[key]) return
+  const stream = discoveryStreams[key]
+
+  if (event.type === 'text') {
+    const last = stream.blocks[stream.blocks.length - 1]
+    if (last?.type === 'text') {
+      last.content += event.content
+    } else {
+      stream.blocks.push({ type: 'text', content: event.content })
+    }
+  } else if (event.type === 'tool_use') {
+    stream.blocks.push({
+      type: 'tool_use',
+      name: event.name,
+      input: event.input,
+      toolUseId: event.toolUseId || event.id,
+    })
+  } else if (event.type === 'tool_result') {
+    const toolUseId = event.toolUseId || event.tool_use_id
+    const toolBlock = stream.blocks.find(
+      b => b.type === 'tool_use' && b.toolUseId === toolUseId
+    )
+    if (toolBlock) {
+      toolBlock.result = event.result || event.content
+      toolBlock.isError = event.isError
+    }
+  } else if (event.type === 'stage') {
+    stream.stage = event.message || event.stage
+  } else if (event.type === 'done') {
+    stream.stage = event.message
+    if (event.parseWarning) {
+      stream.parseWarning = true
+      stream.rawOutputPreview = event.rawOutputPreview
+    }
+  } else if (event.type === 'error') {
+    stream.blocks.push({ type: 'text', content: `\n❌ 错误: ${event.message}` })
+    stream.stage = 'error'
+  }
+}
+
+function renderMarkdown(text: string): string {
+  if (!text) return ''
+  try { return marked.parse(text) as string }
+  catch { return text.replace(/\n/g, '<br>') }
+}
+
+const discoveryTypeLabels: Record<string, string> = {
+  e2e: '页面发现',
+  api: 'API 接口发现',
+  frontend: '前端组件发现',
+  review: '审查点发现',
+  context: '知识图谱生成',
+}
+function discoveryLabel(dtype: string): string {
+  return discoveryTypeLabels[dtype] || dtype
+}
 
 // 页面管理弹窗
 const showPageManager = ref(false)
@@ -891,6 +1004,7 @@ const detailPageBaseUrl = ref('')
 // 管理弹窗 — API
 const showApiManager = ref(false)
 const apiManagerProjectName = ref('')
+const apiManagerProjectId = ref('')
 const apiManagerLoading = ref(false)
 const apiManagerDiscovery = ref<any>(null)
 const apiManagerTests = ref<any>(null)
@@ -898,12 +1012,14 @@ const apiManagerTests = ref<any>(null)
 // 管理弹窗 — 前端
 const showFrontendManager = ref(false)
 const frontendManagerProjectName = ref('')
+const frontendManagerProjectId = ref('')
 const frontendManagerLoading = ref(false)
 const frontendManagerData = ref<any>(null)
 
 // 管理弹窗 — 审查点
 const showReviewManager = ref(false)
 const reviewManagerProjectName = ref('')
+const reviewManagerProjectId = ref('')
 const reviewManagerLoading = ref(false)
 const reviewManagerDiscovery = ref<any>(null)
 const reviewManagerRules = ref<any>(null)
@@ -921,8 +1037,29 @@ const expandedManagerIds = reactive<Record<string, Set<string>>>({
 // 管理弹窗 — 知识图谱
 const showContextManager = ref(false)
 const contextManagerProjectName = ref('')
+const contextManagerProjectId = ref('')
 const contextManagerLoading = ref(false)
 const contextManagerData = ref<any>(null)
+
+// 管理弹窗 — 发现日志
+const managerLogBlocks = ref<any[]>([])
+const managerLogLoading = ref(false)
+const showManagerLog = ref(false)
+const managerLogTime = ref('')
+
+async function loadDiscoveryLog(projectId: string, type: string) {
+  managerLogLoading.value = true
+  managerLogBlocks.value = []
+  showManagerLog.value = true
+  try {
+    const res = await getDiscoveryLogByType(projectId, type)
+    if (res.data) {
+      managerLogBlocks.value = res.data.blocks || []
+      managerLogTime.value = res.data.savedAt || ''
+    }
+  } catch { /* ignore */ }
+  managerLogLoading.value = false
+}
 
 /** 详情页面的展开后实际 URL 列表 */
 const detailPageResolvedUrls = computed(() => {
@@ -1148,14 +1285,22 @@ function confirmDiscover() {
 
 async function doDiscover(id: string) {
   discoveringProject.value = id
-  discoverLogs[id] = { stage: 'init', logs: [`开始页面发现（模式: ${discoverMode.value}）...`] }
+  const key = `${id}-e2e`
+  initStream(key, `开始页面发现（模式: ${discoverMode.value}）...\n`)
   message.value = null
 
   try {
     await apiDiscoverProject(id, discoverMode.value, (progress) => {
-      if (!discoverLogs[id]) discoverLogs[id] = { stage: '', logs: [] }
-      discoverLogs[id].stage = progress.stage
-      discoverLogs[id].logs.push(progress.message)
+      // E2E 发现的进度格式为 { stage, message }，需转换为统一流格式
+      if (progress.stage === 'complete' || progress.stage === 'done') {
+        handleStreamEvent(key, { type: 'text', content: `\n✅ ${progress.message}\n` })
+        handleStreamEvent(key, { type: 'done', message: '完成' })
+      } else if (progress.stage === 'error') {
+        handleStreamEvent(key, { type: 'error', message: progress.message })
+      } else {
+        handleStreamEvent(key, { type: 'text', content: progress.message + '\n' })
+        handleStreamEvent(key, { type: 'stage', message: progress.stage })
+      }
     })
 
     // 刷新项目列表
@@ -1165,9 +1310,7 @@ async function doDiscover(id: string) {
     message.value = { type: 'success', text: '页面发现完成' }
   } catch (e: any) {
     message.value = { type: 'error', text: '发现失败: ' + e.message }
-    if (discoverLogs[id]) {
-      discoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
-    }
+    handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringProject.value = null
   }
@@ -1175,22 +1318,19 @@ async function doDiscover(id: string) {
 
 async function doDiscoverApi(id: string) {
   discoveringApiProject.value = id
-  apiDiscoverLogs[id] = { stage: 'init', logs: ['开始 API 接口发现...'] }
+  const key = `${id}-api`
+  initStream(key, '开始 API 接口发现...\n')
   message.value = null
 
   try {
     await apiDiscoverApi(id, (progress) => {
-      if (!apiDiscoverLogs[id]) apiDiscoverLogs[id] = { stage: '', logs: [] }
-      apiDiscoverLogs[id].stage = progress.stage
-      apiDiscoverLogs[id].logs.push(progress.message)
+      handleStreamEvent(key, progress)
     })
 
     message.value = { type: 'success', text: 'API 接口发现完成' }
   } catch (e: any) {
     message.value = { type: 'error', text: 'API 发现失败: ' + e.message }
-    if (apiDiscoverLogs[id]) {
-      apiDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
-    }
+    handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringApiProject.value = null
   }
@@ -1198,22 +1338,19 @@ async function doDiscoverApi(id: string) {
 
 async function doDiscoverFrontend(id: string) {
   discoveringFrontendProject.value = id
-  frontendDiscoverLogs[id] = { stage: 'init', logs: ['开始前端组件发现...'] }
+  const key = `${id}-frontend`
+  initStream(key, '开始前端组件发现...\n')
   message.value = null
 
   try {
     await apiDiscoverFrontend(id, (progress) => {
-      if (!frontendDiscoverLogs[id]) frontendDiscoverLogs[id] = { stage: '', logs: [] }
-      frontendDiscoverLogs[id].stage = progress.stage
-      frontendDiscoverLogs[id].logs.push(progress.message)
+      handleStreamEvent(key, progress)
     })
 
     message.value = { type: 'success', text: '前端组件发现完成' }
   } catch (e: any) {
     message.value = { type: 'error', text: '前端发现失败: ' + e.message }
-    if (frontendDiscoverLogs[id]) {
-      frontendDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
-    }
+    handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringFrontendProject.value = null
   }
@@ -1221,22 +1358,19 @@ async function doDiscoverFrontend(id: string) {
 
 async function doDiscoverReview(id: string) {
   discoveringReviewProject.value = id
-  reviewDiscoverLogs[id] = { stage: 'init', logs: ['开始代码审查点发现...'] }
+  const key = `${id}-review`
+  initStream(key, '开始代码审查点发现...\n')
   message.value = null
 
   try {
     await apiDiscoverReview(id, (progress) => {
-      if (!reviewDiscoverLogs[id]) reviewDiscoverLogs[id] = { stage: '', logs: [] }
-      reviewDiscoverLogs[id].stage = progress.stage
-      reviewDiscoverLogs[id].logs.push(progress.message)
+      handleStreamEvent(key, progress)
     })
 
     message.value = { type: 'success', text: '审查点发现完成' }
   } catch (e: any) {
     message.value = { type: 'error', text: '审查点发现失败: ' + e.message }
-    if (reviewDiscoverLogs[id]) {
-      reviewDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
-    }
+    handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringReviewProject.value = null
   }
@@ -1244,22 +1378,19 @@ async function doDiscoverReview(id: string) {
 
 async function doDiscoverContext(id: string) {
   discoveringContextProject.value = id
-  contextDiscoverLogs[id] = { stage: 'init', logs: ['开始知识图谱生成...'] }
+  const key = `${id}-context`
+  initStream(key, '开始知识图谱生成...\n')
   message.value = null
 
   try {
     await apiDiscoverPageContext(id, (progress) => {
-      if (!contextDiscoverLogs[id]) contextDiscoverLogs[id] = { stage: '', logs: [] }
-      contextDiscoverLogs[id].stage = progress.stage
-      contextDiscoverLogs[id].logs.push(progress.message)
+      handleStreamEvent(key, progress)
     })
 
     message.value = { type: 'success', text: '知识图谱生成完成' }
   } catch (e: any) {
     message.value = { type: 'error', text: '知识图谱生成失败: ' + e.message }
-    if (contextDiscoverLogs[id]) {
-      contextDiscoverLogs[id].logs.push(`❌ 错误: ${e.message}`)
-    }
+    handleStreamEvent(key, { type: 'error', message: e.message })
   } finally {
     discoveringContextProject.value = null
   }
@@ -1277,6 +1408,7 @@ function toggleManagerExpand(category: string, id: string) {
 async function openApiManager(project: TestProject) {
   showApiManager.value = true
   apiManagerProjectName.value = project.name
+  apiManagerProjectId.value = project.id
   apiManagerLoading.value = true
   apiManagerDiscovery.value = null
   apiManagerTests.value = null
@@ -1296,6 +1428,7 @@ async function openApiManager(project: TestProject) {
 async function openFrontendManager(project: TestProject) {
   showFrontendManager.value = true
   frontendManagerProjectName.value = project.name
+  frontendManagerProjectId.value = project.id
   frontendManagerLoading.value = true
   frontendManagerData.value = null
   expandedManagerIds.frontend.clear()
@@ -1309,6 +1442,7 @@ async function openFrontendManager(project: TestProject) {
 async function openReviewManager(project: TestProject) {
   showReviewManager.value = true
   reviewManagerProjectName.value = project.name
+  reviewManagerProjectId.value = project.id
   reviewManagerLoading.value = true
   reviewManagerDiscovery.value = null
   reviewManagerRules.value = null
@@ -1328,6 +1462,7 @@ async function openReviewManager(project: TestProject) {
 async function openContextManager(project: TestProject) {
   showContextManager.value = true
   contextManagerProjectName.value = project.name
+  contextManagerProjectId.value = project.id
   contextManagerLoading.value = true
   contextManagerData.value = null
   expandedManagerIds.context.clear()
@@ -1472,7 +1607,7 @@ async function openPageManager(project: TestProject) {
   try {
     const [pagesRes, logRes, paramsRes] = await Promise.all([
       getProjectPages(project.id),
-      getDiscoveryLog(project.id),
+      getE2EDiscoveryLog(project.id),
       getGlobalParams(project.id).catch(() => ({ data: {} })),
     ])
     pageManagerSets.value = pagesRes.data
@@ -1944,6 +2079,117 @@ function showPageDetail(page: PageConfig) {
   font-size: 11px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+/* 实时流面板 */
+.discover-stream-panel {
+  margin-top: 10px;
+  border: 1px solid #e0e0f0;
+  border-radius: 8px;
+  background: #fafbff;
+  overflow: hidden;
+}
+.discover-stream-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f0ff;
+  font-weight: 500;
+  font-size: 13px;
+  color: #667eea;
+}
+.discover-stream-body {
+  padding: 10px 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.stream-text {
+  color: #444;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.stream-text :deep(p) {
+  margin: 4px 0;
+}
+.stream-text :deep(h1),
+.stream-text :deep(h2),
+.stream-text :deep(h3) {
+  color: #1a1a2e;
+  margin: 8px 0 4px;
+  font-size: 14px;
+}
+.stream-text :deep(ul),
+.stream-text :deep(ol) {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.stream-text :deep(code) {
+  background: #f0f0f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.stream-text :deep(pre) {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  overflow-x: auto;
+}
+.stream-warning {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #d48806;
+}
+
+/* 管理弹窗日志区域 */
+.manager-log-section {
+  margin-top: 16px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 12px;
+}
+.manager-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  color: #666;
+  cursor: default;
+}
+.manager-log-body {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px;
+  background: #fafbff;
+  border: 1px solid #e8e8f0;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+.manager-log-time {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 6px;
+}
+.stream-raw-preview {
+  margin-top: 6px;
+  background: #fff;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #666;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .btn-discover {
   background: #667eea !important;

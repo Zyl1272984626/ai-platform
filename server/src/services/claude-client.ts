@@ -117,12 +117,12 @@ export async function sendMessage(
   session.status = 'active';
   session.updatedAt = new Date().toISOString();
 
-  const maxTurns = session.config.maxTurns || 50;
+  const maxTurns = session.config.maxTurns || 9999;
 
   try {
     const abortController = new AbortController();
-    const totalTimeout = session.config.totalTimeout || 30 * 60 * 1000;
-    const timer = setTimeout(() => abortController.abort(), totalTimeout);
+    // 无超时限制，让 Claude Code 自然完成
+    const timer = setTimeout(() => {}, 0);
 
     // 调用 Agent SDK
     const query = await getClaudeQuery();
@@ -255,10 +255,11 @@ export async function executeStep(
   emitter?: EventEmitter
 ): Promise<{ output: string; metadata: Record<string, unknown> }> {
   const mergedTools = [...new Set([...AUTO_APPROVED_TOOLS, ...(config.allowedTools || [])])];
-  const timeout = config.timeout || 10 * 60 * 1000;
+  const timeout = config.timeout || 0; // 0 表示无限制
 
   const abortController = new AbortController();
-  const timer = setTimeout(() => abortController.abort(), timeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   try {
     const query = await getClaudeQuery();
@@ -267,7 +268,7 @@ export async function executeStep(
       options: {
         cwd: config.cwd,
         allowedTools: mergedTools,
-        maxTurns: config.maxTurns || 30,
+        maxTurns: config.maxTurns || 9999,
         permissionMode: 'bypassPermissions',
         abortController,
       },

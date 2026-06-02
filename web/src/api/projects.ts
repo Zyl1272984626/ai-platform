@@ -393,6 +393,11 @@ export function getReviewRules(id: string) {
   return api.get(`/projects/${id}/review-rules`)
 }
 
+/** 获取发现日志（按类型） */
+export function getDiscoveryLogByType(id: string, type: string) {
+  return api.get(`/projects/${id}/discovery-log/${type}`)
+}
+
 // ========== 知识图谱 ==========
 
 /** 触发知识图谱发现 — SSE 流式返回进度 */

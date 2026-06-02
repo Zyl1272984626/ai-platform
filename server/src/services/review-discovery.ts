@@ -78,10 +78,16 @@ export async function discoverReview(
   const projectDir = path.join(DATA_DIR, 'projects', projectId);
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
 
+  // 清理旧文件，避免 Claude Code 多读一轮旧数据
+  for (const f of ['review-discovery.json', 'review-rules.json', 'discovery-log-review.json']) {
+    try { fs.unlinkSync(path.join(projectDir, f)); } catch { /* 文件不存在 */ }
+  }
+
   let fullOutput = '';
+  const blocks: Array<{ type: string; content?: string; name?: string; input?: any; toolUseId?: string; result?: string; isError?: boolean }> = [];
   const abortController = new AbortController();
-  const totalTimeout = 10 * 60 * 1000;
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   try {
     const response = query({
@@ -89,7 +95,7 @@ export async function discoverReview(
       options: {
         cwd: project.sourcePath,
         allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
-        maxTurns: 80,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
       },
@@ -98,12 +104,38 @@ export async function discoverReview(
     for await (const msg of response) {
       if (abortController.signal.aborted) throw new Error('审查发现超时');
 
-      if (msg.type === 'assistant' && (msg as any).message?.content) {
-        for (const block of (msg as any).message.content) {
-          if (block.type === 'text') {
-            fullOutput += block.text;
-            detectReviewProgress(fullOutput, onProgress);
+      switch (msg.type) {
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                onProgress?.({ type: 'text', content: block.text } as any);
+                const last = blocks[blocks.length - 1];
+                if (last?.type === 'text') last.content += block.text;
+                else blocks.push({ type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                onProgress?.({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id } as any);
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+              }
+            }
           }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string'
+                  ? block.content : JSON.stringify(block.content);
+                const truncated = resultContent?.slice(0, 3000);
+                onProgress?.({ type: 'tool_result', toolUseId: block.tool_use_id, result: truncated, isError: block.is_error } as any);
+                const toolBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (toolBlock) { toolBlock.result = truncated; toolBlock.isError = block.is_error; }
+              }
+            }
+          }
+          break;
         }
       }
     }
@@ -111,32 +143,68 @@ export async function discoverReview(
     clearTimeout(timer);
   } catch (err: any) {
     clearTimeout(timer);
-    onProgress?.({ stage: 'error', message: `发现失败: ${err.message}` });
+    onProgress?.({ type: 'error', message: `发现失败: ${err.message}` } as any);
     throw err;
   }
 
-  onProgress?.({ stage: 'analyzing', message: '正在解析发现结果...' });
+  onProgress?.({ type: 'stage', stage: 'analyzing', message: '正在解析发现结果...' } as any);
 
-  // 解析输出，提取 review-discovery.json 和 review-rules.json
-  const { discovery, rules } = parseReviewOutput(fullOutput, projectId, Date.now() - startTime);
+  const discoveryPath = path.join(projectDir, 'review-discovery.json');
+  const rulesPath = path.join(projectDir, 'review-rules.json');
 
-  // 保存
-  fs.writeFileSync(
-    path.join(projectDir, 'review-discovery.json'),
-    JSON.stringify(discovery, null, 2), 'utf-8',
-  );
-  fs.writeFileSync(
-    path.join(projectDir, 'review-rules.json'),
-    JSON.stringify(rules, null, 2), 'utf-8',
-  );
+  let discovery: ReviewDiscoveryResult | undefined;
+  let rules: any;
+
+  // 策略0：检查 Claude 是否已经直接写入了文件（最可靠）
+  if (fs.existsSync(discoveryPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+      if (parsed.modules && Array.isArray(parsed.modules)) {
+        discovery = parsed;
+        discovery!.discoveredAt = discovery!.discoveredAt || new Date().toISOString();
+        discovery!.projectId = projectId;
+        if (!discovery!.summary) discovery!.summary = { totalFiles: 0, totalModules: 0, keyFiles: 0, scanDuration: Date.now() - startTime };
+      }
+    } catch { /* JSON 解析失败，走文本解析 */ }
+  }
+
+  if (fs.existsSync(rulesPath)) {
+    try {
+      rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+    } catch { /* JSON 解析失败 */ }
+  }
+
+  // 策略1-3：文件不存在时，从输出中提取
+  if (!discovery || !rules) {
+    const parsed = parseReviewOutput(fullOutput, projectId, Date.now() - startTime, blocks);
+    discovery = discovery || parsed.discovery;
+    rules = rules || parsed.rules;
+
+    // 保存解析结果
+    if (!fs.existsSync(discoveryPath)) {
+      fs.writeFileSync(discoveryPath, JSON.stringify(discovery, null, 2), 'utf-8');
+    }
+    if (!fs.existsSync(rulesPath)) {
+      fs.writeFileSync(rulesPath, JSON.stringify(rules, null, 2), 'utf-8');
+    }
+  }
+
+  // 保存发现日志（只保留最新）
+  fs.writeFileSync(path.join(projectDir, 'discovery-log-review.json'), JSON.stringify({
+    savedAt: new Date().toISOString(),
+    blocks,
+  }), 'utf-8');
 
   onProgress?.({
+    type: 'done',
     stage: 'done',
-    message: `发现完成: ${discovery.summary.totalModules} 模块, ${rules.dimensions?.length || 0} 审查维度`,
-    detail: { foundModules: discovery.summary.totalModules, generatedRules: rules.dimensions?.length || 0 },
-  });
+    message: `发现完成: ${discovery!.summary.totalModules} 模块, ${rules?.dimensions?.length || 0} 审查维度`,
+    detail: { foundModules: discovery!.summary.totalModules, generatedRules: rules?.dimensions?.length || 0 },
+    parseWarning: discovery!.summary.totalModules === 0,
+    rawOutputPreview: discovery!.summary.totalModules === 0 ? fullOutput.slice(0, 2000) : undefined,
+  } as any);
 
-  return discovery;
+  return discovery!;
 }
 
 // ========== 辅助函数 ==========
@@ -150,6 +218,7 @@ function buildReviewDiscoveryPrompt(project: any): string {
 function loadSkillPrompt(skillName: string, project: any): string {
   const config = getConfig();
   const skillPath = path.resolve(config.aiPlatformRoot, 'skills', 'tests', skillName, 'SKILL.md');
+  const outputDir = path.join(DATA_DIR, 'projects', project.id);
 
   let content = '';
   try {
@@ -161,7 +230,8 @@ function loadSkillPrompt(skillName: string, project: any): string {
 
   return content
     .replace(/\{\{projectName\}\}/g, project.name)
-    .replace(/\{\{sourcePath\}\}/g, project.sourcePath);
+    .replace(/\{\{sourcePath\}\}/g, project.sourcePath)
+    .replace(/\{\{outputDir\}\}/g, outputDir.replace(/\\/g, '/'));
 }
 
 function detectReviewProgress(output: string, onProgress?: (p: ReviewDiscoveryProgress) => void) {
@@ -174,7 +244,12 @@ function detectReviewProgress(output: string, onProgress?: (p: ReviewDiscoveryPr
   }
 }
 
-function parseReviewOutput(output: string, projectId: string, duration: number): {
+function parseReviewOutput(
+  output: string,
+  projectId: string,
+  duration: number,
+  blocks?: Array<{ type: string; content?: string; name?: string; input?: any }>,
+): {
   discovery: ReviewDiscoveryResult;
   rules: any;
 } {
@@ -188,6 +263,28 @@ function parseReviewOutput(output: string, projectId: string, duration: number):
 
   const rules: any = { dimensions: [], ignore: { patterns: ['**/node_modules/**', '**/dist/**'] }, fileLimits: { maxFilesPerReview: 30, maxLinesPerFile: 500 } };
 
+  // 策略0：从 Write 工具的 input.content 中提取（Claude 可能用 Write 写文件而非文本输出）
+  if (blocks) {
+    for (const block of blocks) {
+      if (block.type === 'tool_use' && block.name === 'Write' && block.input?.content) {
+        try {
+          const parsed = JSON.parse(block.input.content);
+          if (parsed.modules && Array.isArray(parsed.modules)) {
+            discovery.modules = parsed.modules;
+            discovery.projectStructure = parsed.projectStructure || discovery.projectStructure;
+            discovery.summary.totalModules = parsed.modules.length;
+            discovery.summary.keyFiles = parsed.modules.reduce((s: number, m: any) => s + (m.keyFiles?.length || 0), 0);
+          } else if (parsed.dimensions) {
+            rules.dimensions = parsed.dimensions;
+            rules.ignore = parsed.ignore || rules.ignore;
+            rules.fileLimits = parsed.fileLimits || rules.fileLimits;
+          }
+        } catch { /* not valid JSON in Write tool */ }
+      }
+    }
+  }
+
+  // 策略1：从 ```json``` 代码块中提取
   const jsonMatches = output.match(/```json\s*\n([\s\S]*?)```/g);
   if (jsonMatches) {
     for (const block of jsonMatches) {
@@ -195,18 +292,33 @@ function parseReviewOutput(output: string, projectId: string, duration: number):
       try {
         const parsed = JSON.parse(content);
         if (parsed.modules && !parsed.dimensions) {
-          // review-discovery
           discovery.modules = parsed.modules;
           discovery.projectStructure = parsed.projectStructure || discovery.projectStructure;
           discovery.summary.totalModules = parsed.modules?.length || 0;
           discovery.summary.keyFiles = parsed.modules?.reduce((s: number, m: any) => s + (m.keyFiles?.length || 0), 0) || 0;
         } else if (parsed.dimensions) {
-          // review-rules
           rules.dimensions = parsed.dimensions;
           rules.ignore = parsed.ignore || rules.ignore;
           rules.fileLimits = parsed.fileLimits || rules.fileLimits;
         }
       } catch { /* not valid JSON */ }
+    }
+  }
+
+  // 策略2：如果代码块没解析到，尝试从全文找 JSON 对象
+  if (discovery.summary.totalModules === 0) {
+    // 尝试匹配 { "modules": [...] } 或 {"modules":[...]}
+    const moduleMatch = output.match(/\{\s*["']modules["']\s*:\s*\[[\s\S]*?\]\s*\}/);
+    if (moduleMatch) {
+      try {
+        const parsed = JSON.parse(moduleMatch[0]);
+        if (parsed.modules?.length) {
+          discovery.modules = parsed.modules;
+          discovery.summary.totalModules = parsed.modules.length;
+          discovery.summary.keyFiles = parsed.modules.reduce((s: number, m: any) => s + (m.keyFiles?.length || 0), 0);
+          if (parsed.projectStructure) discovery.projectStructure = parsed.projectStructure;
+        }
+      } catch { /* fallback failed */ }
     }
   }
 

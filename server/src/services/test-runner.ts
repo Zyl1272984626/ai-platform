@@ -266,8 +266,8 @@ async function runAgentTest(
 
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
-  const totalTimeout = 30 * 60 * 1000; // 30 分钟
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   // 创建一个虚拟 case 来追踪整体进度
   const mainCase = suite.cases[0];
@@ -293,7 +293,7 @@ async function runAgentTest(
           'mcp__web_reader__webReader',
           'mcp__4_5v_mcp__analyze_image',
         ],
-        maxTurns: 100,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
         appendSystemPrompt: skillContent,
@@ -470,8 +470,8 @@ ${pageListPrompt}
 
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
-  const totalTimeout = 60 * 60 * 1000; // 60 分钟
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   const startTime = Date.now();
   let fullOutput = '';
@@ -503,7 +503,7 @@ ${pageListPrompt}
           'mcp__playwright__browser_tabs',
           'mcp__4_5v_mcp__analyze_image',
         ],
-        maxTurns: mode === 'deep' ? 300 : mode === 'standard' ? 150 : 50,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
         appendSystemPrompt: skillContent,
@@ -1003,8 +1003,8 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
 
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
-  const totalTimeout = 30 * 60 * 1000; // 30 分钟
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   const startTime = Date.now();
   let fullOutput = '';
@@ -1016,7 +1016,7 @@ ${rulesContent ? `## 审查规则\n${rulesContent}` : '## 审查维度\n请从�
       options: {
         cwd: project.sourcePath,
         allowedTools: ['Read', 'Glob', 'Grep'],
-        maxTurns: 100,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
       },

@@ -76,10 +76,16 @@ export async function discoverFrontend(
   const projectDir = path.join(DATA_DIR, 'projects', projectId);
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
 
+  // 清理旧文件，避免 Claude Code 多读一轮旧数据
+  for (const f of ['frontend-discovery.json', 'discovery-log-frontend.json']) {
+    try { fs.unlinkSync(path.join(projectDir, f)); } catch { /* 文件不存在 */ }
+  }
+
   let fullOutput = '';
+  const blocks: Array<{ type: string; content?: string; name?: string; input?: any; toolUseId?: string; result?: string; isError?: boolean }> = [];
   const abortController = new AbortController();
-  const totalTimeout = 10 * 60 * 1000;
-  const timer = setTimeout(() => abortController.abort(), totalTimeout);
+  // 无超时限制，让 Claude Code 自然完成
+  const timer = setTimeout(() => {}, 0);
 
   try {
     const response = query({
@@ -87,7 +93,7 @@ export async function discoverFrontend(
       options: {
         cwd: project.sourcePath,
         allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
-        maxTurns: 80,
+        maxTurns: 9999,
         permissionMode: 'bypassPermissions',
         abortController,
       },
@@ -96,12 +102,38 @@ export async function discoverFrontend(
     for await (const msg of response) {
       if (abortController.signal.aborted) throw new Error('前端发现超时');
 
-      if (msg.type === 'assistant' && (msg as any).message?.content) {
-        for (const block of (msg as any).message.content) {
-          if (block.type === 'text') {
-            fullOutput += block.text;
-            detectFrontendProgress(fullOutput, onProgress);
+      switch (msg.type) {
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                onProgress?.({ type: 'text', content: block.text } as any);
+                const last = blocks[blocks.length - 1];
+                if (last?.type === 'text') last.content += block.text;
+                else blocks.push({ type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                onProgress?.({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id } as any);
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+              }
+            }
           }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string'
+                  ? block.content : JSON.stringify(block.content);
+                const truncated = resultContent?.slice(0, 3000);
+                onProgress?.({ type: 'tool_result', toolUseId: block.tool_use_id, result: truncated, isError: block.is_error } as any);
+                const toolBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (toolBlock) { toolBlock.result = truncated; toolBlock.isError = block.is_error; }
+              }
+            }
+          }
+          break;
         }
       }
     }
@@ -109,22 +141,47 @@ export async function discoverFrontend(
     clearTimeout(timer);
   } catch (err: any) {
     clearTimeout(timer);
-    onProgress?.({ stage: 'error', message: `发现失败: ${err.message}` });
+    onProgress?.({ type: 'error', message: `发现失败: ${err.message}` } as any);
     throw err;
   }
 
-  onProgress?.({ stage: 'analyzing', message: '正在解析发现结果...' });
-
-  const discovery = parseFrontendOutput(fullOutput, projectId, Date.now() - startTime);
+  onProgress?.({ type: 'stage', stage: 'analyzing', message: '正在解析发现结果...' } as any);
 
   const discoveryPath = path.join(projectDir, 'frontend-discovery.json');
-  fs.writeFileSync(discoveryPath, JSON.stringify(discovery, null, 2), 'utf-8');
+  let discovery: FrontendDiscoveryResult | undefined;
+
+  // 策略0：检查 Claude 是否已经直接写入了文件（最可靠）
+  if (fs.existsSync(discoveryPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+      if (parsed.modules && Array.isArray(parsed.modules)) {
+        discovery = parsed;
+        discovery!.projectId = projectId;
+        discovery!.discoveredAt = discovery!.discoveredAt || new Date().toISOString();
+      }
+    } catch { /* 解析失败，走文本解析 */ }
+  }
+
+  // 策略1-2：文件不存在时从输出中提取
+  if (!discovery) {
+    discovery = parseFrontendOutput(fullOutput, projectId, Date.now() - startTime, blocks);
+    fs.writeFileSync(discoveryPath, JSON.stringify(discovery, null, 2), 'utf-8');
+  }
+
+  // 保存发现日志（只保留最新）
+  fs.writeFileSync(path.join(projectDir, 'discovery-log-frontend.json'), JSON.stringify({
+    savedAt: new Date().toISOString(),
+    blocks,
+  }), 'utf-8');
 
   onProgress?.({
+    type: 'done',
     stage: 'done',
-    message: `发现完成: ${discovery.summary.totalModules} 类, ${discovery.summary.totalTestTargets} 个可测试目标`,
-    detail: { foundUtils: discovery.summary.totalTestTargets },
-  });
+    message: `发现完成: ${discovery!.summary.totalModules} 类, ${discovery!.summary.totalTestTargets} 个可测试目标`,
+    detail: { foundUtils: discovery!.summary.totalTestTargets },
+    parseWarning: discovery!.summary.totalModules === 0,
+    rawOutputPreview: discovery!.summary.totalModules === 0 ? fullOutput.slice(0, 2000) : undefined,
+  } as any);
 
   return discovery;
 }
@@ -149,9 +206,12 @@ function loadSkillPrompt(skillName: string, project: any): string {
     content = buildFrontendDiscoveryPrompt(project);
   }
 
+  const outputDir = path.join(DATA_DIR, 'projects', project.id);
+
   return content
     .replace(/\{\{projectName\}\}/g, project.name)
-    .replace(/\{\{sourcePath\}\}/g, project.sourcePath);
+    .replace(/\{\{sourcePath\}\}/g, project.sourcePath)
+    .replace(/\{\{outputDir\}\}/g, outputDir.replace(/\\/g, '/'));
 }
 
 function detectFrontendProgress(output: string, onProgress?: (p: FrontendDiscoveryProgress) => void) {
@@ -164,7 +224,12 @@ function detectFrontendProgress(output: string, onProgress?: (p: FrontendDiscove
   }
 }
 
-function parseFrontendOutput(output: string, projectId: string, duration: number): FrontendDiscoveryResult {
+function parseFrontendOutput(
+  output: string,
+  projectId: string,
+  duration: number,
+  blocks?: Array<{ type: string; content?: string; name?: string; input?: any }>,
+): FrontendDiscoveryResult {
   const result: FrontendDiscoveryResult = {
     projectId,
     discoveredAt: new Date().toISOString(),
@@ -172,8 +237,26 @@ function parseFrontendOutput(output: string, projectId: string, duration: number
     modules: [],
   };
 
+  // 策略0：从 Write 工具的 input.content 中提取
+  if (blocks) {
+    for (const block of blocks) {
+      if (block.type === 'tool_use' && block.name === 'Write' && block.input?.content) {
+        try {
+          const parsed = JSON.parse(block.input.content);
+          if (parsed.modules && Array.isArray(parsed.modules)) {
+            result.modules = parsed.modules;
+            result.summary.totalModules = parsed.modules.length;
+            result.summary.totalTestTargets = parsed.modules.reduce(
+              (sum: number, m: any) => sum + (m.files?.length || 0), 0,
+            );
+          }
+        } catch { /* not valid JSON in Write tool */ }
+      }
+    }
+  }
+
   const jsonMatch = output.match(/```json\s*\n([\s\S]*?)```/g);
-  if (jsonMatch) {
+  if (result.summary.totalModules === 0 && jsonMatch) {
     for (const block of jsonMatch) {
       const content = block.replace(/```json\s*\n/, '').replace(/\n```$/, '').trim();
       try {

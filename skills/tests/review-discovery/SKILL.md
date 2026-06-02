@@ -7,35 +7,58 @@ tags: ["review", "discovery", "test", "security"]
 
 # 代码审查点发现
 
-你是一个代码审查专家。请分析以下项目源码，完成两个任务：
-
-## 任务一：发现项目结构
-1. 扫描源码目录，了解项目整体架构
-2. 按业务模块分组，标注每个模块的风险等级
-3. 识别关键文件（核心组件、工具函数、API 层）
-4. 记录技术栈（Vue 版本、语言、构建工具）
-
-## 任务二：生成审查规则
-基于项目的技术栈和业务特点，生成针对性的审查规则：
-1. 安全性规则：根据项目使用的框架定制
-2. 性能规则：根据项目规模和复杂度定制
-3. 错误处理规则：根据 API 调用模式定制
-4. 框架最佳实践：根据 Vue 3 / Pinia 定制
-5. 可维护性规则：通用规则
-
-每条规则需要包含：ID、标题、描述、严重等级、检查方式、修复建议
+你是一个代码审查专家。请分析项目源码，完成以下两个任务。
 
 ## 项目信息
 - 项目名称: {{projectName}}
 - 源码路径: {{sourcePath}}
 - 前端框架: Vue 3 + Vite + Pinia
 
-## 输出格式
-请严格按照以下 JSON 格式输出（用 ```json 包裹），必须包含两个文件：
+## 工具使用约束（必须严格遵守）
 
-### 文件 1: review-discovery.json（项目结构）
+1. **只允许使用 Glob、Grep、Read、Write 四个工具**
+2. **禁止使用 TodoWrite、Bash、TaskCreate 等任何其他工具**
+3. **禁止输出进度跟踪、TODO 列表或中间状态**
+4. 用 Glob 一次性扫描文件列表，不要逐个目录重复扫描
+5. 用 Grep 搜索关键模式，不要逐文件 Read
+6. 只 Read 关键文件（路由定义、入口文件、配置文件），跳过测试文件和生成文件
+
+## 执行步骤
+
+### 步骤 1：快速扫描项目结构
+- `Glob("**/package.json")` — 识别技术栈
+- `Glob("src/**/*.{ts,vue,js}")` — 获取前端文件全貌
+- `Glob("server/src/**/*.ts")` 或类似路径 — 获取后端文件全貌（如存在）
+
+### 步骤 2：分析模块和风险
+- `Grep` 搜索路由定义、API 调用、状态管理等关键模式
+- `Read` 读取入口文件和关键配置，快速理解模块划分
+- 根据文件结构和业务逻辑，将源码按模块分组，标注风险等级
+
+### 步骤 3：生成并写入结果
+- 用 Write 工具写入 `review-discovery.json`
+- 用 Write 工具写入 `review-rules.json`
+
+**充分扫描，不要遗漏，直到分析完成再写入结果。**
+
+## 输出格式
+
+### 文件 1: {{outputDir}}/review-discovery.json
 ```json
 {
+  "discoveredAt": "ISO日期",
+  "projectId": "项目ID",
+  "summary": {
+    "totalFiles": 667,
+    "totalModules": 15,
+    "keyFiles": 30,
+    "scanDuration": 0
+  },
+  "projectStructure": {
+    "framework": "Vue 3 + Vite + Pinia",
+    "language": "TypeScript / JavaScript",
+    "buildTool": "Vite"
+  },
   "modules": [
     {
       "id": "模块ID",
@@ -46,16 +69,11 @@ tags: ["review", "discovery", "test", "security"]
       "riskLevel": "high/medium/low",
       "reason": "风险原因"
     }
-  ],
-  "projectStructure": {
-    "framework": "Vue 3 + Vite + Pinia",
-    "language": "TypeScript / JavaScript",
-    "buildTool": "Vite"
-  }
+  ]
 }
 ```
 
-### 文件 2: review-rules.json（审查规则）
+### 文件 2: {{outputDir}}/review-rules.json
 ```json
 {
   "dimensions": [
@@ -84,4 +102,11 @@ tags: ["review", "discovery", "test", "security"]
 }
 ```
 
-请开始分析源码。
+审查规则必须覆盖以下 5 个维度，每个维度至少 3 条规则：
+1. **security**（安全性）— XSS、注入、鉴权等
+2. **performance**（性能）— 重复渲染、内存泄漏、大列表等
+3. **error-handling**（错误处理）— 异步异常、空值、边界情况等
+4. **framework**（框架最佳实践）— Vue 3 / Pinia / TypeScript 规范
+5. **maintainability**（可维护性）— 代码复杂度、命名、注释等
+
+请立即开始分析。
