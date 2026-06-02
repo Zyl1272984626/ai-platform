@@ -33,28 +33,51 @@
                 {{ project.status === 'active' ? '活跃' : '停用' }}
               </span>
             </div>
-            <div class="project-actions">
-              <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
-              <button class="btn btn-sm" @click="editProject(project)">编辑</button>
-              <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
-                {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
-              </button>
-              <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
-                {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
-              </button>
-              <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
-                {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
-              </button>
-              <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
-                {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
-              </button>
-              <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
-                管理页面
-              </button>
-              <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
-                {{ checkingProject === project.id ? '检测中...' : '检测' }}
-              </button>
-              <button class="btn btn-sm btn-danger" @click="doDeleteProject(project.id)">删除</button>
+            <div class="project-action-groups">
+              <div class="action-group">
+                <span class="action-group-label label-e2e">E2E</span>
+                <button class="btn btn-sm btn-discover" @click="openDiscoverDialog(project)" :disabled="discoveringProject === project.id">
+                  {{ discoveringProject === project.id ? '发现中...' : '发现页面' }}
+                </button>
+                <button class="btn btn-sm btn-manage" @click="openPageManager(project)" :disabled="!project.pageSets?.length">
+                  管理页面
+                </button>
+              </div>
+              <div class="action-group">
+                <span class="action-group-label label-frontend">前端</span>
+                <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
+                  {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
+                </button>
+                <button class="btn btn-sm btn-manage-frontend" @click="openFrontendManager(project)">
+                  管理组件
+                </button>
+              </div>
+              <div class="action-group">
+                <span class="action-group-label label-api">API</span>
+                <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
+                  {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
+                </button>
+                <button class="btn btn-sm btn-manage-api" @click="openApiManager(project)">
+                  管理接口
+                </button>
+              </div>
+              <div class="action-group">
+                <span class="action-group-label label-review">审查</span>
+                <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
+                  {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
+                </button>
+                <button class="btn btn-sm btn-manage-review" @click="openReviewManager(project)">
+                  管理审查点
+                </button>
+              </div>
+              <div class="action-group action-group-tools">
+                <button class="btn btn-sm" @click="setDefault(project.id)" v-if="project.id !== config.defaultProjectId">设为默认</button>
+                <button class="btn btn-sm" @click="editProject(project)">编辑</button>
+                <button class="btn btn-sm btn-check" @click="doCheckProject(project.id)" :disabled="checkingProject === project.id">
+                  {{ checkingProject === project.id ? '检测中...' : '检测' }}
+                </button>
+                <button class="btn btn-sm btn-danger" @click="doDeleteProject(project.id)">删除</button>
+              </div>
             </div>
           </div>
           <div class="project-detail">
@@ -481,6 +504,195 @@
         </div>
       </div>
     </div>
+
+    <!-- 管理接口弹窗 -->
+    <div v-if="showApiManager" class="modal-overlay" @click.self="showApiManager = false">
+      <div class="modal-content modal-wide">
+        <h3>管理接口 — {{ apiManagerProjectName }}</h3>
+        <div v-if="apiManagerLoading" class="loading" style="padding:20px;">加载中...</div>
+        <template v-else>
+          <div v-if="!apiManagerDiscovery && !apiManagerTests" class="empty-projects">
+            暂无数据，请先点击「发现接口」
+          </div>
+          <template v-else>
+            <!-- 摘要 -->
+            <div v-if="apiManagerDiscovery?.summary" class="manager-summary">
+              <span>发现于 {{ formatDate(apiManagerDiscovery.discoveredAt) }}</span>
+              <span>{{ apiManagerDiscovery.summary.totalModules || 0 }} 模块</span>
+              <span>{{ apiManagerDiscovery.summary.totalEndpoints || 0 }} 接口</span>
+            </div>
+            <!-- 模块列表 -->
+            <div class="manager-section">
+              <h4 class="manager-section-title">接口模块</h4>
+              <div v-for="mod in apiManagerDiscovery?.modules || []" :key="mod.id" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('api', mod.id)">
+                  <span class="expand-icon">{{ expandedManagerIds.api.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ mod.name }}</span>
+                  <span class="manager-block-count">{{ mod.endpoints?.length || 0 }} 个接口</span>
+                  <code v-if="mod.sourcePath" class="manager-block-path">{{ mod.sourcePath }}</code>
+                </div>
+                <div v-if="expandedManagerIds.api.has(mod.id)" class="manager-block-body">
+                  <div v-for="ep in mod.endpoints" :key="ep.id" class="manager-item">
+                    <span class="method-badge" :class="ep.method?.toLowerCase()">{{ ep.method }}</span>
+                    <code class="ep-path">{{ ep.path }}</code>
+                    <span class="ep-name">{{ ep.name }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- 测试用例 -->
+            <div v-if="apiManagerTests?.testModules?.length" class="manager-section">
+              <h4 class="manager-section-title">测试用例 ({{ apiManagerTests.testModules.reduce((s:number, m:any) => s + (m.tests?.length || 0), 0) }} 个)</h4>
+              <div v-for="mod in apiManagerTests.testModules" :key="mod.moduleId" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('api-test', mod.moduleId)">
+                  <span class="expand-icon">{{ expandedManagerIds['api-test'].has(mod.moduleId) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ mod.moduleName }}</span>
+                  <span class="manager-block-count">{{ mod.tests?.length || 0 }} 个用例</span>
+                </div>
+                <div v-if="expandedManagerIds['api-test'].has(mod.moduleId)" class="manager-block-body">
+                  <div v-for="tc in mod.tests" :key="tc.id" class="manager-item">
+                    <span class="method-badge" :class="tc.method?.toLowerCase()">{{ tc.method }}</span>
+                    <code class="ep-path">{{ tc.path }}</code>
+                    <span class="ep-name">{{ tc.name }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showApiManager = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 管理组件弹窗 -->
+    <div v-if="showFrontendManager" class="modal-overlay" @click.self="showFrontendManager = false">
+      <div class="modal-content modal-wide">
+        <h3>管理组件 — {{ frontendManagerProjectName }}</h3>
+        <div v-if="frontendManagerLoading" class="loading" style="padding:20px;">加载中...</div>
+        <template v-else>
+          <div v-if="!frontendManagerData" class="empty-projects">
+            暂无数据，请先点击「发现组件」
+          </div>
+          <template v-else>
+            <div class="manager-summary">
+              <span>发现于 {{ formatDate(frontendManagerData.discoveredAt) }}</span>
+              <span>{{ frontendManagerData.summary?.totalModules || 0 }} 类</span>
+              <span>{{ frontendManagerData.summary?.totalTestTargets || 0 }} 个可测试目标</span>
+            </div>
+            <div class="manager-section">
+              <div v-for="mod in frontendManagerData.modules || []" :key="mod.id" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('frontend', mod.id)">
+                  <span class="expand-icon">{{ expandedManagerIds.frontend.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ mod.name }}</span>
+                  <span class="manager-block-count">{{ mod.files?.length || 0 }} 个文件</span>
+                  <span class="manager-block-desc">{{ mod.description }}</span>
+                </div>
+                <div v-if="expandedManagerIds.frontend.has(mod.id)" class="manager-block-body">
+                  <div v-for="file in mod.files" :key="file.path" class="manager-item frontend-item">
+                    <div class="frontend-file-header">
+                      <code class="frontend-file-path">{{ file.path }}</code>
+                      <span v-if="file.complexity" class="complexity-badge" :class="file.complexity">{{ file.complexity }}</span>
+                    </div>
+                    <div class="frontend-file-detail">
+                      <span v-if="file.description" class="frontend-file-desc">{{ file.description }}</span>
+                      <div v-if="file.exports?.length" class="frontend-exports">
+                        导出: <code v-for="exp in file.exports" :key="exp">{{ exp }}</code>
+                      </div>
+                      <div v-if="file.testableLogic?.length" class="frontend-testable">
+                        可测试: {{ file.testableLogic.join('、') }}
+                      </div>
+                      <div v-if="file.functions?.length" class="frontend-functions">
+                        <div v-for="fn in file.functions" :key="fn.name" class="frontend-fn">
+                          <code>{{ fn.name }}</code>({{ fn.params?.join(', ') || '' }}) — {{ fn.description }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showFrontendManager = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 管理审查点弹窗 -->
+    <div v-if="showReviewManager" class="modal-overlay" @click.self="showReviewManager = false">
+      <div class="modal-content modal-wide">
+        <h3>管理审查点 — {{ reviewManagerProjectName }}</h3>
+        <div v-if="reviewManagerLoading" class="loading" style="padding:20px;">加载中...</div>
+        <template v-else>
+          <div v-if="!reviewManagerDiscovery && !reviewManagerRules" class="empty-projects">
+            暂无数据，请先点击「发现审查点」
+          </div>
+          <template v-else>
+            <!-- 项目结构 -->
+            <div v-if="reviewManagerDiscovery" class="manager-summary">
+              <span>发现于 {{ formatDate(reviewManagerDiscovery.discoveredAt) }}</span>
+              <span>{{ reviewManagerDiscovery.modules?.length || 0 }} 模块</span>
+              <span>{{ reviewManagerDiscovery.summary?.keyFiles || 0 }} 关键文件</span>
+            </div>
+            <div v-if="reviewManagerDiscovery?.projectStructure" class="manager-section">
+              <h4 class="manager-section-title">项目结构</h4>
+              <div class="manager-info-grid">
+                <span v-for="(val, key) in reviewManagerDiscovery.projectStructure" :key="key" class="manager-info-item">
+                  <label>{{ key }}</label> {{ val }}
+                </span>
+              </div>
+            </div>
+            <!-- 模块列表 -->
+            <div v-if="reviewManagerDiscovery?.modules?.length" class="manager-section">
+              <h4 class="manager-section-title">项目模块</h4>
+              <div v-for="mod in reviewManagerDiscovery.modules" :key="mod.id" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('review', mod.id)">
+                  <span class="expand-icon">{{ expandedManagerIds.review.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ mod.name }}</span>
+                  <span class="risk-badge" :class="mod.riskLevel">{{ mod.riskLevel }}</span>
+                  <span class="manager-block-count">{{ mod.files }} 文件</span>
+                  <span class="manager-block-desc">{{ mod.reason }}</span>
+                </div>
+                <div v-if="expandedManagerIds.review.has(mod.id)" class="manager-block-body">
+                  <div v-for="f in mod.keyFiles" :key="f" class="manager-item">
+                    <code class="frontend-file-path">{{ f }}</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- 审查维度 -->
+            <div v-if="reviewManagerRules?.dimensions?.length" class="manager-section">
+              <h4 class="manager-section-title">审查维度</h4>
+              <div v-for="dim in reviewManagerRules.dimensions" :key="dim.id" class="manager-block">
+                <div class="manager-block-header" @click="toggleManagerExpand('review-rule', dim.id)">
+                  <span class="expand-icon">{{ expandedManagerIds['review-rule'].has(dim.id) ? '▼' : '▶' }}</span>
+                  <span class="manager-block-name">{{ dim.name }}</span>
+                  <span class="severity-badge" :class="dim.severity">{{ dim.severity }}</span>
+                  <span class="manager-block-count">{{ dim.rules?.length || 0 }} 条规则</span>
+                </div>
+                <div v-if="expandedManagerIds['review-rule'].has(dim.id)" class="manager-block-body">
+                  <div v-for="rule in dim.rules" :key="rule.id" class="manager-item review-rule-item">
+                    <div class="review-rule-header">
+                      <code class="rule-id">{{ rule.id }}</code>
+                      <span class="rule-title">{{ rule.title }}</span>
+                    </div>
+                    <div v-if="rule.description" class="review-rule-desc">{{ rule.description }}</div>
+                    <div v-if="rule.suggestion" class="review-rule-suggestion">建议: {{ rule.suggestion }}</div>
+                  </div>
+                  <div v-if="!dim.rules?.length" class="empty-pages">暂无规则</div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </template>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showReviewManager = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -509,6 +721,11 @@ import {
   deletePage as apiDeletePage,
   getGlobalParams,
   saveGlobalParams as apiSaveGlobalParams,
+  getApiDiscovery,
+  getApiTests,
+  getFrontendDiscovery,
+  getReviewDiscovery,
+  getReviewRules,
   type TestProject,
   type ProjectCheckResult,
   type PageSet,
@@ -578,6 +795,35 @@ const expandedParamRefs = ref(new Set<string>())
 // 页面详情
 const detailPage = ref<PageConfig | null>(null)
 const detailPageBaseUrl = ref('')
+
+// 管理弹窗 — API
+const showApiManager = ref(false)
+const apiManagerProjectName = ref('')
+const apiManagerLoading = ref(false)
+const apiManagerDiscovery = ref<any>(null)
+const apiManagerTests = ref<any>(null)
+
+// 管理弹窗 — 前端
+const showFrontendManager = ref(false)
+const frontendManagerProjectName = ref('')
+const frontendManagerLoading = ref(false)
+const frontendManagerData = ref<any>(null)
+
+// 管理弹窗 — 审查点
+const showReviewManager = ref(false)
+const reviewManagerProjectName = ref('')
+const reviewManagerLoading = ref(false)
+const reviewManagerDiscovery = ref<any>(null)
+const reviewManagerRules = ref<any>(null)
+
+// 管理弹窗 — 折叠状态
+const expandedManagerIds = reactive<Record<string, Set<string>>>({
+  api: new Set(),
+  'api-test': new Set(),
+  frontend: new Set(),
+  review: new Set(),
+  'review-rule': new Set(),
+})
 
 /** 详情页面的展开后实际 URL 列表 */
 const detailPageResolvedUrls = computed(() => {
@@ -895,6 +1141,66 @@ async function doDiscoverReview(id: string) {
   } finally {
     discoveringReviewProject.value = null
   }
+}
+
+// ========== 管理弹窗 ==========
+
+function toggleManagerExpand(category: string, id: string) {
+  const set = expandedManagerIds[category]
+  if (!set) return
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
+}
+
+async function openApiManager(project: TestProject) {
+  showApiManager.value = true
+  apiManagerProjectName.value = project.name
+  apiManagerLoading.value = true
+  apiManagerDiscovery.value = null
+  apiManagerTests.value = null
+  expandedManagerIds.api.clear()
+  expandedManagerIds['api-test'].clear()
+  try {
+    const [discoveryRes, testsRes] = await Promise.all([
+      getApiDiscovery(project.id).catch(() => ({ data: null })),
+      getApiTests(project.id).catch(() => ({ data: null })),
+    ])
+    apiManagerDiscovery.value = discoveryRes.data
+    apiManagerTests.value = testsRes.data
+  } catch { /* ignore */ }
+  apiManagerLoading.value = false
+}
+
+async function openFrontendManager(project: TestProject) {
+  showFrontendManager.value = true
+  frontendManagerProjectName.value = project.name
+  frontendManagerLoading.value = true
+  frontendManagerData.value = null
+  expandedManagerIds.frontend.clear()
+  try {
+    const res = await getFrontendDiscovery(project.id).catch(() => ({ data: null }))
+    frontendManagerData.value = res.data
+  } catch { /* ignore */ }
+  frontendManagerLoading.value = false
+}
+
+async function openReviewManager(project: TestProject) {
+  showReviewManager.value = true
+  reviewManagerProjectName.value = project.name
+  reviewManagerLoading.value = true
+  reviewManagerDiscovery.value = null
+  reviewManagerRules.value = null
+  expandedManagerIds.review.clear()
+  expandedManagerIds['review-rule'].clear()
+  try {
+    const [discoveryRes, rulesRes] = await Promise.all([
+      getReviewDiscovery(project.id).catch(() => ({ data: null })),
+      getReviewRules(project.id).catch(() => ({ data: null })),
+    ])
+    reviewManagerDiscovery.value = discoveryRes.data
+    reviewManagerRules.value = rulesRes.data
+  } catch { /* ignore */ }
+  reviewManagerLoading.value = false
 }
 
 // ========== 基础配置操作 ==========
@@ -1433,6 +1739,7 @@ function showPageDetail(page: PageConfig) {
 .project-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .project-detail {
   margin-bottom: 4px;
@@ -2064,5 +2371,303 @@ function showPageDetail(page: PageConfig) {
 .discover-option-desc {
   font-size: 12px;
   color: #999;
+}
+
+/* 按钮分组 */
+.project-action-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.action-group-tools {
+  margin-left: auto;
+}
+.action-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  min-width: 28px;
+  text-align: center;
+}
+.label-e2e { background: #667eea; color: #fff; }
+.label-frontend { background: #fa8c16; color: #fff; }
+.label-api { background: #13c2c2; color: #fff; }
+.label-review { background: #722ed1; color: #fff; }
+
+/* 管理按钮样式 */
+.btn-manage-api {
+  background: #e6fffb !important;
+  color: #13c2c2 !important;
+}
+.btn-manage-api:hover:not(:disabled) {
+  background: #b5f5ec !important;
+}
+.btn-manage-frontend {
+  background: #fff7e6 !important;
+  color: #fa8c16 !important;
+}
+.btn-manage-frontend:hover:not(:disabled) {
+  background: #ffe7ba !important;
+}
+.btn-manage-review {
+  background: #f9f0ff !important;
+  color: #722ed1 !important;
+}
+.btn-manage-review:hover:not(:disabled) {
+  background: #efdbff !important;
+}
+
+/* 管理弹窗通用 */
+.manager-summary {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #888;
+  padding: 8px 12px;
+  background: #f9f9fb;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.manager-section {
+  margin-bottom: 16px;
+}
+.manager-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.manager-block {
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.manager-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+}
+.manager-block-header:hover {
+  background: #f5f5f5;
+}
+.manager-block-name {
+  font-weight: 500;
+  color: #333;
+}
+.manager-block-count {
+  font-size: 11px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.manager-block-desc {
+  font-size: 11px;
+  color: #aaa;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manager-block-path {
+  font-size: 11px;
+  color: #888;
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.manager-block-body {
+  padding: 8px 12px;
+}
+
+/* 接口列表项 */
+.manager-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+.manager-item:hover {
+  background: #f9f9fb;
+}
+.method-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  min-width: 36px;
+  text-align: center;
+  color: #fff;
+}
+.method-badge.get { background: #61affe; }
+.method-badge.post { background: #49cc90; }
+.method-badge.put { background: #fca130; }
+.method-badge.delete { background: #f93e3e; }
+.method-badge.patch { background: #50e3c2; }
+.ep-path {
+  font-size: 11px;
+  color: #666;
+  font-family: monospace;
+  background: #f5f5f5;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+.ep-name {
+  color: #888;
+  font-size: 12px;
+}
+
+/* 前端组件列表 */
+.frontend-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
+}
+.frontend-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.frontend-file-path {
+  font-size: 12px;
+  color: #333;
+  background: #f5f5f5;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.complexity-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.complexity-badge.low { background: #f6ffed; color: #52c41a; }
+.complexity-badge.medium { background: #fffbe6; color: #faad14; }
+.complexity-badge.high { background: #fff2f0; color: #ff4d4f; }
+.frontend-file-detail {
+  width: 100%;
+  padding-left: 12px;
+}
+.frontend-file-desc {
+  font-size: 11px;
+  color: #888;
+}
+.frontend-exports {
+  font-size: 11px;
+  color: #666;
+}
+.frontend-exports code {
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  margin-right: 4px;
+}
+.frontend-testable {
+  font-size: 11px;
+  color: #fa8c16;
+}
+.frontend-functions {
+  margin-top: 4px;
+}
+.frontend-fn {
+  font-size: 11px;
+  color: #666;
+  padding: 1px 0;
+}
+.frontend-fn code {
+  background: #f0f0f0;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  color: #333;
+}
+
+/* 审查相关 */
+.risk-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.risk-badge.high { background: #fff2f0; color: #ff4d4f; }
+.risk-badge.medium { background: #fffbe6; color: #faad14; }
+.risk-badge.low { background: #f6ffed; color: #52c41a; }
+.severity-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.severity-badge.critical { background: #fff2f0; color: #ff4d4f; }
+.severity-badge.warning { background: #fffbe6; color: #faad14; }
+.severity-badge.info { background: #e6f7ff; color: #1890ff; }
+.manager-info-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+.manager-info-item {
+  font-size: 12px;
+  color: #666;
+}
+.manager-info-item label {
+  color: #999;
+  margin-right: 4px;
+}
+.review-rule-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.review-rule-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rule-id {
+  background: #ede9fe;
+  color: #7c3aed;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.rule-title {
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+.review-rule-desc {
+  font-size: 11px;
+  color: #888;
+  padding-left: 60px;
+}
+.review-rule-suggestion {
+  font-size: 11px;
+  color: #52c41a;
+  padding-left: 60px;
 }
 </style>

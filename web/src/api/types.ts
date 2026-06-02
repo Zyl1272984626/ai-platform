@@ -122,7 +122,7 @@ export interface StepRun {
 export interface Skill {
   name: string
   description: string
-  type: 'scene' | 'capability'
+  type: 'scene' | 'capability' | 'test'
   tags?: string[]
   dependencies?: string[]
   content?: string

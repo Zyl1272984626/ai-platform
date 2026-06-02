@@ -121,9 +121,13 @@ async function preflightCheck(type: TestType, config?: Record<string, unknown>):
   const project = projectId ? getProjectById(projectId) : undefined;
 
   if (project) {
-    // 检测项目前端可达性
+    // 检测项目前端可达性（使用 loginUrl 而非根路径，因为根路径可能不返回 200）
+    const checkUrl = project.loginUrl
+      ? `${project.baseUrl}${project.loginUrl}`
+      : project.baseUrl;
     try {
-      const resp = await fetch(project.baseUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      const resp = await fetch(checkUrl, { method: 'GET', signal: AbortSignal.timeout(5000) });
+      // SPA 页面通常返回 200，即使路由是 hash 模式
       if (!resp.ok && resp.status !== 200) {
         return `项目 ${project.name} 前端不可达 (${project.baseUrl})`;
       }

@@ -11,6 +11,7 @@
           <button class="ftab" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部</button>
           <button class="ftab" :class="{ active: filter === 'scene' }" @click="filter = 'scene'">场景</button>
           <button class="ftab" :class="{ active: filter === 'capability' }" @click="filter = 'capability'">能力</button>
+          <button class="ftab" :class="{ active: filter === 'test' }" @click="filter = 'test'">测试</button>
         </div>
       </div>
     </header>
@@ -23,7 +24,7 @@
         @click="openDetail(skill.name)"
       >
         <div class="skill-top">
-          <span class="skill-type-badge" :class="skill.type">{{ skill.type === 'scene' ? '场景' : '能力' }}</span>
+          <span class="skill-type-badge" :class="skill.type">{{ skill.type === 'scene' ? '场景' : skill.type === 'test' ? '测试' : '能力' }}</span>
           <span class="skill-name">{{ skill.name }}</span>
         </div>
         <div class="skill-desc">{{ skill.description }}</div>
@@ -74,7 +75,7 @@ import type { Skill } from '../api/types'
 const router = useRouter()
 const skills = ref<Skill[]>([])
 const search = ref('')
-const filter = ref<'all' | 'scene' | 'capability'>('all')
+const filter = ref<'all' | 'scene' | 'capability' | 'test'>('all')
 const detailSkill = ref<Skill | null>(null)
 const detailContent = ref('')
 
@@ -191,6 +192,7 @@ function tryInChat() {
 }
 .skill-type-badge.scene { background: #eef0ff; color: #667eea; }
 .skill-type-badge.capability { background: #f0fff4; color: #52c41a; }
+.skill-type-badge.test { background: #f9f0ff; color: #722ed1; }
 .skill-name {
   font-size: 14px;
   font-weight: 600;

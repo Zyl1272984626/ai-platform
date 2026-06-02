@@ -8,7 +8,7 @@ import { AI_PLATFORM_ROOT } from './config.js';
 export interface SkillMeta {
   name: string;
   description: string;
-  type: 'scene' | 'capability';
+  type: 'scene' | 'capability' | 'test';
   path: string;
   allowedTools?: string[];
   dependencies?: string[];
@@ -24,11 +24,16 @@ const SKILLS_DIR = path.resolve(AI_PLATFORM_ROOT, 'skills');
 export function listSkills(): SkillMeta[] {
   const skills: SkillMeta[] = [];
 
-  for (const dirName of ['scenes', 'capabilities']) {
+  for (const dirName of ['scenes', 'capabilities', 'tests']) {
     const typeDir = path.join(SKILLS_DIR, dirName);
     if (!fs.existsSync(typeDir)) continue;
 
-    const skillType = dirName === 'scenes' ? 'scene' as const : 'capability' as const;
+    const typeMap: Record<string, 'scene' | 'capability' | 'test'> = {
+      scenes: 'scene',
+      capabilities: 'capability',
+      tests: 'test',
+    };
+    const skillType = typeMap[dirName];
 
     for (const name of fs.readdirSync(typeDir)) {
       const skillFile = path.join(typeDir, name, 'SKILL.md');
@@ -56,7 +61,7 @@ export function getSkill(name: string): SkillMeta | undefined {
 function parseSkillFrontmatter(
   content: string,
   name: string,
-  type: 'scene' | 'capability',
+  type: 'scene' | 'capability' | 'test',
   filePath: string
 ): SkillMeta {
   const meta: SkillMeta = {
