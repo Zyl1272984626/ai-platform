@@ -792,3 +792,48 @@ projectsRouter.get('/:id/discovery-log/:type', async (req: Request, res: Respons
     res.json(null);
   }
 });
+
+// ========== 生成发现提示词 ==========
+
+/** 生成发现提示词（供前端复制到 Claude Code 手动执行） */
+projectsRouter.post('/:id/generate-discovery-prompt', async (req: Request, res: Response) => {
+  const { type } = req.body;
+  const projectId = req.params.id;
+
+  if (!type) return res.status(400).json({ error: 'type is required' });
+
+  try {
+    let result: { prompt: string; cwd: string };
+    switch (type) {
+      case 'api': {
+        const { generateApiDiscoveryPrompt } = await import('../services/api-discovery.js');
+        result = generateApiDiscoveryPrompt(projectId);
+        break;
+      }
+      case 'frontend': {
+        const { generateFrontendDiscoveryPrompt } = await import('../services/frontend-discovery.js');
+        result = generateFrontendDiscoveryPrompt(projectId);
+        break;
+      }
+      case 'review': {
+        const { generateReviewDiscoveryPrompt } = await import('../services/review-discovery.js');
+        result = generateReviewDiscoveryPrompt(projectId);
+        break;
+      }
+      case 'context': {
+        const { generateContextDiscoveryPrompt } = await import('../services/page-context-discovery.js');
+        result = generateContextDiscoveryPrompt(projectId);
+        break;
+      }
+      case 'e2e': {
+        // E2E 发现使用 Playwright，不走 Claude Code，暂不支持
+        return res.status(400).json({ error: 'E2E 页面发现使用 Playwright 自动化，不支持手动执行' });
+      }
+      default:
+        return res.status(400).json({ error: `不支持的发现类型: ${type}` });
+    }
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});

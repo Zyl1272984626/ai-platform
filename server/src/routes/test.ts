@@ -13,6 +13,9 @@ import {
   listRunningSuites,
   getConcurrency,
   setConcurrency,
+  resumeTestRun,
+  chatWithReview,
+  generateTestPrompt,
   type TestType,
 } from '../services/test-runner.js';
 import { testBus } from '../services/test-events.js';
@@ -41,6 +44,18 @@ testRouter.get('/runs/:id', (req: Request, res: Response) => {
   const run = getTestRun(req.params.id);
   if (!run) return res.status(404).json({ error: 'Run not found' });
   res.json(run);
+});
+
+// 生成提示词（供前端复制到 Claude Code 手动执行）
+testRouter.post('/generate-prompt', (req: Request, res: Response) => {
+  const { type, config } = req.body;
+  if (!type) return res.status(400).json({ error: 'type is required' });
+  try {
+    const result = generateTestPrompt(type as TestType, config || {});
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // 创建并执行测试（返回 JSON，SSE 通过 /runs/:id/stream 订阅）
@@ -103,12 +118,16 @@ testRouter.get('/runs/:id/stream', (req: Request, res: Response) => {
   const onTestUpdate = (d: any) => onEvent('test:update', d);
   const onAgentStream = (d: any) => onEvent('agent:stream', d);
   const onTestError = (d: any) => onEvent('test:error', d);
+  const onTestResumed = (d: any) => onEvent('test:resumed', d);
+  const onAgentChat = (d: any) => onEvent('agent:chat', d);
 
   testBus.on('test:start', onTestStart);
   testBus.on('test:update', onTestUpdate);
   testBus.on('agent:stream', onAgentStream);
   testBus.on('test:done', onDone);
   testBus.on('test:error', onTestError);
+  testBus.on('test:resumed', onTestResumed);
+  testBus.on('agent:chat', onAgentChat);
 
   // 心跳保活
   const heartbeat = setInterval(() => {
@@ -125,6 +144,8 @@ testRouter.get('/runs/:id/stream', (req: Request, res: Response) => {
     testBus.off('agent:stream', onAgentStream);
     testBus.off('test:done', onDone);
     testBus.off('test:error', onTestError);
+    testBus.off('test:resumed', onTestResumed);
+    testBus.off('agent:chat', onAgentChat);
   });
 });
 
@@ -151,6 +172,35 @@ testRouter.post('/concurrency', (req: Request, res: Response) => {
 testRouter.post('/runs/:id/abort', (req: Request, res: Response) => {
   const ok = abortTestRun(req.params.id);
   res.json({ ok });
+});
+
+// 恢复中断的代码审查
+testRouter.post('/runs/:id/resume', async (req: Request, res: Response) => {
+  try {
+    const suiteId = await resumeTestRun(req.params.id);
+    // 启动执行
+    executeTestRun(suiteId).catch((err) => {
+      testBus.emit('test:error', { suiteId, error: err.message });
+    });
+    res.json({ suiteId });
+  } catch (err: unknown) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+});
+
+// 人工对话（基于审查上下文）
+testRouter.post('/runs/:id/chat', async (req: Request, res: Response) => {
+  const { message } = req.body;
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  try {
+    const chatSuiteId = await chatWithReview(req.params.id, message);
+    res.json({ suiteId: chatSuiteId });
+  } catch (err: unknown) {
+    res.status(400).json({ error: (err as Error).message });
+  }
 });
 
 // 获取 E2E 测试报告（HTML）

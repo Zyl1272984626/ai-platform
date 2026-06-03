@@ -78,3 +78,18 @@ export function setConcurrency(type: string, value: number) {
 export function getReportUrl(runId: string): string {
   return `/api/tests/runs/${runId}/report`
 }
+
+/** 恢复中断的代码审查 */
+export function resumeTestRun(id: string) {
+  return api.post<{ suiteId: string }>(`/tests/runs/${id}/resume`).then(r => r.data)
+}
+
+/** 对话（基于审查上下文） */
+export function chatWithReviewApi(runId: string, message: string) {
+  return api.post<{ suiteId: string }>(`/tests/runs/${runId}/chat`, { message }).then(r => r.data)
+}
+
+/** 生成测试提示词（供复制到 Claude Code 手动执行） */
+export function generateTestPrompt(type: string, config: Record<string, unknown> = {}) {
+  return api.post<{ prompt: string; cwd: string }>('/tests/generate-prompt', { type, config }).then(r => r.data)
+}

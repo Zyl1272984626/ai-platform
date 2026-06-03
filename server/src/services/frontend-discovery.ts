@@ -213,7 +213,7 @@ function buildFrontendDiscoveryPrompt(project: any): string {
 /** 从 Skill 文件加载 prompt，替换模板变量 */
 function loadSkillPrompt(skillName: string, project: any): string {
   const config = getConfig();
-  const skillPath = path.resolve(config.aiPlatformRoot, 'skills', 'tests', skillName, 'SKILL.md');
+  const skillPath = path.resolve(config.aiPlatformRoot, 'skills', 'base', skillName, 'SKILL.md');
 
   let content = '';
   try {
@@ -229,6 +229,28 @@ function loadSkillPrompt(skillName: string, project: any): string {
     .replace(/\{\{projectName\}\}/g, project.name)
     .replace(/\{\{sourcePath\}\}/g, project.sourcePath)
     .replace(/\{\{outputDir\}\}/g, outputDir.replace(/\\/g, '/'));
+}
+
+/** 生成发现提示词（供前端复制到 Claude Code 手动执行） */
+export function generateFrontendDiscoveryPrompt(projectId: string): { prompt: string; cwd: string } {
+  const project = getProjectById(projectId);
+  if (!project?.sourcePath) throw new Error('项目不存在或未配置源码路径');
+  const config = getConfig();
+  const skillPath = path.resolve(config.aiPlatformRoot, 'skills', 'base', 'frontend-discovery', 'SKILL.md');
+  const outputDir = path.join(DATA_DIR, 'projects', project.id).replace(/\\/g, '/');
+
+  const prompt = `请先 Read 以下 Skill 文件理解发现流程，然后执行前端组件发现。
+
+Skill 文件: ${skillPath.replace(/\\/g, '/')}
+
+## 项目信息
+- 项目名称: ${project.name}
+- 源码路径: ${project.sourcePath}
+- 输出目录: ${outputDir}
+
+请严格按照 Skill 文件中的流程执行，将发现结果写入输出目录。`;
+
+  return { prompt, cwd: project.sourcePath };
 }
 
 function detectFrontendProgress(output: string, onProgress?: (p: FrontendDiscoveryProgress) => void) {

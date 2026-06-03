@@ -105,8 +105,8 @@ tags: ["e2e", "test", "playwright", "page-test"]
 所有页面测试完成后：
 1. 汇总所有页面结果
 2. 计算通过率、平均评分、问题统计
-3. 将完整结果写入 `{e2eDataDir}/runs/{runId}/run.json`
-4. 生成 HTML 报告写入 `{e2eDataDir}/reports/{runId}.html`
+3. 将完整结果写入 `{e2eDataDir}/runs/{projectName}/{runId}/run.json`
+4. 生成 HTML 报告写入 `{e2eDataDir}/reports/{projectName}/{runId}.html`
 
 ## 评分规则
 

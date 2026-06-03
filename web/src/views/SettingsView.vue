@@ -57,6 +57,9 @@
               <button class="btn btn-sm btn-discover-frontend" @click="doDiscoverFrontend(project.id)" :disabled="discoveringFrontendProject === project.id">
                 {{ discoveringFrontendProject === project.id ? '发现中...' : '发现组件' }}
               </button>
+              <button class="btn btn-sm btn-prompt-copy" @click="doCopyDiscoveryPrompt(project.id, 'frontend')" title="复制提示词到 Claude Code 执行">
+                复制提示词
+              </button>
               <button class="btn btn-sm btn-manage-frontend" @click="openFrontendManager(project)">
                 管理组件
               </button>
@@ -65,6 +68,9 @@
               <span class="action-group-label label-api">API</span>
               <button class="btn btn-sm btn-discover-api" @click="doDiscoverApi(project.id)" :disabled="discoveringApiProject === project.id">
                 {{ discoveringApiProject === project.id ? '发现中...' : '发现接口' }}
+              </button>
+              <button class="btn btn-sm btn-prompt-copy" @click="doCopyDiscoveryPrompt(project.id, 'api')" title="复制提示词到 Claude Code 执行">
+                复制提示词
               </button>
               <button class="btn btn-sm btn-manage-api" @click="openApiManager(project)">
                 管理接口
@@ -75,6 +81,9 @@
               <button class="btn btn-sm btn-discover-review" @click="doDiscoverReview(project.id)" :disabled="discoveringReviewProject === project.id">
                 {{ discoveringReviewProject === project.id ? '发现中...' : '发现审查点' }}
               </button>
+              <button class="btn btn-sm btn-prompt-copy" @click="doCopyDiscoveryPrompt(project.id, 'review')" title="复制提示词到 Claude Code 执行">
+                复制提示词
+              </button>
               <button class="btn btn-sm btn-manage-review" @click="openReviewManager(project)">
                 管理审查点
               </button>
@@ -83,6 +92,9 @@
               <span class="action-group-label label-context">知识</span>
               <button class="btn btn-sm btn-discover-context" @click="doDiscoverContext(project.id)" :disabled="discoveringContextProject === project.id">
                 {{ discoveringContextProject === project.id ? '生成中...' : '生成图谱' }}
+              </button>
+              <button class="btn btn-sm btn-prompt-copy" @click="doCopyDiscoveryPrompt(project.id, 'context')" title="复制提示词到 Claude Code 执行">
+                复制提示词
               </button>
               <button class="btn btn-sm btn-manage-context" @click="openContextManager(project)">
                 查看图谱
@@ -173,6 +185,47 @@
         </div>
       </section>
 
+      <!-- Claude 配置 -->
+      <section class="setting-section">
+        <h2 class="section-title">🤖 Claude 配置（智谱 CodePlan）</h2>
+        <div class="form-group">
+          <label>认证 Token <span class="required">*</span></label>
+          <p class="field-desc">智谱 CodePlan 的 ANTHROPIC_AUTH_TOKEN</p>
+          <div class="input-row token-row">
+            <input
+              v-model="form.claudeConfig.authToken"
+              :type="showToken ? 'text' : 'password'"
+              placeholder="粘贴 CodePlan Token"
+            />
+            <button class="btn-toggle-pw" @click="showToken = !showToken">
+              {{ showToken ? '隐藏' : '显示' }}
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>API 地址</label>
+          <p class="field-desc">ANTHROPIC_BASE_URL，智谱 Anthropic 兼容接口地址</p>
+          <input v-model="form.claudeConfig.baseUrl" placeholder="https://open.bigmodel.cn/api/anthropic" />
+        </div>
+        <div class="form-group">
+          <label>模型</label>
+          <p class="field-desc">ANTHROPIC_MODEL，默认使用的模型</p>
+          <select v-model="form.claudeConfig.model" class="model-select">
+            <option value="glm-5.1">glm-5.1</option>
+            <option value="glm-4.5">glm-4.5</option>
+            <option value="glm-4-plus">glm-4-plus</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-top: 12px;">
+          <button class="btn-test-claude" :disabled="testingClaude || !form.claudeConfig.authToken" @click="doTestClaude">
+            {{ testingClaude ? '测试中...' : '🔗 测试连接' }}
+          </button>
+          <span v-if="claudeTestResult" class="check-badge" :class="claudeTestResult.ok ? 'ok' : 'err'" style="margin-left: 10px;">
+            {{ claudeTestResult.msg }}
+          </span>
+        </div>
+      </section>
+
       <!-- 环境检测 -->
       <section class="setting-section">
         <h2 class="section-title">环境检测</h2>
@@ -186,9 +239,9 @@
             <span v-else class="check-badge pending">待检测</span>
           </div>
           <div class="env-check-item">
-            <span class="env-label">ANTHROPIC_API_KEY</span>
-            <span v-if="checks.anthropicApiKey" class="check-badge" :class="checks.anthropicApiKey.ok ? 'ok' : 'err'">
-              {{ checks.anthropicApiKey.msg }}
+            <span class="env-label">Claude 配置 (CodePlan)</span>
+            <span v-if="checks.claudeConfig" class="check-badge" :class="checks.claudeConfig.ok ? 'ok' : 'err'">
+              {{ checks.claudeConfig.msg }}
             </span>
             <span v-else class="check-badge pending">待检测</span>
           </div>
@@ -825,7 +878,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, type Ref } from 'vue'
 import { marked } from 'marked'
-import { getSettings, updateSettings, checkSettings, type PlatformConfig, type CheckResult } from '../api/settings'
+import { getSettings, updateSettings, checkSettings, testClaude, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import {
   getProjects as fetchProjects,
@@ -868,6 +921,9 @@ const loading = ref(true)
 const saving = ref(false)
 const checking = ref(false)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
+const showToken = ref(false)
+const testingClaude = ref(false)
+const claudeTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 
 // 基础配置表单
 const form = reactive<PlatformConfig>({
@@ -875,6 +931,11 @@ const form = reactive<PlatformConfig>({
   e2eDataDir: '',
   testDataDir: '',
   apiTestBaseUrl: '',
+  claudeConfig: {
+    authToken: '',
+    baseUrl: 'https://open.bigmodel.cn/api/anthropic',
+    model: 'glm-5.1',
+  },
 })
 
 // 完整配置（含 projects）
@@ -1150,6 +1211,10 @@ onMounted(async () => {
     // 加载基础配置
     const settingsRes = await getSettings()
     Object.assign(form, settingsRes.data)
+    // 确保 claudeConfig 嵌套对象正确赋值
+    if ((settingsRes.data as any).claudeConfig) {
+      form.claudeConfig = { ...form.claudeConfig, ...(settingsRes.data as any).claudeConfig }
+    }
     config.defaultProjectId = (settingsRes.data as any).defaultProjectId || ''
 
     // 加载项目列表
@@ -1548,6 +1613,19 @@ async function doSave() {
   }
 }
 
+async function doTestClaude() {
+  testingClaude.value = true
+  claudeTestResult.value = null
+  try {
+    const res = await testClaude(form.claudeConfig)
+    claudeTestResult.value = res.data
+  } catch (e: any) {
+    claudeTestResult.value = { ok: false, msg: '请求失败: ' + e.message }
+  } finally {
+    testingClaude.value = false
+  }
+}
+
 async function doCheck() {
   checking.value = true
   message.value = null
@@ -1818,6 +1896,17 @@ function openPageUrl(page: PageConfig) {
 function showPageDetail(page: PageConfig) {
   detailPage.value = page
 }
+
+// ========== 复制发现提示词 ==========
+async function doCopyDiscoveryPrompt(projectId: string, type: string) {
+  try {
+    const result = await generateDiscoveryPrompt(projectId, type)
+    await navigator.clipboard.writeText(result.prompt)
+    message.value = { type: 'success', text: `已复制 ${type} 发现提示词到剪贴板，可粘贴到 Claude Code 执行` }
+  } catch (e: any) {
+    message.value = { type: 'error', text: '生成提示词失败: ' + (e.response?.data?.error || e.message) }
+  }
+}
 </script>
 
 <style scoped>
@@ -1884,6 +1973,62 @@ function showPageDetail(page: PageConfig) {
 }
 .required {
   color: #ff4d4f;
+}
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.token-row input {
+  flex: 1;
+  font-family: monospace;
+  font-size: 13px;
+}
+.btn-toggle-pw {
+  padding: 6px 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.btn-toggle-pw:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+.model-select {
+  width: 240px;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  appearance: auto;
+}
+.model-select:focus {
+  border-color: #667eea;
+  outline: none;
+}
+.btn-test-claude {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+.btn-test-claude:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-test-claude:not(:disabled):hover {
+  opacity: 0.85;
 }
 .field-desc {
   font-size: 12px;
@@ -2249,6 +2394,16 @@ function showPageDetail(page: PageConfig) {
 }
 .btn-discover:hover:not(:disabled) {
   background: #5a6fd6 !important;
+}
+.btn-prompt-copy {
+  background: #fff !important;
+  color: #667eea !important;
+  border: 1px dashed #667eea !important;
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+}
+.btn-prompt-copy:hover {
+  background: #f0f0ff !important;
 }
 .btn-discover-api {
   background: #13c2c2 !important;

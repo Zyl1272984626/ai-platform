@@ -146,10 +146,47 @@
             </div>
           </div>
         </div>
+        <!-- 前端测试：项目选择 + 模块勾选 -->
+        <div v-if="activeType === 'frontend'" class="agent-params">
+          <div class="param-row">
+            <label>目标项目</label>
+            <select v-model="selectedProjectId" @change="onFrontendProjectChange" class="param-input">
+              <option value="">请选择项目</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+          </div>
+          <div v-if="frontendDiscoverySummary" class="api-discovery-info">
+            <span class="discovery-info-text">
+              已发现: {{ frontendDiscoverySummary.totalModules || 0 }} 类 {{ frontendDiscoverySummary.totalTestTargets || 0 }} 个目标
+            </span>
+          </div>
+          <div v-if="frontendModules.length > 0" class="module-select">
+            <div class="module-check module-check-all">
+              <label>
+                <input type="checkbox" :checked="selectedFrontendModules.length === frontendModules.length" @change="toggleAllFrontendModules" />
+                <strong>全选 ({{ selectedFrontendModules.length }}/{{ frontendModules.length }})</strong>
+              </label>
+            </div>
+            <div v-for="mod in frontendModules" :key="mod.id" class="module-check">
+              <label>
+                <input type="checkbox" :value="mod.id" v-model="selectedFrontendModules" />
+                {{ mod.name }} ({{ mod.files?.length || 0 }} 个文件)
+              </label>
+            </div>
+          </div>
+          <div v-else-if="selectedProjectId && !apiLoading" class="no-discovery-hint">
+            请先在设置页面点击「发现组件」
+          </div>
+        </div>
       </div>
-      <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'codereview' && (!selectedProjectId || selectedReviewModules.length === 0))" @click="startTest">
-        ▶ 开始测试
-      </button>
+      <div class="type-header-actions">
+        <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'frontend' && (!selectedProjectId || selectedFrontendModules.length === 0)) || (activeType === 'codereview' && (!selectedProjectId || selectedReviewModules.length === 0))" @click="startTest">
+          ▶ 开始测试
+        </button>
+        <button v-if="activeType === 'e2e' || activeType === 'codereview'" class="btn-prompt" :disabled="!selectedProjectId || (activeType === 'codereview' && selectedReviewModules.length === 0)" @click="doGeneratePrompt">
+          生成提示词
+        </button>
+      </div>
     </div>
 
     <!-- 运行面板：支持多个并行运行 -->
@@ -157,7 +194,8 @@
       <div v-if="stream.type === activeType" class="run-panel" :class="{ 'run-panel-done': stream.done }">
         <div class="run-panel-header">
           <div class="run-panel-title">
-            <span v-if="!stream.done" class="streaming-indicator">运行中</span>
+            <span v-if="stream.isResume && !stream.done" class="streaming-indicator resume-indicator">恢复运行</span>
+            <span v-else-if="!stream.done" class="streaming-indicator">运行中</span>
             <span v-else class="stream-done">已完成</span>
             <span>{{ stream.name || '测试运行中...' }}</span>
           </div>
@@ -183,6 +221,32 @@
               :done="!!block.result"
             />
           </template>
+        </div>
+        <!-- 聊天输入区（代码审查和 Agent 类型可用） -->
+        <div v-if="stream.type === 'codereview' || stream.type === 'agent'" class="chat-area">
+          <div v-if="stream.chatMessages.length > 0" class="chat-messages">
+            <template v-for="(msg, idx) in stream.chatMessages" :key="idx">
+              <div class="chat-msg chat-user">
+                <span class="chat-avatar">💬</span>
+                <span class="chat-text">{{ msg.text }}</span>
+              </div>
+              <div v-if="msg.reply" class="chat-msg chat-assistant">
+                <span class="chat-avatar">🤖</span>
+                <div class="chat-text" v-html="renderMarkdown(msg.reply)"></div>
+              </div>
+            </template>
+          </div>
+          <div class="chat-input-row">
+            <input
+              v-model="stream.chatInput"
+              placeholder="输入消息，如'重点看一下 auth.ts 的安全性'..."
+              @keydown.enter="sendChat(streamId)"
+              :disabled="stream.chatLoading"
+            />
+            <button @click="sendChat(streamId)" :disabled="stream.chatLoading || !stream.chatInput?.trim()">
+              {{ stream.chatLoading ? '...' : '发送' }}
+            </button>
+          </div>
         </div>
       </div>
     </template>
@@ -236,6 +300,8 @@
             <div v-if="tc.error" class="detail-error">{{ tc.error }}</div>
           </div>
           <div class="detail-actions">
+            <button v-if="canResume(run)" class="btn-resume" @click.stop="handleResumeRun(run.id)">🔄 恢复审查</button>
+            <button v-if="canChat(run) && !canResume(run)" class="btn-chat" @click.stop="openChatStream(run.id)">💬 继续对话</button>
             <div v-if="(run.type === 'e2e' || run.type === 'codereview') && run.config?.reportPath" class="report-info">
               <span class="report-path">{{ run.config.reportPath }}</span>
               <button class="btn-report" @click.stop="openReport(run.id)">查看报告</button>
@@ -248,6 +314,19 @@
         </div>
       </div>
     </section>
+
+    <!-- 提示词弹窗 -->
+    <div v-if="showPromptModal" class="modal-overlay" @click.self="showPromptModal = false">
+      <div class="modal-content prompt-modal">
+        <h3>生成的提示词</h3>
+        <p class="field-desc">复制以下内容粘贴到 Claude Code 窗口即可手动执行</p>
+        <textarea class="prompt-textarea" readonly :value="generatedPrompt" @click="($event.target as HTMLTextAreaElement).select()"></textarea>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showPromptModal = false">关闭</button>
+          <button class="btn btn-copy" @click="copyPrompt">{{ promptCopied ? '已复制!' : '复制提示词' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -260,6 +339,8 @@ import {
   listTestTypes, listTestRuns, runTest, deleteTestRun as apiDelete,
   abortTestRun as apiAbort, getReportUrl, listRunningTests, subscribeTestStream,
   getConcurrency, setConcurrency as apiSetConcurrency,
+  resumeTestRun as apiResume, chatWithReviewApi,
+  generateTestPrompt as apiGenerateTestPrompt,
   type TestTypeInfo, type TestRun,
 } from '../api/tests'
 import {
@@ -285,6 +366,12 @@ interface StreamBlock {
   toolUseId?: string
 }
 
+interface ChatMessage {
+  text: string
+  reply: string
+  loading?: boolean
+}
+
 interface StreamState {
   blocks: StreamBlock[]
   done: boolean
@@ -293,6 +380,10 @@ interface StreamState {
   es: EventSource | null
   name: string
   type: string  // 测试类型，用于过滤显示
+  isResume?: boolean  // 是否为恢复模式
+  chatMessages: ChatMessage[]
+  chatInput: string
+  chatLoading: boolean
 }
 
 const testTypes = ref<TestTypeInfo[]>([])
@@ -331,6 +422,11 @@ const apiLoading = ref(false)
 const reviewRulesInfo = ref<any>(null)
 const reviewModules = ref<any[]>([])
 const selectedReviewModules = ref<string[]>([])
+
+// 前端测试参数
+const frontendDiscoverySummary = ref<any>(null)
+const frontendModules = ref<any[]>([])
+const selectedFrontendModules = ref<string[]>([])
 
 const currentType = computed(() => testTypes.value.find(t => t.type === activeType.value))
 const filteredRuns = computed(() => runs.value.filter(r => r.type === activeType.value))
@@ -509,10 +605,82 @@ function handleSSEEvent(evt: any, suiteId: string) {
     }
     // 同时刷新 runs 以更新历史
     refreshRuns()
+  } else if (evt.event === 'test:resumed') {
+    // 恢复模式提示
+    const skipped = evt.skippedCases?.length || 0
+    const resumed = evt.resumedCases?.length || 0
+    stream.isResume = true
+    stream.blocks.push({
+      type: 'text',
+      content: `ℹ️ 恢复模式：跳过 ${skipped} 个已完成模块，恢复 ${resumed} 个中断模块\n`,
+    })
+    scrollToBottom(suiteId)
+  } else if (evt.event === 'agent:chat') {
+    // 聊天消息事件
+    if (evt.type === 'text' && evt.content) {
+      // 追加到聊天消息的回复中
+      const lastMsg = stream.chatMessages[stream.chatMessages.length - 1]
+      if (lastMsg && lastMsg.loading) {
+        lastMsg.reply += evt.content
+        lastMsg.loading = false
+      } else if (lastMsg) {
+        lastMsg.reply += evt.content
+      }
+      scrollToBottom(suiteId)
+    } else if (evt.type === 'tool_use') {
+      // 工具调用在聊天回复中简要显示
+      const lastMsg = stream.chatMessages[stream.chatMessages.length - 1]
+      if (lastMsg) {
+        const toolLine = `\n🔧 ${evt.name}(${Object.keys(evt.input || {}).slice(0, 2).join(', ')}...)\n`
+        lastMsg.reply += toolLine
+      }
+      scrollToBottom(suiteId)
+    }
   }
 }
 
 /** 从 UI 开始新测试 */
+// ========== 生成提示词 ==========
+const showPromptModal = ref(false)
+const generatedPrompt = ref('')
+const promptCopied = ref(false)
+
+async function doGeneratePrompt() {
+  const config: Record<string, unknown> = {}
+  if (activeType.value === 'e2e') {
+    config.mode = e2eMode.value
+    config.scope = e2eScope.value
+    config.projectId = selectedProjectId.value
+  }
+  if (activeType.value === 'codereview') {
+    config.projectId = selectedProjectId.value
+    config.modules = selectedReviewModules.value
+  }
+
+  try {
+    const result = await apiGenerateTestPrompt(activeType.value, config)
+    generatedPrompt.value = result.prompt
+    showPromptModal.value = true
+    promptCopied.value = false
+  } catch (e: any) {
+    alert('生成提示词失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
+async function copyPrompt() {
+  try {
+    await navigator.clipboard.writeText(generatedPrompt.value)
+    promptCopied.value = true
+    setTimeout(() => { promptCopied.value = false }, 2000)
+  } catch {
+    // fallback: select textarea
+    const ta = document.querySelector('.prompt-textarea') as HTMLTextAreaElement
+    if (ta) { ta.select(); document.execCommand('copy') }
+    promptCopied.value = true
+    setTimeout(() => { promptCopied.value = false }, 2000)
+  }
+}
+
 async function startTest() {
   if (!currentType.value) return
 
@@ -537,6 +705,10 @@ async function startTest() {
     config.projectId = selectedProjectId.value
     config.modules = selectedReviewModules.value
   }
+  if (activeType.value === 'frontend') {
+    config.projectId = selectedProjectId.value
+    config.modules = selectedFrontendModules.value
+  }
 
   try {
     const { suiteId } = await runTest(activeType.value, config)
@@ -550,6 +722,10 @@ async function startTest() {
       es: null,
       name: '',
       type: activeType.value,
+      isResume: false,
+      chatMessages: [],
+      chatInput: '',
+      chatLoading: false,
     })
     activeStreams.value.set(suiteId, stream)
 
@@ -578,6 +754,10 @@ function resumeStream(suiteId: string) {
     es: null,
     name: run.name,
     type: run.type,
+    isResume: false,
+    chatMessages: [],
+    chatInput: '',
+    chatLoading: false,
   })
   activeStreams.value.set(suiteId, stream)
 
@@ -690,6 +870,135 @@ function toggleAllReviewModules() {
   }
 }
 
+async function onFrontendProjectChange() {
+  frontendDiscoverySummary.value = null
+  frontendModules.value = []
+  selectedFrontendModules.value = []
+  if (!selectedProjectId.value) return
+
+  apiLoading.value = true
+  try {
+    const discoveryRes = await getFrontendDiscovery(selectedProjectId.value).catch(() => ({ data: null }))
+    if (discoveryRes.data?.summary) {
+      frontendDiscoverySummary.value = discoveryRes.data.summary
+    }
+    if (discoveryRes.data?.modules) {
+      frontendModules.value = discoveryRes.data.modules
+      // 默认全选
+      selectedFrontendModules.value = discoveryRes.data.modules.map((m: any) => m.id)
+    }
+  } catch { /* ignore */ }
+  apiLoading.value = false
+}
+
+function toggleAllFrontendModules() {
+  if (selectedFrontendModules.value.length === frontendModules.value.length) {
+    selectedFrontendModules.value = []
+  } else {
+    selectedFrontendModules.value = frontendModules.value.map((m: any) => m.id)
+  }
+}
+
+/** 恢复中断的代码审查 */
+async function handleResumeRun(runId: string) {
+  try {
+    const { suiteId } = await apiResume(runId)
+
+    // 创建流状态
+    const run = runs.value.find(r => r.id === runId)
+    const stream = reactive<StreamState>({
+      blocks: [],
+      done: false,
+      elapsed: '0s',
+      timer: null,
+      es: null,
+      name: run?.name || '恢复审查中...',
+      type: 'codereview',
+      isResume: true,
+      chatMessages: [],
+      chatInput: '',
+      chatLoading: false,
+    })
+    activeStreams.value.set(suiteId, stream)
+    connectStream(suiteId, Date.now())
+    refreshRuns()
+
+    // 切换到代码审查 tab
+    activeType.value = 'codereview'
+  } catch (e: any) {
+    alert('恢复失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
+/** 检查 run 是否有可恢复的模块 */
+function canResume(run: TestRun): boolean {
+  if (run.type !== 'codereview') return false
+  if (run.status !== 'error' && run.status !== 'failed') return false
+  const resumeInfo = run.config?.resumeInfo as any
+  if (!resumeInfo?.cases) return false
+  return Object.values(resumeInfo.cases).some((c: any) => c.status === 'interrupted')
+}
+
+/** 检查 run 是否可以发起对话 */
+function canChat(run: TestRun): boolean {
+  if (run.type !== 'codereview') return false
+  if (run.status === 'running') return false
+  const resumeInfo = run.config?.resumeInfo as any
+  if (!resumeInfo?.cases) return false
+  return Object.values(resumeInfo.cases).some((c: any) => c.sessionId)
+}
+
+/** 发送聊天消息 */
+async function sendChat(streamId: string) {
+  const stream = activeStreams.value.get(streamId)
+  if (!stream || !stream.chatInput?.trim()) return
+
+  const message = stream.chatInput.trim()
+  stream.chatInput = ''
+  stream.chatMessages.push({ text: message, reply: '', loading: true })
+  stream.chatLoading = true
+
+  try {
+    await chatWithReviewApi(streamId, message)
+    // SSE 会自动接收 agent:chat 事件，追加到 chatMessages
+  } catch (e: any) {
+    const lastMsg = stream.chatMessages[stream.chatMessages.length - 1]
+    if (lastMsg) {
+      lastMsg.reply = `发送失败: ${e.response?.data?.error || e.message}`
+      lastMsg.loading = false
+    }
+  } finally {
+    stream.chatLoading = false
+  }
+}
+
+/** 从历史记录打开对话流 */
+function openChatStream(runId: string) {
+  if (activeStreams.value.has(runId)) return
+
+  const run = runs.value.find(r => r.id === runId)
+  if (!run) return
+
+  const stream = reactive<StreamState>({
+    blocks: [],
+    done: false,
+    elapsed: '...',
+    timer: null,
+    es: null,
+    name: run.name,
+    type: run.type,
+    isResume: false,
+    chatMessages: [],
+    chatInput: '',
+    chatLoading: false,
+  })
+  activeStreams.value.set(runId, stream)
+  activeType.value = run.type
+
+  // 连接 SSE（已完成的项目会立即收到 test:done）
+  connectStream(runId, new Date(run.startedAt).getTime())
+}
+
 // 页面加载：初始化 + 恢复运行中的测试
 onMounted(async () => {
   try {
@@ -729,6 +1038,10 @@ onMounted(async () => {
         es: null,
         name: suite.name,
         type: suite.type,
+        isResume: false,
+        chatMessages: [],
+        chatInput: '',
+        chatLoading: false,
       })
       activeStreams.value.set(suite.id, stream)
 
@@ -753,6 +1066,7 @@ watch(activeType, async (newType) => {
     if (newType === 'e2e') onProjectChange()
     else if (newType === 'api') onApiProjectChange()
     else if (newType === 'codereview') onReviewProjectChange()
+    else if (newType === 'frontend') onFrontendProjectChange()
   }
 })
 
@@ -832,6 +1146,72 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+.type-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+.btn-prompt {
+  padding: 10px 20px;
+  background: #fff;
+  color: #667eea;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.15s;
+  margin-top: 4px;
+}
+.btn-prompt:hover { background: #f0f0ff; }
+.btn-prompt:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 提示词弹窗 */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+.modal-content h3 { margin: 0 0 8px; font-size: 18px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.modal-actions .btn-cancel {
+  padding: 8px 20px; background: #f5f5f5; border: 1px solid #ddd;
+  border-radius: 6px; cursor: pointer; font-size: 14px; color: #666;
+}
+.prompt-modal { max-width: 720px; width: 90vw; }
+.prompt-textarea {
+  width: 100%;
+  min-height: 280px;
+  max-height: 60vh;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  background: #fafafa;
+  color: #333;
+}
+.btn-copy {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.btn-copy:hover { opacity: 0.9; }
 
 /* Agent 参数 */
 .agent-params {
@@ -1228,4 +1608,108 @@ select.param-input { cursor: pointer; appearance: auto; }
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* 恢复按钮 */
+.btn-resume {
+  background: none;
+  border: 1px solid #faad14;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #faad14;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-resume:hover { background: #fffbe6; }
+.btn-chat {
+  background: none;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-chat:hover { background: #f0f0ff; }
+
+/* 恢复模式标识 */
+.resume-indicator { color: #faad14 !important; }
+.resume-indicator::before { background: #faad14 !important; }
+
+/* 聊天区域 */
+.chat-area {
+  border-top: 1px solid #f0f0f0;
+  padding: 12px 20px;
+}
+.chat-messages {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+.chat-msg {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.chat-avatar { flex-shrink: 0; }
+.chat-user .chat-text {
+  background: #f0f0ff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #333;
+}
+.chat-assistant .chat-text {
+  background: #fafafa;
+  padding: 6px 12px;
+  border-radius: 8px;
+  flex: 1;
+}
+.chat-assistant .chat-text :deep(pre) {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 8px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.chat-assistant .chat-text :deep(code) {
+  background: #f0f0f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.chat-assistant .chat-text :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.chat-input-row input:focus { border-color: #667eea; }
+.chat-input-row button {
+  padding: 8px 16px;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity 0.15s;
+}
+.chat-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+.chat-input-row button:hover:not(:disabled) { opacity: 0.85; }
 </style>

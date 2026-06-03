@@ -12,6 +12,7 @@ import path from 'path';
 import fs from 'fs';
 import net from 'net';
 import { fileURLToPath } from 'url';
+import { marked } from 'marked';
 import { AI_PLATFORM_ROOT, getConfig, getProjectById, type TestProject, type PageConfig } from './config.js';
 import { testBus } from './test-events.js';
 
@@ -40,6 +41,17 @@ export interface TestCase {
   blocks?: StreamBlock[];   // 结构化事件记录，用于历史回放
 }
 
+/** 中断恢复信息（按模块维度记录 session_id） */
+export interface ResumeCaseInfo {
+  sessionId: string
+  status: 'completed' | 'interrupted'
+  partialOutput: string
+}
+
+export interface ResumeInfo {
+  cases: Record<string, ResumeCaseInfo>
+}
+
 export interface TestSuite {
   id: string;
   name: string;
@@ -50,6 +62,16 @@ export interface TestSuite {
   finishedAt?: string;
   duration?: number;
   config: Record<string, unknown>;
+}
+
+/** 从 suite.config 中获取 resumeInfo */
+function getResumeInfo(suite: TestSuite): ResumeInfo {
+  return (suite.config.resumeInfo as ResumeInfo) || { cases: {} };
+}
+
+/** 设置 suite.config 中的 resumeInfo */
+function setResumeInfo(suite: TestSuite, info: ResumeInfo): void {
+  suite.config.resumeInfo = info;
 }
 
 // ========== 存储 ==========
@@ -453,12 +475,15 @@ ${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
 `;
   }
 
+  const projectSlug = project?.name ? project.name.replace(/[<>:"/\\|?*\s]+/g, '_') : '_default';
+  const e2eDataDir = getConfig().e2eDataDir || getConfig().testDataDir;
+
   const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试${project ? ` ${project.name}` : ''} ${scope} 范围的页面。
 
 ${pageListPrompt}
 输入参数：
 \`\`\`json
-{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}}
+{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"}
 \`\`\`
 
 请严格按照 SKILL.md 中的流程执行：登录 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
@@ -588,19 +613,26 @@ ${pageListPrompt}
     mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
     if (mainCase.status === 'failed') mainCase.error = '输出内容不足';
 
-    // 尝试读取 e2e-test 生成的报告路径
+    // 尝试读取 e2e-test 生成的报告路径（优先按项目目录查找，兼容旧扁平目录）
     try {
-      const e2eRunsDir = path.join(getConfig().e2eDataDir, 'runs');
-      if (fs.existsSync(e2eRunsDir)) {
-        const runDirs = fs.readdirSync(e2eRunsDir)
-          .filter(d => { try { return fs.statSync(path.join(e2eRunsDir, d)).isDirectory(); } catch { return false; } })
-          .map(d => ({ name: d, mtime: fs.statSync(path.join(e2eRunsDir, d)).mtimeMs }))
+      const searchDirs = [
+        path.join(getConfig().e2eDataDir, 'runs', projectSlug),  // 新路径：按项目隔离
+        path.join(getConfig().e2eDataDir, 'runs'),               // 旧路径：扁平目录（兼容）
+      ];
+      for (const e2eRunsBase of searchDirs) {
+        if (!fs.existsSync(e2eRunsBase)) continue;
+        const runDirs = fs.readdirSync(e2eRunsBase)
+          .filter(d => { try { return fs.statSync(path.join(e2eRunsBase, d)).isDirectory(); } catch { return false; } })
+          .map(d => ({ name: d, mtime: fs.statSync(path.join(e2eRunsBase, d)).mtimeMs }))
           .sort((a, b) => b.mtime - a.mtime);
         if (runDirs.length > 0) {
-          const runJsonPath = path.join(e2eRunsDir, runDirs[0].name, 'run.json');
+          const runJsonPath = path.join(e2eRunsBase, runDirs[0].name, 'run.json');
           if (fs.existsSync(runJsonPath)) {
             const runData = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
-            suite.config.reportPath = runData.reportPath || '';
+            if (runData.reportPath) {
+              suite.config.reportPath = runData.reportPath;
+              break;  // 找到就停止
+            }
           }
         }
       }
@@ -706,88 +738,371 @@ function generateParamCombinations(params: Record<string, string[]>): Record<str
   return result;
 }
 
-// ========== 前端单元测试 ==========
+// ========== 前端单元测试（两阶段：生成 + 执行） ==========
+
+/** 加载 frontend-test Skill 并替换模板变量 */
+function loadFrontendTestSkill(variables: Record<string, string>): string {
+  const skillPath = path.resolve(AI_PLATFORM_ROOT, 'skills', 'tests', 'frontend-test', 'SKILL.md');
+  let content = '';
+  try {
+    content = fs.readFileSync(skillPath, 'utf-8');
+    content = content.replace(/^---[\s\S]*?---\n*/, '');
+    console.log('[FrontendTest] Skill 加载成功，长度:', content.length);
+  } catch (e: any) {
+    content = '你是一位严格的前端测试工程师。请根据发现结果生成 vitest 单元测试。';
+    console.log('[FrontendTest] Skill 加载失败:', e.message);
+  }
+  for (const [key, value] of Object.entries(variables)) {
+    content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+  }
+  return content;
+}
+
+/** 将发现结果中单个模块的信息格式化为 Skill 能理解的文本 */
+function buildFrontendModuleInfo(mod: any): string {
+  const files = (mod.files || []).map((f: any) => {
+    let info = `- ${f.path}`;
+    if (f.exports?.length) info += ` (导出: ${f.exports.join(', ')})`;
+    if (f.functions?.length) {
+      info += '\n  函数:\n' + f.functions.map((fn: any) =>
+        `    - ${fn.name}(${fn.params?.join(', ') || ''}) — ${fn.description}`
+      ).join('\n');
+    }
+    if (f.testableLogic?.length) {
+      info += '\n  可测试逻辑:\n' + f.testableLogic.map((l: string) => `    - ${l}`).join('\n');
+    }
+    return info;
+  }).join('\n');
+
+  return `## 当前模块
+- 模块ID: ${mod.id}
+- 模块名称: ${mod.name}
+- 描述: ${mod.description}
+- 文件数量: ${mod.files?.length || 0}
+
+## 文件列表
+${files}`;
+}
+
+/** 递归扫描目录下所有 .test.ts 文件 */
+function findTestFiles(dir: string): string[] {
+  const results: string[] = [];
+  if (!fs.existsSync(dir)) return results;
+  function walk(d: string) {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.test.ts')) results.push(full);
+    }
+  }
+  walk(dir);
+  return results;
+}
 
 async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
+  console.log('[FrontendTest] 开始前端单元测试...');
+  const { query } = await import('@anthropic-ai/claude-code');
+
   const projectId = config.projectId as string | undefined;
   const project = projectId ? getProjectById(projectId) : undefined;
 
-  // 确定测试目录
-  let webDir = path.resolve(AI_PLATFORM_ROOT, 'web');
-  let sourcePath: string | undefined;
-
-  if (project?.sourcePath) {
-    sourcePath = project.sourcePath;
-    // 检查是否有项目级前端测试
-    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
-    const projectTestsDir = path.join(DATA_DIR, 'projects', projectId!, 'frontend-tests');
-    if (fs.existsSync(projectTestsDir)) {
-      webDir = projectTestsDir;
-    } else {
-      // fallback: 使用源码项目的 web 目录
-      const srcWebDir = path.resolve(project.sourcePath, 'web');
-      if (fs.existsSync(srcWebDir)) {
-        webDir = srcWebDir;
-      }
+  if (!project?.sourcePath) {
+    for (const tc of suite.cases) {
+      tc.status = 'failed';
+      tc.error = '请选择项目并配置源码路径';
     }
+    return;
   }
 
-  for (const tc of suite.cases) {
-    tc.status = 'running';
-    saveRun(suite);
-    testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: 'running' });
-
-    const startTime = Date.now();
+  // 读取发现数据
+  const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+  const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'frontend-discovery.json');
+  let discovery: any = null;
+  if (fs.existsSync(discoveryPath)) {
     try {
-      const { execSync } = await import('child_process');
+      discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+    } catch { /* ignore */ }
+  }
 
-      // 如果有源码路径，生成临时 vitest 配置
-      let configArg = '';
-      if (sourcePath && webDir !== path.resolve(AI_PLATFORM_ROOT, 'web')) {
-        const vitestConfig = `
+  if (!discovery?.modules) {
+    for (const tc of suite.cases) {
+      tc.status = 'failed';
+      tc.error = '请先在设置页面点击「发现组件」';
+    }
+    return;
+  }
+
+  const selectedModuleIds = (config.modules as string[]) || [];
+  const testsOutputDir = path.join(DATA_DIR, 'projects', projectId!, 'frontend-tests');
+  if (!fs.existsSync(testsOutputDir)) fs.mkdirSync(testsOutputDir, { recursive: true });
+
+  const abortController = new AbortController();
+  abortControllers.set(suite.id, abortController);
+
+  // 初始化 resumeInfo
+  if (!getResumeInfo(suite).cases || Object.keys(getResumeInfo(suite).cases).length === 0) {
+    setResumeInfo(suite, { cases: {} });
+  }
+  const resumeInfo = getResumeInfo(suite);
+
+  try {
+    // ===== 阶段一：逐模块调用 Claude Code 生成测试文件 =====
+    for (let i = 0; i < suite.cases.length; i++) {
+      if (abortController.signal.aborted) {
+        for (let j = i; j < suite.cases.length; j++) {
+          suite.cases[j].status = 'error';
+          suite.cases[j].error = '用户手动停止';
+        }
+        break;
+      }
+
+      const tc = suite.cases[i];
+      const moduleId = selectedModuleIds[i];
+      const mod = discovery.modules.find((m: any) => m.id === moduleId);
+
+      if (!mod) {
+        tc.status = 'skipped' as any;
+        tc.error = '未找到模块信息';
+        continue;
+      }
+
+      // 检查 resumeInfo，跳过已完成的模块
+      const resumeCase = resumeInfo.cases[tc.id];
+      if (resumeCase?.status === 'completed') {
+        tc.status = 'passed' as any;
+        testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n⏭️ 跳过已生成: ${mod.name}\n\n` });
+        continue;
+      }
+
+      const resumeSessionId = resumeCase?.status === 'interrupted'
+        ? resumeCase.sessionId
+        : undefined;
+
+      // 加载 Skill 并替换模板变量
+      const skillContent = loadFrontendTestSkill({
+        projectName: project.name,
+        sourcePath: project.sourcePath!,
+        moduleInfoSection: buildFrontendModuleInfo(mod),
+        testsOutputDir: testsOutputDir.replace(/\\/g, '/'),
+      });
+
+      await runSingleModuleFrontendTest(suite, tc, mod, project.sourcePath!, abortController, skillContent, resumeSessionId);
+    }
+
+    // ===== 阶段二：执行 vitest =====
+    if (!abortController.signal.aborted) {
+      await executeVitestTests(suite, testsOutputDir, project.sourcePath!);
+    }
+  } catch (err: any) {
+    console.error('[FrontendTest] 出错:', err.message);
+  }
+
+  abortControllers.delete(suite.id);
+  saveRun(suite);
+}
+
+/** 执行单个模块的测试文件生成 */
+async function runSingleModuleFrontendTest(
+  suite: TestSuite,
+  tc: TestCase,
+  mod: any,
+  sourcePath: string,
+  suiteAbortController: AbortController,
+  skillContent: string,
+  resumeSessionId?: string,
+): Promise<void> {
+  const { query } = await import('@anthropic-ai/claude-code');
+
+  tc.status = 'running';
+  const resumePrefix = resumeSessionId ? '🔄 恢复生成: ' : '🧪 开始生成: ';
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## ${resumePrefix}${mod.name}\n\n` });
+  saveRun(suite);
+
+  const moduleAbortController = new AbortController();
+  const onSuiteAbort = () => moduleAbortController.abort();
+  suiteAbortController.signal.addEventListener('abort', onSuiteAbort);
+
+  const startTime = Date.now();
+  let fullOutput = '';
+  const blocks: StreamBlock[] = [];
+
+  try {
+    const queryOptions: Record<string, any> = {
+      cwd: sourcePath,
+      allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
+      maxTurns: 9999,
+      permissionMode: 'bypassPermissions',
+      abortController: moduleAbortController,
+      appendSystemPrompt: skillContent,
+    };
+
+    const promptText = resumeSessionId
+      ? '请继续之前的测试生成，从中断处继续。保持之前的生成进度。'
+      : `请为模块 "${mod.name}" (${mod.id}) 生成完整的 vitest 单元测试文件。`;
+
+    if (resumeSessionId) {
+      queryOptions.resume = resumeSessionId;
+      queryOptions.forkSession = true;
+    }
+
+    const response = query({ prompt: promptText, options: queryOptions });
+
+    let capturedSessionId = '';
+
+    for await (const msg of response) {
+      if (moduleAbortController.signal.aborted) throw new Error('测试生成被中断');
+
+      switch (msg.type) {
+        case 'system': {
+          const sessionId = (msg as any).session_id;
+          if (sessionId) capturedSessionId = sessionId;
+          break;
+        }
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                blocks.push({ type: 'text', content: block.text });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
+              }
+            }
+          }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_result', toolUseId: block.tool_use_id, content: resultContent?.slice(0, 5000) });
+              }
+            }
+          }
+          break;
+        }
+        case 'result': {
+          const resultMsg = msg as any;
+          if (resultMsg.subtype === 'success' && resultMsg.result && !fullOutput) {
+            fullOutput = resultMsg.result;
+          }
+          break;
+        }
+      }
+    }
+
+    tc.duration = Date.now() - startTime;
+    tc.output = fullOutput;
+    tc.blocks = blocks;
+    tc.status = fullOutput.length > 50 ? 'passed' : 'failed';
+    if (tc.status === 'failed') tc.error = '生成输出不足';
+
+    // 保存 resumeInfo
+    if (capturedSessionId) {
+      const info = getResumeInfo(suite);
+      info.cases[tc.id] = { sessionId: capturedSessionId, status: 'completed', partialOutput: fullOutput };
+      setResumeInfo(suite, info);
+    }
+
+    testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n${tc.status === 'passed' ? '✅' : '❌'} 测试生成完成: ${mod.name} (${(tc.duration / 1000).toFixed(1)}s)\n\n` });
+  } catch (err: any) {
+    tc.duration = Date.now() - startTime;
+    tc.status = 'error';
+    tc.error = err.message;
+    tc.blocks = blocks;
+
+    // 保存 resumeInfo（中断）
+    const info = getResumeInfo(suite);
+    const existingResume = info.cases[tc.id];
+    const sessionIdToSave = existingResume?.sessionId || '';
+    if (sessionIdToSave) {
+      info.cases[tc.id] = { sessionId: sessionIdToSave, status: 'interrupted', partialOutput: fullOutput };
+      setResumeInfo(suite, info);
+    }
+
+    testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n💥 测试生成中断: ${mod.name} - ${err.message}\n\n` });
+  } finally {
+    suiteAbortController.signal.removeEventListener('abort', onSuiteAbort);
+  }
+
+  saveRun(suite);
+  testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
+}
+
+/** 阶段二：执行 vitest 测试 */
+async function executeVitestTests(suite: TestSuite, testsDir: string, sourcePath: string): Promise<void> {
+  const testFiles = findTestFiles(testsDir);
+  if (testFiles.length === 0) {
+    testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## ⚠️ 未找到生成的测试文件\n\n` });
+    return;
+  }
+
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## 执行 vitest (${testFiles.length} 个测试文件)...\n\n` });
+
+  // 生成临时 vitest 配置
+  const vitestConfig = `
 import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: { globals: true, environment: 'happy-dom' },
   resolve: { alias: { '@': '${sourcePath.replace(/\\/g, '/')}/src' } },
 })
 `;
-        const configPath = path.join(webDir, '_vitest.config.ts');
-        fs.writeFileSync(configPath, vitestConfig, 'utf-8');
-        configArg = ` --config "${configPath}"`;
-      }
+  const configPath = path.join(testsDir, '_vitest.config.ts');
+  fs.writeFileSync(configPath, vitestConfig, 'utf-8');
 
-      const result = execSync(`npx vitest run --reporter=json${configArg} 2>&1`, {
-        cwd: webDir,
-        timeout: 120000,
-        encoding: 'utf-8',
-      });
+  try {
+    const { execSync } = await import('child_process');
+    const result = execSync(`npx vitest run --reporter=json --config "${configPath}" 2>&1`, {
+      cwd: testsDir,
+      timeout: 300000, // 5 分钟
+      encoding: 'utf-8',
+    });
 
-      tc.duration = Date.now() - startTime;
-      tc.output = result.slice(0, 3000);
-
+    // 解析 JSON 报告
+    const jsonMatch = result.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
+    if (jsonMatch) {
       try {
-        const jsonMatch = result.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
-        if (jsonMatch) {
-          const report = JSON.parse(jsonMatch[0]);
-          const total = report.numTotalTests || 0;
-          const passed = report.numPassedTests || 0;
-          tc.status = total > 0 && passed === total ? 'passed' : 'failed';
-          tc.output = `总计 ${total} 个测试，通过 ${passed}，失败 ${report.numFailedTests || 0}`;
-        } else {
-          tc.status = result.includes('Tests') && !result.includes('FAIL') ? 'passed' : 'failed';
-        }
-      } catch {
-        tc.status = result.includes('passed') ? 'passed' : 'failed';
-      }
-    } catch (err: any) {
-      tc.duration = Date.now() - startTime;
-      tc.status = 'error';
-      tc.error = err.stderr?.slice(0, 500) || err.message;
-      tc.output = err.stdout?.slice(0, 2000) || '';
+        const report = JSON.parse(jsonMatch[0]);
+        const total = report.numTotalTests || 0;
+        const passed = report.numPassedTests || 0;
+        const failed = report.numFailedTests || 0;
+        suite.config.vitestSummary = { total, passed, failed };
+        testBus.emit('agent:stream', {
+          suiteId: suite.id,
+          type: 'text',
+          content: `\n\n✅ vitest 执行完成: 总计 ${total}，通过 ${passed}，失败 ${failed}\n`,
+        });
+      } catch { /* ignore parse */ }
     }
-
-    saveRun(suite);
-    testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
+  } catch (err: any) {
+    // vitest 可能返回非零退出码（有失败测试），但仍输出 JSON
+    const stdout = err.stdout || '';
+    const jsonMatch = stdout.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const report = JSON.parse(jsonMatch[0]);
+        const total = report.numTotalTests || 0;
+        const passed = report.numPassedTests || 0;
+        const failed = report.numFailedTests || 0;
+        suite.config.vitestSummary = { total, passed, failed };
+        testBus.emit('agent:stream', {
+          suiteId: suite.id,
+          type: 'text',
+          content: `\n\n⚠️ vitest 执行完成(有失败): 总计 ${total}，通过 ${passed}，失败 ${failed}\n`,
+        });
+      } catch { /* ignore */ }
+    } else {
+      testBus.emit('agent:stream', {
+        suiteId: suite.id,
+        type: 'text',
+        content: `\n\n❌ vitest 执行出错: ${(err.stderr || err.message).slice(0, 500)}\n`,
+      });
+    }
   }
 }
 
@@ -930,6 +1245,24 @@ function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((o, k) => o?.[k], obj);
 }
 
+/** 加载 code-review Skill 并替换模板变量 */
+function loadCodeReviewSkill(variables: Record<string, string>): string {
+  const skillPath = path.resolve(AI_PLATFORM_ROOT, 'skills', 'tests', 'code-review', 'SKILL.md');
+  let content = '';
+  try {
+    content = fs.readFileSync(skillPath, 'utf-8');
+    content = content.replace(/^---[\s\S]*?---\n*/, '');
+    console.log('[CodeReview] Skill 加载成功，长度:', content.length);
+  } catch (e: any) {
+    content = '你是一位资深代码审查专家。请对项目源码进行审查。';
+    console.log('[CodeReview] Skill 加载失败:', e.message);
+  }
+  for (const [key, value] of Object.entries(variables)) {
+    content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+  }
+  return content;
+}
+
 // ========== 代码审查 ==========
 
 async function runCodeReview(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
@@ -973,8 +1306,39 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
   // 判断是否按模块审查
   const isPerModule = suite.cases.length > 1 || (selectedModuleIds.length > 0 && modules.length > 0);
 
+  // 准备报告输出目录（按项目隔离）
+  const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+  const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports', projectSlug);
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
+
+  // 初始化 resumeInfo（如果不存在）
+  if (!getResumeInfo(suite).cases || Object.keys(getResumeInfo(suite).cases).length === 0) {
+    setResumeInfo(suite, { cases: {} });
+  }
+  const resumeInfo = getResumeInfo(suite);
+
+  // 发出恢复提示事件
+  const resumedCases: string[] = [];
+  const skippedCases: string[] = [];
+  for (let i = 0; i < suite.cases.length; i++) {
+    const tc = suite.cases[i];
+    const resumeCase = resumeInfo.cases[tc.id];
+    if (resumeCase?.status === 'completed') {
+      skippedCases.push(tc.id);
+    } else if (resumeCase?.status === 'interrupted') {
+      resumedCases.push(tc.id);
+    }
+  }
+  if (skippedCases.length > 0 || resumedCases.length > 0) {
+    testBus.emit('test:resumed', {
+      suiteId: suite.id,
+      resumedCases,
+      skippedCases,
+    });
+  }
 
   try {
     if (isPerModule) {
@@ -999,18 +1363,24 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
           continue;
         }
 
-        // 构建模块级审查 prompt
+        // 检查 resumeInfo，跳过已完成的模块
+        const resumeCase = resumeInfo.cases[tc.id];
+        if (resumeCase?.status === 'completed') {
+          tc.status = 'passed' as any;
+          testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n⏭️ 跳过已完成: ${mod.name}\n\n` });
+          continue;
+        }
+
+        const resumeSessionId = resumeCase?.status === 'interrupted'
+          ? resumeCase.sessionId
+          : undefined;
+
+        // 构建模块级审查 Skill 变量
         const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
         const riskIndicators = (mod as any).riskIndicators || (mod.reason ? [mod.reason] : []);
         const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
-        const modulePrompt = `你是一位资深代码审查专家。请对以下项目中的特定模块进行深度审查。
 
-## 项目信息
-- 项目名称: ${project.name}
-- 源码路径: ${project.sourcePath}
-- 前端框架: ${(project as any).framework || 'Vue 3 + Vite + Pinia'}
-
-## 审查模块
+        const moduleInfoSection = `## 审查模块
 - 模块名称: ${mod.name}
 - 模块路径: ${mod.path}
 - 文件数量: ${mod.files}
@@ -1019,53 +1389,52 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
 ${riskText}
 
 ## 模块关键文件
-${fileList}
+${fileList}`;
 
-${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
+        const skillContent = loadCodeReviewSkill({
+          projectName: project.name,
+          sourcePath: project.sourcePath!,
+          framework: (project as any).framework || 'Vue 3 + Vite + Pinia',
+          moduleInfoSection,
+          rulesSection: rulesContent
+            ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}`
+            : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。',
+          reviewScope: '请重点扫描上述关键文件，以及模块路径下的其他相关文件。',
+          scoreTitle: '模块评分',
+          summaryTitle: '该模块的整体评价和改进建议',
+          reportPath: path.join(reportsDir, `module-${tc.id}.md`).replace(/\\/g, '/'),
+        });
 
-## 审查原则
-1. **实际代码分析为主** — Read 关键文件的真实内容，基于你看到的具体代码给出结论
-2. **规则是筛查指引** — 按 checkMethod 的方法去检查，但结论必须来自实际代码，不是复述规则
-3. **好代码也要认可** — 如果某条规则检查后未发现问题，标注为"通过"而非跳过
+        const modulePrompt = `请对项目 ${project.name} 的模块 "${mod.name}" 进行深度代码审查。`;
 
-## 审查范围
-请重点扫描上述关键文件，以及模块路径下的其他相关文件。
-
-## 输出格式
-请以 Markdown 格式输出审查报告，包含：
-
-### 模块评分（0-100）
-
-### 问题列表
-对每个发现的问题记录：
-- 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
-- 规则 ID（对应审查规则中匹配的 ID）
-- 文件路径和行号
-- 问题描述（基于实际代码分析）
-- 修复建议
-
-### 规则覆盖情况
-简要说明每条规则在该模块中的检查结果（通过/发现问题）
-
-### 总结
-该模块的整体评价和改进建议`;
-
-        await runSingleModuleReview(suite, tc, modulePrompt, project.sourcePath!, abortController, mod.name);
+        await runSingleModuleReview(suite, tc, modulePrompt, project.sourcePath!, abortController, mod.name, resumeSessionId, skillContent);
       }
 
-      // 生成合并 HTML 报告
-      const allOutputs = suite.cases
-        .filter(c => c.output && c.output.length > 50)
-        .map(c => `---\n## ${c.name}\n\n${c.output}`)
-        .join('\n\n');
-      if (allOutputs.length > 100) {
+      // 从 AI 写入的模块报告文件合并生成 HTML 报告
+      const moduleMdFiles: string[] = [];
+      for (const c of suite.cases) {
+        const moduleMdPath = path.join(reportsDir, `module-${c.id}.md`);
+        if (fs.existsSync(moduleMdPath)) {
+          moduleMdFiles.push(moduleMdPath);
+        }
+      }
+
+      if (moduleMdFiles.length > 0) {
         try {
-          const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports');
-          if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-          const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
-          const totalDuration = suite.cases.reduce((s, c) => s + (c.duration || 0), 0);
-          fs.writeFileSync(reportFile, buildReviewHtml(project.name, allOutputs, totalDuration), 'utf-8');
-          suite.config.reportPath = reportFile;
+          const allOutputs = moduleMdFiles
+            .map(f => fs.readFileSync(f, 'utf-8'))
+            .filter(content => content.length > 50)
+            .map((content, i) => {
+              const c = suite.cases[i];
+              return `---\n## ${c.name}\n\n${content}`;
+            })
+            .join('\n\n');
+          if (allOutputs.length > 100) {
+            const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
+            const totalDuration = suite.cases.reduce((s, c) => s + (c.duration || 0), 0);
+            fs.writeFileSync(reportFile, buildReviewHtml(project.name, allOutputs, totalDuration), 'utf-8');
+            suite.config.reportPath = reportFile;
+          }
         } catch (err: any) {
           console.error('[CodeReview] 生成HTML报告失败:', err.message);
         }
@@ -1080,45 +1449,29 @@ ${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则
         saveRun(suite);
       }
 
-      const reviewPrompt = `你是一位资深代码审查专家。请对以下项目的源代码进行审查。
+      const fullReportPath = mainCase
+        ? path.join(reportsDir, `module-${mainCase.id}.md`).replace(/\\/g, '/')
+        : '';
 
-## 项目信息
-- 项目名称: ${project.name}
-- 源码路径: ${project.sourcePath}
-- 前端框架: Vue 3 + Vite + Pinia
-
-${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}` : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。'}
-
-## 审查原则
-1. **实际代码分析为主** — Read 文件的真实内容，基于具体代码给出结论
-2. **规则是筛查指引** — 按 checkMethod 的方法去检查，但结论必须来自实际代码
-3. **好代码也要认可** — 如果某条规则检查后未发现问题，标注为"通过"而非跳过
-
-## 审查范围
-请扫描项目源码，重点关注以下文件：
+      const fullSkillContent = loadCodeReviewSkill({
+        projectName: project.name,
+        sourcePath: project.sourcePath!,
+        framework: 'Vue 3 + Vite + Pinia',
+        moduleInfoSection: '',
+        rulesSection: rulesContent
+          ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}`
+          : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。',
+        reviewScope: `请扫描项目源码，重点关注以下文件：
 1. src/pages/ 下的页面组件
 2. src/components/ 下的通用组件
 3. src/utils/ 和 src/api/ 下的工具和接口
-4. 后端路由和控制器（如果有）
+4. 后端路由和控制器（如果有）`,
+        scoreTitle: '总体评分',
+        summaryTitle: '总体评价和改进建议',
+        reportPath: fullReportPath,
+      });
 
-## 输出格式
-请以 Markdown 格式输出审查报告，包含：
-
-### 总体评分（0-100）
-
-### 问题列表
-对每个问题记录：
-- 严重等级（🔴 Critical / 🟡 Warning / 🔵 Info）
-- 规则 ID
-- 文件路径和行号
-- 问题描述（基于实际代码分析）
-- 修复建议
-
-### 规则覆盖情况
-简要说明每条规则的检查结果
-
-### 总结
-总体评价和改进建议`;
+      const reviewPrompt = `请对项目 ${project.name} 的源代码进行全面审查。`;
 
       const startTime = Date.now();
       let fullOutput = '';
@@ -1128,10 +1481,11 @@ ${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则
         prompt: reviewPrompt,
         options: {
           cwd: project.sourcePath,
-          allowedTools: ['Read', 'Glob', 'Grep'],
+          allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
           maxTurns: 9999,
           permissionMode: 'bypassPermissions',
           abortController,
+          appendSystemPrompt: fullSkillContent,
         },
       });
 
@@ -1185,16 +1539,20 @@ ${rulesContent ? `## 审查筛查规则（参考指引）\n以下是筛查规则
         if (mainCase.status === 'failed') mainCase.error = '审查输出内容不足';
       }
 
-      // 生成 HTML 审查报告
-      if (fullOutput.length > 100) {
-        try {
-          const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports');
-          if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-          const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
-          fs.writeFileSync(reportFile, buildReviewHtml(project.name, fullOutput, mainCase?.duration || 0), 'utf-8');
-          suite.config.reportPath = reportFile;
-        } catch (err: any) {
-          console.error('[CodeReview] 生成HTML报告失败:', err.message);
+      // 从 AI 写入的报告文件生成 HTML
+      if (mainCase) {
+        const moduleMdPath = path.join(reportsDir, `module-${mainCase.id}.md`);
+        if (fs.existsSync(moduleMdPath)) {
+          try {
+            const mdContent = fs.readFileSync(moduleMdPath, 'utf-8');
+            if (mdContent.length > 100) {
+              const reportFile = path.join(reportsDir, `review-${suite.id}.html`);
+              fs.writeFileSync(reportFile, buildReviewHtml(project.name, mdContent, mainCase.duration || 0), 'utf-8');
+              suite.config.reportPath = reportFile;
+            }
+          } catch (err: any) {
+            console.error('[CodeReview] 生成HTML报告失败:', err.message);
+          }
         }
       }
     }
@@ -1214,12 +1572,15 @@ async function runSingleModuleReview(
   cwd: string,
   suiteAbortController: AbortController,
   moduleName: string,
+  resumeSessionId?: string,
+  skillContent?: string,
 ): Promise<void> {
   const { query } = await import('@anthropic-ai/claude-code');
 
   tc.status = 'running';
   // 发出 case 级进度事件，让前端知道当前在审查哪个模块
-  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## 🔍 开始审查: ${moduleName}\n\n` });
+  const resumePrefix = resumeSessionId ? '🔄 恢复审查: ' : '🔍 开始审查: ';
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## ${resumePrefix}${moduleName}\n\n` });
   saveRun(suite);
 
   const moduleAbortController = new AbortController();
@@ -1232,22 +1593,51 @@ async function runSingleModuleReview(
   let fullOutput = '';
   const blocks: StreamBlock[] = [];
 
+  // 确保 resumeInfo 存在
+  const currentResumeInfo = getResumeInfo(suite);
+  if (!currentResumeInfo.cases) {
+    setResumeInfo(suite, { cases: {} });
+  }
+
   try {
+    // 构建 query 选项：支持 resume 模式
+    const queryOptions: Record<string, any> = {
+      cwd,
+      allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
+      maxTurns: 9999,
+      permissionMode: 'bypassPermissions',
+      abortController: moduleAbortController,
+      ...(skillContent ? { appendSystemPrompt: skillContent } : {}),
+    };
+
+    const promptText = resumeSessionId
+      ? '请继续之前的代码审查，从中断处继续分析。保持之前的审查进度和结论。'
+      : modulePrompt;
+
+    if (resumeSessionId) {
+      queryOptions.resume = resumeSessionId;
+      queryOptions.forkSession = true;
+    }
+
     const response = query({
-      prompt: modulePrompt,
-      options: {
-        cwd,
-        allowedTools: ['Read', 'Glob', 'Grep'],
-        maxTurns: 9999,
-        permissionMode: 'bypassPermissions',
-        abortController: moduleAbortController,
-      },
+      prompt: promptText,
+      options: queryOptions,
     });
+
+    let capturedSessionId = '';
 
     for await (const msg of response) {
       if (moduleAbortController.signal.aborted) throw new Error('审查被中断');
 
       switch (msg.type) {
+        case 'system': {
+          // 捕获 session_id
+          const sessionId = (msg as any).session_id;
+          if (sessionId) {
+            capturedSessionId = sessionId;
+          }
+          break;
+        }
         case 'assistant': {
           if ((msg as any).message?.content) {
             for (const block of (msg as any).message.content) {
@@ -1292,6 +1682,17 @@ async function runSingleModuleReview(
     tc.status = fullOutput.length > 100 ? 'passed' : 'failed';
     if (tc.status === 'failed') tc.error = '审查输出内容不足';
 
+    // 保存 resumeInfo：模块完成
+    if (capturedSessionId) {
+      const info = getResumeInfo(suite);
+      info.cases[tc.id] = {
+        sessionId: capturedSessionId,
+        status: 'completed',
+        partialOutput: fullOutput,
+      };
+      setResumeInfo(suite, info);
+    }
+
     // 模块完成事件
     testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n${tc.status === 'passed' ? '✅' : '❌'} 模块审查完成: ${moduleName} (${(tc.duration / 1000).toFixed(1)}s)\n\n` });
 
@@ -1300,6 +1701,21 @@ async function runSingleModuleReview(
     tc.status = 'error';
     tc.error = err.message;
     tc.blocks = blocks;
+
+    // 保存 resumeInfo：模块中断
+    // 尝试找到已有的 sessionId（来自 resume 或首次运行的 system 消息）
+    const info = getResumeInfo(suite);
+    const existingResume = info.cases[tc.id];
+    const sessionIdToSave = existingResume?.sessionId || '';
+    if (sessionIdToSave) {
+      info.cases[tc.id] = {
+        sessionId: sessionIdToSave,
+        status: 'interrupted',
+        partialOutput: fullOutput,
+      };
+      setResumeInfo(suite, info);
+    }
+
     testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n\n💥 模块审查中断: ${moduleName} - ${err.message}\n\n` });
   } finally {
     suiteAbortController.signal.removeEventListener('abort', onSuiteAbort);
@@ -1310,11 +1726,69 @@ async function runSingleModuleReview(
   testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
 }
 
-/** 将 Markdown 审查结果转为独立 HTML 报告 */
+/** 将 Markdown 审查结果转为独立 HTML 报告（服务端渲染，无 CDN 依赖） */
 function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
-  // 将 markdown 转义为 JSON 字符串，供前端 JS 使用 marked 渲染
-  const mdEscaped = JSON.stringify(markdown);
   const durationSec = (duration / 1000).toFixed(1);
+
+  // 服务端完成 Markdown 解析，按模块分割并渲染为 HTML
+  const moduleRegex = /^---\s*\n##\s+(.+)$/gm;
+  const modules: { title: string; content: string; html: string }[] = [];
+  let match: RegExpExecArray | null;
+  const splits: { title: string; index: number; end: number }[] = [];
+  while ((match = moduleRegex.exec(markdown)) !== null) {
+    splits.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+  }
+
+  if (splits.length === 0) {
+    modules.push({ title: '完整审查报告', content: markdown, html: marked.parse(markdown) as string });
+  } else {
+    for (let i = 0; i < splits.length; i++) {
+      const start = splits[i].end;
+      const end = i + 1 < splits.length ? splits[i + 1].index : markdown.length;
+      const content = markdown.substring(start, end).trim();
+      modules.push({ title: splits[i].title, content, html: marked.parse(content) as string });
+    }
+  }
+
+  // 统计严重等级
+  let criticalCount = 0, warningCount = 0, infoCount = 0;
+  for (const m of modules) {
+    criticalCount += (m.content.match(/🔴/g) || []).length;
+    warningCount += (m.content.match(/🟡/g) || []).length;
+    infoCount += (m.content.match(/🔵/g) || []).length;
+  }
+
+  // 提取评分
+  function extractScore(content: string): number | null {
+    const scoreMatch = content.match(/模块评分[：:]\s*(\d+)/);
+    if (scoreMatch) return parseInt(scoreMatch[1]);
+    const ratingMatch = content.match(/总体评分[：:]\s*(\d+)/);
+    if (ratingMatch) return parseInt(ratingMatch[1]);
+    return null;
+  }
+
+  function extractRisk(title: string): string {
+    if (/高风险/.test(title)) return 'high';
+    if (/中风险/.test(title)) return 'medium';
+    if (/低风险/.test(title)) return 'low';
+    return '';
+  }
+
+  // 构建侧边栏 HTML
+  let sidebarHtml = '';
+  modules.forEach((m, i) => {
+    const score = extractScore(m.content);
+    const risk = extractRisk(m.title);
+    const riskTag = risk ? `<span class="risk ${risk}">${risk === 'high' ? '高' : risk === 'medium' ? '中' : '低'}</span>` : '';
+    const scoreTag = score !== null ? `<span class="score">${score}</span>` : '';
+    sidebarHtml += `<div class="sidebar-item${i === 0 ? ' active' : ''}" data-idx="${i}">${riskTag}<span class="name">${m.title}</span>${scoreTag}</div>`;
+  });
+
+  // 构建内容区 HTML
+  let contentHtml = '';
+  modules.forEach((m, i) => {
+    contentHtml += `<div class="module-section${i === 0 ? ' active' : ''}" id="module-${i}"><h1>${m.title}</h1><div>${m.html}</div></div>`;
+  });
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1322,7 +1796,6 @@ function buildReviewHtml(projectName: string, markdown: string, duration: number
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>代码审查报告 - ${projectName}</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
@@ -1364,7 +1837,6 @@ function buildReviewHtml(projectName: string, markdown: string, duration: number
   .module-section blockquote { border-left: 4px solid #667eea; padding: 8px 16px; background: #f0f0ff; margin: 12px 0; border-radius: 0 6px 6px 0; }
   .module-section hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
   .footer { text-align: center; padding: 16px; font-size: 12px; color: #a0aec0; background: white; border-top: 1px solid #e8e8e8; }
-  .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: #999; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -1374,126 +1846,41 @@ function buildReviewHtml(projectName: string, markdown: string, duration: number
   <div class="meta">项目: ${projectName} | 耗时: ${durationSec}s | 生成时间: ${new Date().toLocaleString('zh-CN')}</div>
 </div>
 
-<div class="summary" id="summary">
+<div class="summary">
   <div class="summary-card">
-    <div class="value" id="stat-modules">-</div>
+    <div class="value">${modules.length}</div>
     <div class="label">审查模块</div>
   </div>
   <div class="summary-card">
-    <div class="value fail" id="stat-critical">-</div>
+    <div class="value fail">${criticalCount}</div>
     <div class="label">严重问题</div>
   </div>
   <div class="summary-card">
-    <div class="value warn" id="stat-warning">-</div>
+    <div class="value warn">${warningCount}</div>
     <div class="label">警告问题</div>
   </div>
   <div class="summary-card">
-    <div class="value info" id="stat-info">-</div>
+    <div class="value info">${infoCount}</div>
     <div class="label">建议改进</div>
   </div>
 </div>
 
 <div class="container">
-  <div class="sidebar" id="sidebar"></div>
-  <div class="content" id="content">
-    <div class="loading">正在解析报告...</div>
-  </div>
+  <div class="sidebar" id="sidebar">${sidebarHtml}</div>
+  <div class="content">${contentHtml}</div>
 </div>
 
 <div class="footer">由 AI Platform 自动生成</div>
 
 <script>
-(function() {
-  const md = ${mdEscaped};
-
-  // 按 "---\\n## 模块名" 分割模块
-  const moduleRegex = /^---\s*\n##\s+(.+)$/gm;
-  const modules = [];
-  let match;
-  const splits = [];
-  while ((match = moduleRegex.exec(md)) !== null) {
-    splits.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
-  }
-
-  if (splits.length === 0) {
-    // 无模块分割，整篇作为单个模块
-    modules.push({ title: '完整审查报告', content: md });
-  } else {
-    for (let i = 0; i < splits.length; i++) {
-      const start = splits[i].end;
-      const end = i + 1 < splits.length ? splits[i + 1].index : md.length;
-      modules.push({ title: splits[i].title, content: md.substring(start, end).trim() });
-    }
-  }
-
-  // 统计严重等级
-  let criticalCount = 0, warningCount = 0, infoCount = 0;
-  for (const m of modules) {
-    const c = (m.content.match(/🔴/g) || []).length;
-    const w = (m.content.match(/🟡/g) || []).length;
-    const i = (m.content.match(/🔵/g) || []).length;
-    criticalCount += c; warningCount += w; infoCount += i;
-  }
-
-  document.getElementById('stat-modules').textContent = modules.length;
-  document.getElementById('stat-critical').textContent = criticalCount;
-  document.getElementById('stat-warning').textContent = warningCount;
-  document.getElementById('stat-info').textContent = infoCount;
-
-  // 提取每个模块的评分
-  function extractScore(content) {
-    const scoreMatch = content.match(/模块评分[：:]\s*(\d+)/);
-    if (scoreMatch) return parseInt(scoreMatch[1]);
-    const ratingMatch = content.match(/总体评分[：:]\s*(\d+)/);
-    if (ratingMatch) return parseInt(ratingMatch[1]);
-    return null;
-  }
-
-  function extractRisk(title) {
-    if (/高风险/.test(title)) return 'high';
-    if (/中风险/.test(title)) return 'medium';
-    if (/低风险/.test(title)) return 'low';
-    return '';
-  }
-
-  // 构建侧边栏
-  const sidebar = document.getElementById('sidebar');
-  modules.forEach((m, i) => {
-    const item = document.createElement('div');
-    item.className = 'sidebar-item' + (i === 0 ? ' active' : '');
-    const score = extractScore(m.content);
-    const risk = extractRisk(m.title);
-    item.innerHTML = (risk ? '<span class="risk ' + risk + '">' + (risk === 'high' ? '高' : risk === 'medium' ? '中' : '低') + '</span>' : '')
-      + '<span class="name">' + m.title + '</span>'
-      + (score !== null ? '<span class="score">' + score + '</span>' : '');
-    item.onclick = function() {
-      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.module-section').forEach(el => el.classList.remove('active'));
-      document.getElementById('module-' + i).classList.add('active');
-    };
-    sidebar.appendChild(item);
+document.querySelectorAll('.sidebar-item').forEach(function(item) {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.sidebar-item').forEach(function(el) { el.classList.remove('active'); });
+    item.classList.add('active');
+    document.querySelectorAll('.module-section').forEach(function(el) { el.classList.remove('active'); });
+    document.getElementById('module-' + item.getAttribute('data-idx')).classList.add('active');
   });
-
-  // 渲染内容
-  const content = document.getElementById('content');
-  content.innerHTML = '';
-  modules.forEach((m, i) => {
-    const section = document.createElement('div');
-    section.className = 'module-section' + (i === 0 ? ' active' : '');
-    section.id = 'module-' + i;
-
-    const heading = document.createElement('h1');
-    heading.textContent = m.title;
-    section.appendChild(heading);
-
-    const body = document.createElement('div');
-    body.innerHTML = marked.parse(m.content);
-    section.appendChild(body);
-
-    content.appendChild(section);
-  });
-})();
+});
 </script>
 </body>
 </html>`;
@@ -1521,11 +1908,35 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
       cases.push({ id: uuid(), name: `E2E ${mode} 测试 (${label})`, type, status: 'pending' });
       break;
     }
-    case 'frontend':
-      cases.push(
-        { id: uuid(), name: 'Vitest 前端单元测试', type, status: 'pending' },
-      );
+    case 'frontend': {
+      const projectId = config.projectId as string | undefined;
+      if (projectId) {
+        const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+        const discoveryPath = path.join(DATA_DIR, 'projects', projectId, 'frontend-discovery.json');
+        if (fs.existsSync(discoveryPath)) {
+          try {
+            const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+            const allModules = discovery.modules || [];
+            const selectedIds = (config.modules as string[]) || allModules.map((m: any) => m.id);
+            for (const mod of allModules) {
+              if (!selectedIds.includes(mod.id)) continue;
+              const fileCount = mod.files?.length || 0;
+              if (fileCount === 0) continue; // 跳过空模块
+              cases.push({
+                id: uuid(),
+                name: `${mod.name} (${fileCount} 文件)`,
+                type,
+                status: 'pending',
+              });
+            }
+          } catch { /* fallback below */ }
+        }
+      }
+      if (cases.length === 0) {
+        cases.push({ id: uuid(), name: 'Vitest 前端单元测试', type, status: 'pending' });
+      }
       break;
+    }
     case 'api': {
       // 尝试从发现的 api-tests.json 动态生成 cases
       const projectId = config.projectId as string | undefined;
@@ -1590,7 +2001,7 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
 
   const suite: TestSuite = {
     id: uuid(),
-    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? '前端单元' : type === 'codereview' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; const mc = cases.length; return `代码审查(${p ? p.name : '全部'}${mc > 1 ? `, ${mc}模块` : ''})`; })() : 'API接口'}测试`,
+    name: `${type === 'agent' ? 'Agent智能体' : type === 'e2e' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; return `E2E页面(${p ? p.name : (config.scope as string) || 'all'})`; })() : type === 'frontend' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; const mc = cases.length; return `前端单元(${p ? p.name : '全部'}${mc > 1 ? `, ${mc}模块` : ''})`; })() : type === 'codereview' ? (() => { const p = (config.projectId as string) ? getProjectById(config.projectId as string) : undefined; const mc = cases.length; return `代码审查(${p ? p.name : '全部'}${mc > 1 ? `, ${mc}模块` : ''})`; })() : 'API接口'}测试`,
     type,
     status: 'pending',
     cases,
@@ -1601,6 +2012,199 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
   runs.set(suite.id, suite);
   saveRun(suite);
   return suite;
+}
+
+/** 恢复中断的代码审查 */
+export async function resumeTestRun(originalSuiteId: string): Promise<string> {
+  const original = getTestRun(originalSuiteId);
+  if (!original) throw new Error('未找到原始测试记录');
+  if (original.type !== 'codereview') throw new Error('仅支持代码审查类型的恢复');
+
+  // 检查是否有中断的 case
+  const resumeInfo = getResumeInfo(original) as ResumeInfo | null;
+  const hasInterrupted = resumeInfo?.cases && Object.values(resumeInfo.cases).some((c: ResumeCaseInfo) => c.status === 'interrupted');
+  const hasPending = original.cases.some(c => c.status === 'error' || c.status === 'pending');
+
+  if (!hasInterrupted && !hasPending) {
+    throw new Error('没有需要恢复的模块');
+  }
+
+  // 创建新 suite，复制配置和 resumeInfo
+  const suite = createTestSuite(original.type, {
+    ...original.config,
+    resumeInfo: resumeInfo || { cases: {} },
+  });
+
+  return suite.id;
+}
+
+/** 人工对话（基于审查上下文） */
+export async function chatWithReview(suiteId: string, message: string): Promise<string> {
+  const suite = getTestRun(suiteId);
+  if (!suite) throw new Error('未找到测试记录');
+
+  const projectId = suite.config.projectId as string;
+  const project = projectId ? getProjectById(projectId) : undefined;
+  if (!project?.sourcePath) throw new Error('项目源码路径未配置');
+
+  // 找到最近有 sessionId 的 case
+  const resumeInfo = getResumeInfo(suite);
+  let sessionId = '';
+
+  if (resumeInfo?.cases && Object.keys(resumeInfo.cases).length > 0) {
+    // 优先找 completed 的（有完整上下文），其次找 interrupted 的
+    const caseEntries = Object.entries(resumeInfo.cases);
+    const completedCase = caseEntries.find(([_, info]) => info.status === 'completed');
+    const interruptedCase = caseEntries.find(([_, info]) => info.status === 'interrupted');
+    const targetCase = completedCase || interruptedCase;
+    if (targetCase) {
+      sessionId = targetCase[1].sessionId;
+    }
+  }
+
+  if (!sessionId) throw new Error('无可用的会话上下文');
+
+  // 创建一个虚拟的 chat case
+  const { query } = await import('@anthropic-ai/claude-code');
+  const chatCaseId = uuid();
+  const chatCase: TestCase = {
+    id: chatCaseId,
+    name: `💬 ${message.slice(0, 30)}`,
+    type: 'codereview',
+    status: 'running',
+  };
+
+  // 如果原 suite 已完成，需要重新打开；如果正在运行，追加到原 suite
+  const targetSuite = suite;
+  if (targetSuite.status !== 'running') {
+    targetSuite.status = 'running';
+    targetSuite.finishedAt = undefined;
+  }
+  targetSuite.cases.push(chatCase);
+  saveRun(targetSuite);
+
+  const abortController = new AbortController();
+  abortControllers.set(`chat-${chatCaseId}`, abortController);
+
+  const startTime = Date.now();
+  let fullOutput = '';
+  const blocks: StreamBlock[] = [];
+  let newSessionId = '';
+
+  try {
+    testBus.emit('agent:chat', {
+      suiteId: targetSuite.id,
+      caseId: chatCaseId,
+      type: 'text',
+      content: `\n💬 你: ${message}\n\n`,
+    });
+
+    const response = query({
+      prompt: message,
+      options: {
+        resume: sessionId,
+        forkSession: true,
+        cwd: project.sourcePath,
+        allowedTools: ['Read', 'Glob', 'Grep'],
+        maxTurns: 9999,
+        permissionMode: 'bypassPermissions',
+        abortController,
+      },
+    });
+
+    for await (const msg of response) {
+      if (abortController.signal.aborted) throw new Error('对话被中断');
+
+      switch (msg.type) {
+        case 'system': {
+          const sid = (msg as any).session_id;
+          if (sid) newSessionId = sid;
+          break;
+        }
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                blocks.push({ type: 'text', content: block.text });
+                testBus.emit('agent:chat', {
+                  suiteId: targetSuite.id,
+                  caseId: chatCaseId,
+                  type: 'text',
+                  content: block.text,
+                });
+              } else if (block.type === 'tool_use') {
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+                testBus.emit('agent:chat', {
+                  suiteId: targetSuite.id,
+                  caseId: chatCaseId,
+                  type: 'tool_use',
+                  name: block.name,
+                  input: block.input,
+                  id: block.id,
+                });
+              }
+            }
+          }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                testBus.emit('agent:chat', {
+                  suiteId: targetSuite.id,
+                  caseId: chatCaseId,
+                  type: 'tool_result',
+                  toolUseId: block.tool_use_id,
+                  content: resultContent?.slice(0, 5000),
+                });
+              }
+            }
+          }
+          break;
+        }
+        case 'result': {
+          const resultMsg = msg as any;
+          if (resultMsg.subtype === 'success' && resultMsg.result && !fullOutput) {
+            fullOutput = resultMsg.result;
+          }
+          break;
+        }
+      }
+    }
+
+    chatCase.duration = Date.now() - startTime;
+    chatCase.output = fullOutput;
+    chatCase.blocks = blocks;
+    chatCase.status = 'passed';
+
+    // 更新 resumeInfo 中的 sessionId（供下次对话使用）
+    if (newSessionId) {
+      const info = getResumeInfo(targetSuite);
+      info.cases[chatCaseId] = {
+        sessionId: newSessionId,
+        status: 'completed',
+        partialOutput: fullOutput,
+      };
+      setResumeInfo(targetSuite, info);
+    }
+
+  } catch (err: any) {
+    chatCase.duration = Date.now() - startTime;
+    chatCase.status = 'error';
+    chatCase.error = err.message;
+    chatCase.blocks = blocks;
+  }
+
+  abortControllers.delete(`chat-${chatCaseId}`);
+  saveRun(targetSuite);
+  testBus.emit('test:update', { suiteId: targetSuite.id, caseId: chatCaseId, caseName: chatCase.name, status: chatCase.status, duration: chatCase.duration });
+
+  return targetSuite.id;
 }
 
 export async function executeTestRun(suiteId: string): Promise<TestSuite> {
@@ -1707,4 +2311,164 @@ export function setConcurrency(type: TestType, val: number): void {
     CONCURRENCY[type] = val;
     processTypeQueue(type); // 可能立即启动排队的测试
   }
+}
+
+// ========== 生成提示词（供前端复制到 Claude Code 手动执行） ==========
+
+export interface GeneratedPrompt {
+  prompt: string;
+  cwd: string;
+}
+
+export function generateTestPrompt(type: TestType, config: Record<string, unknown>): GeneratedPrompt {
+  const base = getConfig().aiPlatformRoot;
+  const projectId = config.projectId as string | undefined;
+  const project = projectId ? getProjectById(projectId) : undefined;
+
+  if (type === 'codereview') {
+    if (!project?.sourcePath) throw new Error('请选择项目并配置源码路径');
+    const skillFile = path.resolve(base, 'skills', 'tests', 'code-review', 'SKILL.md');
+    const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+    const reportsDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'codereview', 'reports', projectSlug);
+    if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+
+    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+    const selectedModuleIds = (config.modules as string[]) || [];
+
+    // 读取审查规则
+    const rulesPath = path.join(DATA_DIR, 'projects', projectId!, 'review-rules.json');
+    let rulesSection = '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。';
+    if (fs.existsSync(rulesPath)) {
+      try {
+        const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+        rulesSection = `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${JSON.stringify(rules, null, 2)}`;
+      } catch { /* ignore */ }
+    }
+
+    // 读取模块信息并筛选选中的
+    const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json');
+    let allModules: any[] = [];
+    if (fs.existsSync(discoveryPath)) {
+      try {
+        const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
+        allModules = discovery.modules || [];
+      } catch { /* ignore */ }
+    }
+
+    const selectedModules = allModules.filter((m: any) => selectedModuleIds.includes(m.id));
+    const framework = (project as any).framework || 'Vue 3 + Vite + Pinia';
+
+    // 按模块逐个生成审查指令
+    if (selectedModules.length > 0) {
+      const moduleParts = selectedModules.map((mod: any, idx: number) => {
+        const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
+        const riskIndicators = (mod as any).riskIndicators || (mod.reason ? [mod.reason] : []);
+        const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
+        const reportPath = path.join(reportsDir, `manual-module-${idx + 1}.md`).replace(/\\/g, '/');
+
+        return `### 模块 ${idx + 1}: ${mod.name}
+- 模块路径: ${mod.path}
+- 文件数量: ${mod.files}
+- 风险等级: ${mod.riskLevel || 'unknown'}
+- 关注方向:
+${riskText}
+- 关键文件:
+${fileList}
+- 报告输出路径: ${reportPath}`;
+      }).join('\n\n');
+
+      const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对指定模块逐个执行代码审查。
+
+Skill 文件: ${skillFile.replace(/\\/g, '/')}
+
+## 项目信息
+- 项目名称: ${project.name}
+- 源码路径: ${project.sourcePath}
+- 前端框架: ${framework}
+
+${rulesSection}
+
+## 待审查模块 (${selectedModules.length}个)
+${moduleParts}
+
+## 执行方式
+对每个模块分别审查，按 Skill 中定义的格式生成报告，用 Write 工具写入各模块对应的「报告输出路径」。
+全部模块审查完成后，汇总所有模块报告生成一份 HTML 报告。`;
+
+      return { prompt, cwd: project.sourcePath };
+    }
+
+    // 全量审查
+    const reportPath = path.join(reportsDir, `review-full-manual-${Date.now()}.md`).replace(/\\/g, '/');
+    const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对项目进行全面代码审查。
+
+Skill 文件: ${skillFile.replace(/\\/g, '/')}
+
+## 项目信息
+- 项目名称: ${project.name}
+- 源码路径: ${project.sourcePath}
+- 前端框架: ${framework}
+
+${rulesSection}
+
+## 审查范围
+请扫描项目源码全面审查，重点关注 src/pages/、src/components/、src/utils/、src/api/ 等目录。
+
+## 执行方式
+按 Skill 中定义的格式生成报告，用 Write 工具写入: ${reportPath}`;
+
+    return { prompt, cwd: project.sourcePath };
+  }
+
+  if (type === 'e2e') {
+    if (!project) throw new Error('请选择项目');
+    const skillFile = path.resolve(base, 'skills', 'tests', 'e2e-page-test', 'SKILL.md');
+    const mode = (config.mode as string) || 'standard';
+    const scope = (config.scope as string) || 'all';
+    const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+    const e2eDataDir = (getConfig().testDataDir || getConfig().e2eDataDir).replace(/\\/g, '/');
+
+    // 构建页面列表
+    const pages = resolvePages(project, scope);
+    const pageList = pages.map(p => `- ${p.name}: ${project.baseUrl}${p.url}`).join('\n');
+
+    // 构建参数映射
+    const paramsInfo = project.globalParams && Object.keys(project.globalParams).length > 0
+      ? `动态参数映射：\n${Object.entries(project.globalParams).map(([k, v]) => `  - ${k}: ${(v as string[]).join(', ')}`).join('\n')}`
+      : '';
+
+    const prompt = `请先 Read 以下 Skill 文件，理解测试流程，然后执行 E2E 页面测试。
+
+Skill 文件: ${skillFile.replace(/\\/g, '/')}
+工作目录: ${project.sourcePath || base}
+
+## 项目信息
+- 项目名称: ${project.name}
+- 前端地址: ${project.baseUrl}
+- 后端 API: ${project.apiBaseUrl || project.baseUrl}
+- 登录页: ${project.baseUrl}${project.loginUrl || ''}
+- 登录凭据: ${project.username} / ${project.password}
+${paramsInfo ? `\n${paramsInfo}\n` : ''}
+## 测试配置
+- 模式: ${mode}
+- 范围: ${scope}
+- e2eDataDir: ${e2eDataDir}
+- projectName: ${projectSlug}
+
+## 待测试页面 (${pages.length}页)
+${pageList}
+
+请严格按照 Skill 文件中的流程执行：登录 → 逐页测试（observe → think → act → validate）→ 生成报告。
+
+输入参数（Skill 中引用的变量）：
+\`\`\`json
+{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir}", "projectName": "${projectSlug}"}
+\`\`\`
+
+注意：测试产物请写入 e2eDataDir 对应的目录结构中，路径中包含项目名 ${projectSlug}。`;
+
+    return { prompt, cwd: project.sourcePath || base };
+  }
+
+  throw new Error(`类型 ${type} 暂不支持生成提示词`);
 }

@@ -1,10 +1,17 @@
 import api from './client'
 
+export interface ClaudeConfig {
+  authToken: string
+  baseUrl: string
+  model: string
+}
+
 export interface PlatformConfig {
   aiPlatformRoot: string
   e2eDataDir: string
   testDataDir: string
   apiTestBaseUrl: string
+  claudeConfig?: ClaudeConfig
 }
 
 export interface CheckResult {
@@ -22,4 +29,13 @@ export function updateSettings(data: Partial<PlatformConfig>) {
 
 export function checkSettings() {
   return api.get<Record<string, CheckResult>>('/settings/check')
+}
+
+export function testClaude(claudeConfig: ClaudeConfig) {
+  return api.post<CheckResult>('/settings/test-claude', { claudeConfig })
+}
+
+/** 生成发现提示词（供复制到 Claude Code 手动执行） */
+export function generateDiscoveryPrompt(projectId: string, type: string) {
+  return api.post<{ prompt: string; cwd: string }>(`/projects/${projectId}/generate-discovery-prompt`, { type }).then(r => r.data)
 }
