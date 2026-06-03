@@ -57,6 +57,13 @@ app.listen(PORT, () => {
   console.log(`[AI Platform] Server running on http://localhost:${PORT}`);
   console.log(`[AI Platform] Projects: ${config.projects.length}`);
 
+  // 预加载 Claude Code SDK（~75MB），避免首次测试时等待
+  import('@anthropic-ai/claude-code').then(() => {
+    console.log('[AI Platform] Claude Code SDK 预加载完成');
+  }).catch((err: any) => {
+    console.warn('[AI Platform] Claude Code SDK 预加载失败（首次使用时会再尝试）:', err.message);
+  });
+
   // 初始化定时任务调度器
   initScheduler((workflowName, params, emitter) => {
     startWorkflow(workflowName, params, emitter);

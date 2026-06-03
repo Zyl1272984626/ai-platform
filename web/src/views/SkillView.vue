@@ -12,6 +12,7 @@
           <button class="ftab" :class="{ active: filter === 'scene' }" @click="filter = 'scene'">场景</button>
           <button class="ftab" :class="{ active: filter === 'capability' }" @click="filter = 'capability'">能力</button>
           <button class="ftab" :class="{ active: filter === 'test' }" @click="filter = 'test'">测试</button>
+          <button class="ftab" :class="{ active: filter === 'base' }" @click="filter = 'base'">基础</button>
         </div>
       </div>
     </header>
@@ -24,7 +25,7 @@
         @click="openDetail(skill.name)"
       >
         <div class="skill-top">
-          <span class="skill-type-badge" :class="skill.type">{{ skill.type === 'scene' ? '场景' : skill.type === 'test' ? '测试' : '能力' }}</span>
+          <span class="skill-type-badge" :class="skill.type">{{ skill.type === 'scene' ? '场景' : skill.type === 'test' ? '测试' : skill.type === 'base' ? '基础' : '能力' }}</span>
           <span class="skill-name">{{ skill.name }}</span>
         </div>
         <div class="skill-desc">{{ skill.description }}</div>
@@ -44,7 +45,7 @@
       <div class="detail-card">
         <div class="detail-header">
           <div>
-            <span class="skill-type-badge" :class="detailSkill.type">{{ detailSkill.type === 'scene' ? '场景' : '能力' }}</span>
+            <span class="skill-type-badge" :class="detailSkill.type">{{ detailSkill.type === 'scene' ? '场景' : detailSkill.type === 'test' ? '测试' : detailSkill.type === 'base' ? '基础' : '能力' }}</span>
             <h2>{{ detailSkill.name }}</h2>
           </div>
           <button class="close-btn" @click="detailSkill = null">✕</button>
@@ -75,7 +76,7 @@ import type { Skill } from '../api/types'
 const router = useRouter()
 const skills = ref<Skill[]>([])
 const search = ref('')
-const filter = ref<'all' | 'scene' | 'capability' | 'test'>('all')
+const filter = ref<'all' | 'scene' | 'capability' | 'test' | 'base'>('all')
 const detailSkill = ref<Skill | null>(null)
 const detailContent = ref('')
 
@@ -193,6 +194,7 @@ function tryInChat() {
 .skill-type-badge.scene { background: #eef0ff; color: #667eea; }
 .skill-type-badge.capability { background: #f0fff4; color: #52c41a; }
 .skill-type-badge.test { background: #f9f0ff; color: #722ed1; }
+.skill-type-badge.base { background: #e6f7ff; color: #1890ff; }
 .skill-name {
   font-size: 14px;
   font-weight: 600;

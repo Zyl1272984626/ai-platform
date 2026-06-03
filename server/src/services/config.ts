@@ -52,6 +52,12 @@ export interface TestProject {
   globalParams?: Record<string, string[]>;   // 公共动态参数，如 { ":appId": ["base_app"] }
 }
 
+export interface ClaudeConfig {
+  authToken: string;      // ANTHROPIC_AUTH_TOKEN（智谱 CodePlan Token）
+  baseUrl: string;        // ANTHROPIC_BASE_URL
+  model: string;          // ANTHROPIC_MODEL
+}
+
 export interface PlatformConfig {
   // 基础配置
   projectRoot: string;          // 兼容旧配置
@@ -65,6 +71,9 @@ export interface PlatformConfig {
   // 多项目配置
   projects: TestProject[];
   defaultProjectId: string;
+
+  // Claude 配置（智谱 CodePlan）
+  claudeConfig?: ClaudeConfig;
 }
 
 // ========== 默认项目 ==========
@@ -95,6 +104,11 @@ const DEFAULT_CONFIG: PlatformConfig = {
   apiTestBaseUrl: 'http://localhost:3100',
   projects: [createDefaultProject()],
   defaultProjectId: 'agent-main',
+  claudeConfig: {
+    authToken: process.env.ANTHROPIC_AUTH_TOKEN || '',
+    baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
+    model: process.env.ANTHROPIC_MODEL || 'glm-5.1',
+  },
 };
 
 /** 运行时配置缓存 */
@@ -201,6 +215,24 @@ function migrateConfig(saved: any): PlatformConfig {
   };
 }
 
+// ========== Claude 配置注入 ==========
+
+/** 将 claudeConfig 同步到 process.env，让 SDK 和子进程能读取 */
+export function applyClaudeConfig(): void {
+  const c = config.claudeConfig;
+  if (!c) return;
+  if (c.authToken) process.env.ANTHROPIC_AUTH_TOKEN = c.authToken;
+  if (c.baseUrl) process.env.ANTHROPIC_BASE_URL = c.baseUrl;
+  if (c.model) {
+    process.env.ANTHROPIC_MODEL = c.model;
+    process.env.ANTHROPIC_DEFAULT_SONNET_MODEL = c.model;
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = c.model;
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = c.model;
+    process.env.ANTHROPIC_SMALL_FAST_MODEL = c.model;
+  }
+  console.log(`[Config] Claude 配置已注入 (model=${c.model}, baseUrl=${c.baseUrl})`);
+}
+
 // ========== 配置加载/保存 ==========
 
 /** 从文件加载配置 */
@@ -243,6 +275,7 @@ export function loadConfig(): PlatformConfig {
   } catch (e: any) {
     console.warn('[Config] 配置文件读取失败，使用默认值:', e.message);
   }
+  applyClaudeConfig();
   return config;
 }
 
@@ -272,6 +305,7 @@ function saveConfig(): void {
     if (config.testDataDir) {
       process.env.TEST_DATA_DIR = config.testDataDir;
     }
+    applyClaudeConfig();
     console.log('[Config] 配置已保存');
   } catch (e: any) {
     console.error('[Config] 配置保存失败:', e.message);
@@ -447,10 +481,13 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
     results['claudeCode'] = { ok: false, msg: '未安装 Claude Code CLI，请运行: npm install -g @anthropic-ai/claude-code' };
   }
 
-  // ANTHROPIC_API_KEY
-  results['anthropicApiKey'] = {
-    ok: !!process.env.ANTHROPIC_API_KEY,
-    msg: process.env.ANTHROPIC_API_KEY ? 'API Key 已配置' : '未配置 ANTHROPIC_API_KEY 环境变量',
+  // Claude 配置（CodePlan）
+  const claudeCfg = config.claudeConfig;
+  results['claudeConfig'] = {
+    ok: !!(claudeCfg?.authToken),
+    msg: claudeCfg?.authToken
+      ? `已配置 (CodePlan, model=${claudeCfg.model || 'glm-5.1'})`
+      : '未配置 Claude CodePlan Token',
   };
 
   // Playwright 浏览器

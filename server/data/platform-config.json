@@ -30,5 +30,10 @@
       "id": "b65cd4be"
     }
   ],
-  "defaultProjectId": "agent-main"
+  "defaultProjectId": "agent-main",
+  "claudeConfig": {
+    "authToken": "b96a0e239df344c793eb2dfb015b5a2e.S1lQ3AyXUei2O2QO",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "model": "glm-5.1"
+  }
 }

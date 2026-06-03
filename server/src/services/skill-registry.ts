@@ -8,7 +8,7 @@ import { AI_PLATFORM_ROOT } from './config.js';
 export interface SkillMeta {
   name: string;
   description: string;
-  type: 'scene' | 'capability' | 'test';
+  type: 'scene' | 'capability' | 'test' | 'base';
   path: string;
   allowedTools?: string[];
   dependencies?: string[];
@@ -24,14 +24,15 @@ const SKILLS_DIR = path.resolve(AI_PLATFORM_ROOT, 'skills');
 export function listSkills(): SkillMeta[] {
   const skills: SkillMeta[] = [];
 
-  for (const dirName of ['scenes', 'capabilities', 'tests']) {
+  for (const dirName of ['scenes', 'capabilities', 'tests', 'base']) {
     const typeDir = path.join(SKILLS_DIR, dirName);
     if (!fs.existsSync(typeDir)) continue;
 
-    const typeMap: Record<string, 'scene' | 'capability' | 'test'> = {
+    const typeMap: Record<string, 'scene' | 'capability' | 'test' | 'base'> = {
       scenes: 'scene',
       capabilities: 'capability',
       tests: 'test',
+      base: 'base',
     };
     const skillType = typeMap[dirName];
 

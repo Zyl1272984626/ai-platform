@@ -14,7 +14,9 @@ export type TestEventName =
   | 'test:update'
   | 'agent:stream'
   | 'test:done'
-  | 'test:error';
+  | 'test:error'
+  | 'test:resumed'
+  | 'agent:chat';
 
 // 订阅某个 suiteId 的所有事件（返回取消订阅函数）
 export function subscribeSuite(
