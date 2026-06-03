@@ -2325,18 +2325,39 @@ export function registerManualReport(params: {
   type: string;
   projectId?: string;
   projectName?: string;
-  reportPath: string;
+  reportPath?: string;
+  reportFile?: string;  // 报告文件名（如 review-2026-06-03-1430.html），后端自动拼接目录
 }): string {
   const suiteId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
 
+  // 从 projectId 查项目名（避免 curl 传中文乱码）
+  let displayName = '未知项目';
+  let projectSlug = 'unknown';
+  let reportsDir = '';
+  if (params.projectId) {
+    const project = getProjectById(params.projectId);
+    if (project?.name) {
+      displayName = project.name;
+      projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+    }
+    const base = getConfig().testDataDir || getConfig().e2eDataDir;
+    reportsDir = path.join(base, 'codereview', 'reports', projectSlug);
+  }
+
+  // 确定 reportPath：优先用 reportFile 自动拼接（避免中文路径通过 curl 乱码）
+  let finalReportPath = params.reportPath || '';
+  if (!finalReportPath && params.reportFile && reportsDir) {
+    finalReportPath = path.join(reportsDir, params.reportFile).replace(/\\/g, '/');
+  }
+
   const suite: TestSuite = {
     id: suiteId,
-    name: `${params.projectName || '未知项目'} — 手动代码审查`,
+    name: `${displayName} — 手动代码审查`,
     type: (params.type || 'codereview') as TestType,
     cases: [{
       id: `case-${suiteId}`,
-      name: `${params.projectName || '未知项目'} — 手动代码审查`,
+      name: `${displayName} — 手动代码审查`,
       type: (params.type || 'codereview') as TestType,
       status: 'passed',
       duration: 0,
@@ -2346,13 +2367,13 @@ export function registerManualReport(params: {
     finishedAt: now,
     config: {
       projectId: params.projectId || '',
-      reportPath: params.reportPath,
+      reportPath: finalReportPath,
       isManual: true,
     },
   };
 
   const dir = getRunsDir(suite.type as TestType);
-  fs.writeFileSync(path.join(dir, `${suiteId}.json`), JSON.stringify(suite, null, 2));
+  fs.writeFileSync(path.join(dir, `${suiteId}.json`), JSON.stringify(suite, null, 2), 'utf-8');
   runs.set(suiteId, suite);
   return suiteId;
 }
@@ -2397,6 +2418,7 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
     const now = new Date();
     const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
     const registerUrl = `http://localhost:3100/api/tests/register-manual-report`;
+    const htmlReportName = `review-${ts}.html`;
 
     // 按模块逐个生成审查指令
     if (selectedModules.length > 0) {
@@ -2438,13 +2460,13 @@ ${moduleParts}
 1. 对每个模块分别审查，按 Skill 中定义的格式生成报告，用 Write 工具写入各模块对应的「报告输出路径」
 2. 全部模块审查完成后，汇总所有模块报告生成一份 HTML 报告，写入: ${htmlReportPath}
 3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
-   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d '{"type":"codereview","projectId":"${projectId}","projectName":"${project.name}","reportPath":"${htmlReportPath}"}'`;
+   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
       return { prompt, cwd: project.sourcePath };
     }
 
     // 全量审查
-    const reportPath = path.join(reportsDir, `manual-全量审查-${ts}.md`).replace(/\\/g, '/');
+    const reportPath = path.join(reportsDir, `manual-full-${ts}.md`).replace(/\\/g, '/');
     const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
 
     const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对项目进行全面代码审查。
@@ -2465,7 +2487,7 @@ ${rulesSection}
 1. 按 Skill 中定义的格式生成报告，用 Write 工具写入: ${reportPath}
 2. 然后生成 HTML 报告写入: ${htmlReportPath}
 3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
-   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d '{"type":"codereview","projectId":"${projectId}","projectName":"${project.name}","reportPath":"${htmlReportPath}"}'`;
+   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
     return { prompt, cwd: project.sourcePath };
   }
