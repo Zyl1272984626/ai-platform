@@ -16,6 +16,7 @@ import {
   resumeTestRun,
   chatWithReview,
   generateTestPrompt,
+  registerManualReport,
   type TestType,
 } from '../services/test-runner.js';
 import { testBus } from '../services/test-events.js';
@@ -53,6 +54,18 @@ testRouter.post('/generate-prompt', (req: Request, res: Response) => {
   try {
     const result = generateTestPrompt(type as TestType, config || {});
     res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 注册手动执行产生的报告（让测试页面可见）
+testRouter.post('/register-manual-report', (req: Request, res: Response) => {
+  const { type, projectId, projectName, reportPath } = req.body;
+  if (!reportPath) return res.status(400).json({ error: 'reportPath is required' });
+  try {
+    const suiteId = registerManualReport({ type, projectId, projectName, reportPath });
+    res.json({ ok: true, suiteId });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }

@@ -2320,6 +2320,43 @@ export interface GeneratedPrompt {
   cwd: string;
 }
 
+/** 注册手动执行产生的报告（让测试页面可见） */
+export function registerManualReport(params: {
+  type: string;
+  projectId?: string;
+  projectName?: string;
+  reportPath: string;
+}): string {
+  const suiteId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const now = new Date().toISOString();
+
+  const suite: TestSuite = {
+    id: suiteId,
+    name: `${params.projectName || '未知项目'} — 手动代码审查`,
+    type: (params.type || 'codereview') as TestType,
+    cases: [{
+      id: `case-${suiteId}`,
+      name: `${params.projectName || '未知项目'} — 手动代码审查`,
+      type: (params.type || 'codereview') as TestType,
+      status: 'passed',
+      duration: 0,
+    }],
+    status: 'passed',
+    startedAt: now,
+    finishedAt: now,
+    config: {
+      projectId: params.projectId || '',
+      reportPath: params.reportPath,
+      isManual: true,
+    },
+  };
+
+  const dir = getRunsDir(suite.type as TestType);
+  fs.writeFileSync(path.join(dir, `${suiteId}.json`), JSON.stringify(suite, null, 2));
+  runs.set(suiteId, suite);
+  return suiteId;
+}
+
 export function generateTestPrompt(type: TestType, config: Record<string, unknown>): GeneratedPrompt {
   const base = getConfig().aiPlatformRoot;
   const projectId = config.projectId as string | undefined;
@@ -2357,16 +2394,20 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
 
     const selectedModules = allModules.filter((m: any) => selectedModuleIds.includes(m.id));
     const framework = (project as any).framework || 'Vue 3 + Vite + Pinia';
+    const now = new Date();
+    const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    const registerUrl = `http://localhost:3100/api/tests/register-manual-report`;
 
     // 按模块逐个生成审查指令
     if (selectedModules.length > 0) {
-      const moduleParts = selectedModules.map((mod: any, idx: number) => {
+      const moduleParts = selectedModules.map((mod: any) => {
         const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
         const riskIndicators = (mod as any).riskIndicators || (mod.reason ? [mod.reason] : []);
         const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
-        const reportPath = path.join(reportsDir, `manual-module-${idx + 1}.md`).replace(/\\/g, '/');
+        const modSlug = mod.name.replace(/[<>:"/\\|?*]+/g, '_');
+        const reportPath = path.join(reportsDir, `manual-${modSlug}.md`).replace(/\\/g, '/');
 
-        return `### 模块 ${idx + 1}: ${mod.name}
+        return `### ${mod.name}
 - 模块路径: ${mod.path}
 - 文件数量: ${mod.files}
 - 风险等级: ${mod.riskLevel || 'unknown'}
@@ -2376,6 +2417,8 @@ ${riskText}
 ${fileList}
 - 报告输出路径: ${reportPath}`;
       }).join('\n\n');
+
+      const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
 
       const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对指定模块逐个执行代码审查。
 
@@ -2392,14 +2435,18 @@ ${rulesSection}
 ${moduleParts}
 
 ## 执行方式
-对每个模块分别审查，按 Skill 中定义的格式生成报告，用 Write 工具写入各模块对应的「报告输出路径」。
-全部模块审查完成后，汇总所有模块报告生成一份 HTML 报告。`;
+1. 对每个模块分别审查，按 Skill 中定义的格式生成报告，用 Write 工具写入各模块对应的「报告输出路径」
+2. 全部模块审查完成后，汇总所有模块报告生成一份 HTML 报告，写入: ${htmlReportPath}
+3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
+   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d '{"type":"codereview","projectId":"${projectId}","projectName":"${project.name}","reportPath":"${htmlReportPath}"}'`;
 
       return { prompt, cwd: project.sourcePath };
     }
 
     // 全量审查
-    const reportPath = path.join(reportsDir, `review-full-manual-${Date.now()}.md`).replace(/\\/g, '/');
+    const reportPath = path.join(reportsDir, `manual-全量审查-${ts}.md`).replace(/\\/g, '/');
+    const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
+
     const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对项目进行全面代码审查。
 
 Skill 文件: ${skillFile.replace(/\\/g, '/')}
@@ -2415,7 +2462,10 @@ ${rulesSection}
 请扫描项目源码全面审查，重点关注 src/pages/、src/components/、src/utils/、src/api/ 等目录。
 
 ## 执行方式
-按 Skill 中定义的格式生成报告，用 Write 工具写入: ${reportPath}`;
+1. 按 Skill 中定义的格式生成报告，用 Write 工具写入: ${reportPath}
+2. 然后生成 HTML 报告写入: ${htmlReportPath}
+3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
+   curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d '{"type":"codereview","projectId":"${projectId}","projectName":"${project.name}","reportPath":"${htmlReportPath}"}'`;
 
     return { prompt, cwd: project.sourcePath };
   }
