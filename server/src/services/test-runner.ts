@@ -1727,7 +1727,7 @@ async function runSingleModuleReview(
 }
 
 /** 将 Markdown 审查结果转为独立 HTML 报告（服务端渲染，无 CDN 依赖） */
-function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
+export function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
   const durationSec = (duration / 1000).toFixed(1);
 
   // 服务端完成 Markdown 解析，按模块分割并渲染为 HTML
@@ -2440,7 +2440,10 @@ ${fileList}
 - 报告输出路径: ${reportPath}`;
       }).join('\n\n');
 
+      // 合并 Markdown 路径（把所有模块合成一份，后端用固定模板生成 HTML）
+      const mergedMdPath = path.join(reportsDir, `review-${ts}.md`).replace(/\\/g, '/');
       const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
+      const buildHtmlUrl = `http://localhost:3100/api/tests/build-review-html`;
 
       const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对指定模块逐个执行代码审查。
 
@@ -2458,8 +2461,10 @@ ${moduleParts}
 
 ## 执行方式
 1. 对每个模块分别审查，按 Skill 中定义的格式生成报告，用 Write 工具写入各模块对应的「报告输出路径」
-2. 全部模块审查完成后，汇总所有模块报告生成一份 HTML 报告，写入: ${htmlReportPath}
-3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
+2. 全部模块审查完成后，将所有模块报告合并为一份 Markdown 文件（每个模块之间用 \`---\\n## 模块名\` 分隔），写入: ${mergedMdPath}
+3. 用 Bash 调用平台 API 生成统一风格的 HTML 报告：
+   curl -s -X POST "${buildHtmlUrl}" -H "Content-Type: application/json" -d "{\"markdownPath\":\"${mergedMdPath}\",\"htmlPath\":\"${htmlReportPath}\",\"projectName\":\"${projectSlug}\"}"
+4. 用 Bash 注册报告到平台（使报告在测试页面可见）：
    curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
       return { prompt, cwd: project.sourcePath };
@@ -2468,6 +2473,7 @@ ${moduleParts}
     // 全量审查
     const reportPath = path.join(reportsDir, `manual-full-${ts}.md`).replace(/\\/g, '/');
     const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
+    const buildHtmlUrl = `http://localhost:3100/api/tests/build-review-html`;
 
     const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对项目进行全面代码审查。
 
@@ -2484,9 +2490,10 @@ ${rulesSection}
 请扫描项目源码全面审查，重点关注 src/pages/、src/components/、src/utils/、src/api/ 等目录。
 
 ## 执行方式
-1. 按 Skill 中定义的格式生成报告，用 Write 工具写入: ${reportPath}
-2. 然后生成 HTML 报告写入: ${htmlReportPath}
-3. 最后用 Bash 执行以下命令注册报告到平台（使报告在测试页面可见）：
+1. 按 Skill 中定义的格式生成 Markdown 报告，用 Write 工具写入: ${reportPath}
+2. 用 Bash 调用平台 API 生成统一风格的 HTML 报告：
+   curl -s -X POST "${buildHtmlUrl}" -H "Content-Type: application/json" -d "{\"markdownPath\":\"${reportPath}\",\"htmlPath\":\"${htmlReportPath}\",\"projectName\":\"${projectSlug}\"}"
+3. 用 Bash 注册报告到平台（使报告在测试页面可见）：
    curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
     return { prompt, cwd: project.sourcePath };

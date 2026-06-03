@@ -3,6 +3,7 @@
  */
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
+import path from 'path';
 import {
   createTestSuite,
   executeTestRun,
@@ -17,6 +18,7 @@ import {
   chatWithReview,
   generateTestPrompt,
   registerManualReport,
+  buildReviewHtml,
   type TestType,
 } from '../services/test-runner.js';
 import { testBus } from '../services/test-events.js';
@@ -68,6 +70,30 @@ testRouter.post('/register-manual-report', (req: Request, res: Response) => {
     res.json({ ok: true, suiteId });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+// 用固定模板将 Markdown 审查报告转为 HTML（保持平台统一风格）
+testRouter.post('/build-review-html', (req: Request, res: Response) => {
+  const { markdownPath, htmlPath, projectName } = req.body;
+  if (!markdownPath || !htmlPath || !projectName) {
+    return res.status(400).json({ error: 'markdownPath, htmlPath, projectName are required' });
+  }
+  try {
+    if (!fs.existsSync(markdownPath)) {
+      return res.status(400).json({ error: `Markdown 文件不存在: ${markdownPath}` });
+    }
+    const markdown = fs.readFileSync(markdownPath, 'utf-8');
+    if (markdown.length < 50) {
+      return res.status(400).json({ error: 'Markdown 内容不足' });
+    }
+    const html = buildReviewHtml(projectName, markdown, 0);
+    const htmlDir = path.dirname(htmlPath);
+    if (!fs.existsSync(htmlDir)) fs.mkdirSync(htmlDir, { recursive: true });
+    fs.writeFileSync(htmlPath, html, 'utf-8');
+    res.json({ ok: true, htmlPath, size: html.length });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
   }
 });
 
