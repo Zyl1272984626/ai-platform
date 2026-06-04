@@ -1825,6 +1825,37 @@ function getNestedValue(obj: any, path: string): any {
   return path.split('.').reduce((o, k) => o?.[k], obj);
 }
 
+/**
+ * 根据模块层级（frontend/backend）过滤出对应的审查规则
+ * 如果 rulesContent 为空，返回通用兜底文本
+ */
+function buildLayerRulesSection(rulesContent: string, layer: string): string {
+  if (!rulesContent) {
+    return layer === 'backend'
+      ? '## 审查维度\n请从后端安全性（SQL注入、鉴权）、性能（缓存、连接池）、错误处理（异常捕获、事务回滚）、框架最佳实践、可维护性五个维度审查。'
+      : '## 审查维度\n请从安全性、性能、错误处理、框架最佳实践、可维护性五个维度审查。';
+  }
+
+  try {
+    const rules = JSON.parse(rulesContent);
+    if (!rules.dimensions || !Array.isArray(rules.dimensions)) {
+      return `## 审查筛查规则（参考指引）\n${rulesContent}`;
+    }
+
+    // 过滤出与当前层级匹配的维度
+    const filteredDimensions = rules.dimensions.filter((dim: any) => {
+      const dimLayer = (dim as any).layer;
+      if (!dimLayer) return true; // 没有标记 layer 的维度（通用维度）保留
+      return dimLayer === layer;
+    });
+
+    const filteredRules = { ...rules, dimensions: filteredDimensions };
+    return `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${JSON.stringify(filteredRules, null, 2)}`;
+  } catch {
+    return `## 审查筛查规则（参考指引）\n${rulesContent}`;
+  }
+}
+
 /** 加载 code-review Skill 并替换模板变量 */
 function loadCodeReviewSkill(variables: Record<string, string>): string {
   const skillPath = path.resolve(AI_PLATFORM_ROOT, 'skills', 'tests', 'code-review', 'SKILL.md');
@@ -1871,15 +1902,51 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
     } catch { /* ignore */ }
   }
 
-  // 读取发现数据中的模块信息
+  // 读取发现数据中的模块信息和技术栈
   const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json');
   let modules: any[] = [];
+  let discoveryData: any = null;
   if (fs.existsSync(discoveryPath)) {
     try {
       const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
       modules = discovery.modules || [];
+      discoveryData = discovery;
     } catch { /* ignore */ }
   }
+
+  // 从 discovery 结果提取技术栈信息
+  const projectStructure = discoveryData?.projectStructure || {};
+  const feInfo = projectStructure.frontend || {};
+  const beInfo = projectStructure.backend || {};
+  const feFramework = feInfo.framework || '';
+  const beFramework = beInfo.framework || '';
+  const feSourceRoot = feInfo.sourceRoot || '';
+  const beSourceRoot = beInfo.sourceRoot || '';
+
+  // 构建技术栈描述
+  const techStackParts: string[] = [];
+  if (feFramework && feFramework !== '无') techStackParts.push(`前端: ${feFramework} (${feInfo.language || 'JavaScript'}, ${feInfo.buildTool || ''})`);
+  if (beFramework && beFramework !== '无') techStackParts.push(`后端: ${beFramework} (${beInfo.language || ''}, ${beInfo.buildTool || ''})`);
+  const techStackSection = techStackParts.length > 0
+    ? `- 技术栈: ${techStackParts.join(' + ')}`
+    : '';
+
+  // 构建全量审查的 reviewScope（基于实际目录结构）
+  const fullReviewScopeParts: string[] = ['请扫描项目源码，重点关注以下目录：'];
+  let scopeIdx = 1;
+  if (feSourceRoot) {
+    fullReviewScopeParts.push(`${scopeIdx}. ${feSourceRoot} 下的前端源码（页面、组件、工具、接口等）`);
+    scopeIdx++;
+  }
+  if (beSourceRoot) {
+    fullReviewScopeParts.push(`${scopeIdx}. ${beSourceRoot} 下的后端源码（控制器、服务、数据访问、配置等）`);
+    scopeIdx++;
+  }
+  if (scopeIdx === 1) {
+    // 没有探测到具体路径时兜底
+    fullReviewScopeParts.push('1. src/ 下的所有源码文件');
+  }
+  const fullReviewScope = fullReviewScopeParts.join('\n');
 
   const selectedModuleIds = (config.modules as string[]) || [];
 
@@ -1959,10 +2026,16 @@ async function runCodeReview(suite: TestSuite, config: Record<string, unknown>):
         const fileList = (mod.keyFiles || []).map((f: string) => `   - ${f}`).join('\n');
         const riskIndicators = (mod as any).riskIndicators || (mod.reason ? [mod.reason] : []);
         const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
+        const layer = (mod as any).layer || 'frontend';
+        const layerLabel = layer === 'backend' ? '后端' : '前端';
+        const layerFramework = layer === 'backend'
+          ? (beFramework || '未知')
+          : (feFramework || '未知');
 
         const moduleInfoSection = `## 审查模块
 - 模块名称: ${mod.name}
 - 模块路径: ${mod.path}
+- 层级: ${layerLabel} (${layerFramework})
 - 文件数量: ${mod.files}
 - 风险等级: ${mod.riskLevel || 'unknown'}
 - 关注方向:
@@ -1971,15 +2044,16 @@ ${riskText}
 ## 模块关键文件
 ${fileList}`;
 
+        // 根据 layer 过滤出相关规则维度
+        const rulesSectionForModule = buildLayerRulesSection(rulesContent, layer);
+
         const skillContent = loadCodeReviewSkill({
           projectName: project.name,
           sourcePath: project.sourcePath!,
-          framework: (project as any).framework || 'Vue 3 + Vite + Pinia',
+          techStackSection,
           moduleInfoSection,
-          rulesSection: rulesContent
-            ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}`
-            : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。',
-          reviewScope: '请重点扫描上述关键文件，以及模块路径下的其他相关文件。',
+          rulesSection: rulesSectionForModule,
+          reviewScope: `请重点扫描上述关键文件，以及模块路径 ${mod.path} 下的其他相关文件。该模块属于${layerLabel}，请使用${layerLabel}相关的审查标准。`,
           scoreTitle: '模块评分',
           summaryTitle: '该模块的整体评价和改进建议',
           reportPath: path.join(reportsDir, `module-${tc.id}.md`).replace(/\\/g, '/'),
@@ -2036,16 +2110,12 @@ ${fileList}`;
       const fullSkillContent = loadCodeReviewSkill({
         projectName: project.name,
         sourcePath: project.sourcePath!,
-        framework: 'Vue 3 + Vite + Pinia',
+        techStackSection,
         moduleInfoSection: '',
         rulesSection: rulesContent
           ? `## 审查筛查规则（参考指引）\n以下是筛查规则，定义了应该"查什么"和"怎么查"。请按这些规则的方法去检查实际代码，以你的实际分析结论为准，不要照搬规则描述。\n\n${rulesContent}`
-          : '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。',
-        reviewScope: `请扫描项目源码，重点关注以下文件：
-1. src/pages/ 下的页面组件
-2. src/components/ 下的通用组件
-3. src/utils/ 和 src/api/ 下的工具和接口
-4. 后端路由和控制器（如果有）`,
+          : '## 审查维度\n请从安全性、性能、错误处理、框架最佳实践、可维护性五个维度审查。',
+        reviewScope: fullReviewScope,
         scoreTitle: '总体评分',
         summaryTitle: '总体评价和改进建议',
         reportPath: fullReportPath,

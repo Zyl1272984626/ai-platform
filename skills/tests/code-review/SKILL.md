@@ -25,7 +25,7 @@ constraints:
 ## 项目信息
 - 项目名称: {{projectName}}
 - 源码路径: {{sourcePath}}
-- 前端框架: {{framework}}
+{{techStackSection}}
 
 {{moduleInfoSection}}
 
@@ -38,6 +38,8 @@ constraints:
 
 ## 审查范围
 {{reviewScope}}
+
+**审查要点**：根据模块的 layer（frontend/backend）选择对应的审查方式。前端模块关注 UI 渲染、状态管理、用户输入处理；后端模块关注接口安全、数据校验、事务管理、异常处理。
 
 ## 输出格式（必须严格遵循以下模板结构）
 
