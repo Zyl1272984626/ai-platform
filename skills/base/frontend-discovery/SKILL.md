@@ -49,19 +49,40 @@ constraints:
 - `Grep("defineStore", "SRC_ROOT")` — 定位所有 Store
 - `Grep("export function use|export const use", "SRC_ROOT")` — 定位所有 hooks/composables
 
-### 步骤 3：深入扫描子目录
+### 步骤 3：深入扫描子目录（必须穷尽所有层级）
 
-前端项目可能有深层嵌套结构，必须扫描到所有层级：
+前端项目通常有深层嵌套结构，**必须扫描到每一层**。用以下 glob 覆盖已知模式，同时用通配扫描兜底：
+
+**已知目录模式（逐层扫描）：**
 - `Glob("SRC_ROOT/pages/**/*.js")` — 页面模块 JS
 - `Glob("SRC_ROOT/pages/**/*.ts")` — 页面模块 TS
+- `Glob("SRC_ROOT/pages/**/views/**/*.js")` — 深层视图 JS（可能嵌套 4-6 层）
+- `Glob("SRC_ROOT/pages/**/views/**/*.vue")` — 深层视图 Vue
+- `Glob("SRC_ROOT/pages/**/composables/**/*.js")` — 页面内 composables
+- `Glob("SRC_ROOT/pages/**/hooks/**/*.js")` — 页面内 hooks
+- `Glob("SRC_ROOT/pages/**/utils/**/*.js")` — 页面内工具函数
+- `Glob("SRC_ROOT/pages/**/config/**/*.js")` — 页面内配置
 - `Glob("SRC_ROOT/hooks/**/*.js")` — hooks
 - `Glob("SRC_ROOT/hooks/**/*.ts")` — hooks TS
 - `Glob("SRC_ROOT/flow/**/*.js")` — 工作流相关
 - `Glob("SRC_ROOT/components/**/*.vue")` — 所有层级组件
+- `Glob("SRC_ROOT/components/**/*.js")` — 组件内 JS 逻辑
+- `Glob("SRC_ROOT/components/**/core/**/*.js")` — 组件核心逻辑（如 adapter、renderer、theme）
+- `Glob("SRC_ROOT/components/**/adapters/**/*.js")` — 数据适配器
+- `Glob("SRC_ROOT/components/**/utils/**/*.js")` — 组件内工具函数
 - `Glob("SRC_ROOT/**/composables/**/*.js")` — composables
 - `Glob("SRC_ROOT/**/composables/**/*.ts")` — composables TS
 
-**重要**：不要遗漏嵌套子目录中的文件。pages/、hooks/、flow/ 下可能有深层嵌套。
+**通配兜底（发现上面可能遗漏的目录）：**
+- `Grep("export function|export class|export const", "SRC_ROOT/pages")` — 在 pages 目录中搜索所有导出，发现遗漏的工具函数
+- `Grep("export function|export class|export const", "SRC_ROOT/components")` — 在 components 目录中搜索所有导出
+- `Grep("export function|export class|export const", "SRC_ROOT/flow")` — flow 目录中的导出
+
+**重要**：
+- 不要遗漏嵌套子目录中的文件，特别是 `pages/*/views/` 下可能嵌套 4-6 层
+- `components/*/components/core/` 等目录中常有纯逻辑工具（adapter、theme、renderer），必须覆盖
+- `pages/*/modules/voice/`、`pages/*/modules/message/utils/` 等特殊模块不要跳过
+- 如果某个文件有 `export function` 或 `export class`，即使文件名不包含 `use` 前缀，也应该评估是否收录
 
 ### 步骤 4：分析可测试性
 
