@@ -3,6 +3,10 @@ name: review-discovery
 description: 扫描源码分析项目架构和模块结构，按业务模块标注风险等级，生成安全/性能/错误处理等维度的审查筛查规则
 allowed-tools: ["Read", "Glob", "Grep", "Write"]
 tags: ["review", "discovery", "test", "security"]
+usage: 在设置页面的项目操作区点击「发现审查点」时自动加载。分析项目架构和模块结构，生成按维度（安全、性能、错误处理等）的审查规则。生成的数据用于测试中心的代码审查。
+constraints:
+  - 只允许使用 Read、Glob、Grep、Write 四个工具
+  - 需要项目已配置正确的源码路径
 ---
 
 # 代码审查点发现

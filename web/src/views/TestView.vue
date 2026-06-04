@@ -183,8 +183,11 @@
         <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'frontend' && (!selectedProjectId || selectedFrontendModules.length === 0)) || (activeType === 'codereview' && (!selectedProjectId || selectedReviewModules.length === 0))" @click="startTest">
           ▶ 开始测试
         </button>
-        <button v-if="activeType === 'e2e' || activeType === 'codereview'" class="btn-prompt" :disabled="!selectedProjectId || (activeType === 'codereview' && selectedReviewModules.length === 0)" @click="doGeneratePrompt">
+        <button v-if="activeType === 'e2e' || activeType === 'codereview' || activeType === 'frontend'" class="btn-prompt" :disabled="!selectedProjectId || (activeType === 'codereview' && selectedReviewModules.length === 0) || (activeType === 'frontend' && selectedFrontendModules.length === 0)" @click="doGeneratePrompt">
           生成提示词
+        </button>
+        <button v-if="activeType === 'codereview'" class="btn-scan" :disabled="!selectedProjectId" @click="doScanReportFiles">
+          检测报告
         </button>
       </div>
     </div>
@@ -300,7 +303,7 @@
             <div v-if="tc.error" class="detail-error">{{ tc.error }}</div>
           </div>
           <div class="detail-actions">
-            <button v-if="canResume(run)" class="btn-resume" @click.stop="handleResumeRun(run.id)">🔄 恢复审查</button>
+            <button v-if="canResume(run)" class="btn-resume" @click.stop="handleResumeRun(run.id)">🔄 {{ run.type === 'e2e' ? '恢复测试' : '恢复审查' }}</button>
             <button v-if="canChat(run) && !canResume(run)" class="btn-chat" @click.stop="openChatStream(run.id)">💬 继续对话</button>
             <div v-if="(run.type === 'e2e' || run.type === 'codereview') && run.config?.reportPath" class="report-info">
               <span class="report-path">{{ run.config.reportPath }}</span>
@@ -327,6 +330,43 @@
         </div>
       </div>
     </div>
+
+    <!-- 报告文件浏览器弹窗 -->
+    <div v-if="showReportFilesModal" class="modal-overlay" @click.self="showReportFilesModal = false">
+      <div class="modal-content report-files-modal">
+        <h3>报告文件 <span class="modal-subtitle">{{ reportFilesDir }}</span></h3>
+        <div v-if="reportFilesLoading" class="report-loading">扫描中...</div>
+        <div v-else-if="reportFiles.length === 0" class="no-data">未找到报告文件</div>
+        <template v-else>
+          <div class="report-files-header">
+            <label class="select-all-label">
+              <input type="checkbox" :checked="selectedMdFiles.length === mdFileList.length && mdFileList.length > 0" @change="toggleAllMdFiles" />
+              <strong>全选 MD ({{ selectedMdFiles.length }}/{{ mdFileList.length }})</strong>
+            </label>
+            <button class="btn btn-build" :disabled="selectedMdFiles.length === 0 || buildLoading" @click="doBuildFromMdFiles">
+              {{ buildLoading ? '生成中...' : `生成 HTML (${selectedMdFiles.length} 个MD)` }}
+            </button>
+          </div>
+          <div class="report-files-list">
+            <div v-for="f in reportFiles" :key="f.path" class="report-file-item" :class="'file-' + f.type">
+              <template v-if="f.type === 'md'">
+                <input type="checkbox" :value="f.path" v-model="selectedMdFiles" />
+                <span class="file-icon">📄</span>
+              </template>
+              <template v-else>
+                <span class="file-icon">🌐</span>
+              </template>
+              <span class="file-name" :title="f.name">{{ f.name }}</span>
+              <span class="file-size">{{ (f.size / 1024).toFixed(1) }} KB</span>
+              <button v-if="f.type === 'html'" class="btn-open-file" @click="openReportFile(f.path)">打开</button>
+            </div>
+          </div>
+        </template>
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showReportFilesModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -341,7 +381,8 @@ import {
   getConcurrency, setConcurrency as apiSetConcurrency,
   resumeTestRun as apiResume, chatWithReviewApi,
   generateTestPrompt as apiGenerateTestPrompt,
-  type TestTypeInfo, type TestRun,
+  listReportFiles as apiListReportFiles, buildHtmlFromMdFiles as apiBuildHtmlFromMdFiles,
+  type TestTypeInfo, type TestRun, type ReportFile,
 } from '../api/tests'
 import {
   getProjects as fetchProjects,
@@ -656,6 +697,10 @@ async function doGeneratePrompt() {
     config.projectId = selectedProjectId.value
     config.modules = selectedReviewModules.value
   }
+  if (activeType.value === 'frontend') {
+    config.projectId = selectedProjectId.value
+    config.modules = selectedFrontendModules.value
+  }
 
   try {
     const result = await apiGenerateTestPrompt(activeType.value, config)
@@ -679,6 +724,59 @@ async function copyPrompt() {
     promptCopied.value = true
     setTimeout(() => { promptCopied.value = false }, 2000)
   }
+}
+
+// ========== 报告文件浏览器 ==========
+const showReportFilesModal = ref(false)
+const reportFiles = ref<ReportFile[]>([])
+const reportFilesDir = ref('')
+const reportFilesLoading = ref(false)
+const selectedMdFiles = ref<string[]>([])
+const buildLoading = ref(false)
+
+const mdFileList = computed(() => reportFiles.value.filter(f => f.type === 'md'))
+
+function toggleAllMdFiles() {
+  if (selectedMdFiles.value.length === mdFileList.value.length) {
+    selectedMdFiles.value = []
+  } else {
+    selectedMdFiles.value = mdFileList.value.map(f => f.path)
+  }
+}
+
+async function doScanReportFiles() {
+  if (!selectedProjectId.value) return
+  showReportFilesModal.value = true
+  reportFilesLoading.value = true
+  reportFiles.value = []
+  selectedMdFiles.value = []
+  try {
+    const res = await apiListReportFiles(selectedProjectId.value)
+    reportFiles.value = res.files
+    reportFilesDir.value = res.reportsDir
+  } finally {
+    reportFilesLoading.value = false
+  }
+}
+
+async function doBuildFromMdFiles() {
+  if (selectedMdFiles.value.length === 0 || !selectedProjectId.value) return
+  buildLoading.value = true
+  try {
+    const res = await apiBuildHtmlFromMdFiles(selectedProjectId.value, selectedMdFiles.value)
+    alert(`生成成功！${res.moduleCount} 个模块 → ${res.htmlPath}`)
+    // 重新扫描
+    await doScanReportFiles()
+  } catch (e: any) {
+    alert('生成失败: ' + (e?.response?.data?.error || e.message))
+  } finally {
+    buildLoading.value = false
+  }
+}
+
+function openReportFile(filePath: string) {
+  // 在新窗口打开 HTML 报告（用 file:// 协议）
+  window.open('file:///' + filePath.replace(/\\/g, '/'), '_blank')
 }
 
 async function startTest() {
@@ -932,7 +1030,7 @@ async function handleResumeRun(runId: string) {
 
 /** 检查 run 是否有可恢复的模块 */
 function canResume(run: TestRun): boolean {
-  if (run.type !== 'codereview') return false
+  if (run.type !== 'codereview' && run.type !== 'e2e') return false
   if (run.status !== 'error' && run.status !== 'failed') return false
   const resumeInfo = run.config?.resumeInfo as any
   if (!resumeInfo?.cases) return false
@@ -1712,4 +1810,49 @@ select.param-input { cursor: pointer; appearance: auto; }
 }
 .chat-input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
 .chat-input-row button:hover:not(:disabled) { opacity: 0.85; }
+
+/* 报告文件浏览器 */
+.btn-scan {
+  padding: 8px 18px;
+  background: #722ed1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.btn-scan:hover:not(:disabled) { background: #531dab; }
+.btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.report-files-modal { width: 640px; max-height: 80vh; }
+.report-files-modal .modal-subtitle { font-size: 12px; color: #8c8c8c; font-weight: 400; margin-left: 8px; }
+.report-loading, .no-data { text-align: center; padding: 24px; color: #8c8c8c; }
+
+.report-files-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid #f0f0f0; margin-bottom: 8px;
+}
+.select-all-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.btn-build {
+  padding: 5px 14px; background: #667eea; color: white; border: none; border-radius: 4px;
+  cursor: pointer; font-size: 12px;
+}
+.btn-build:hover:not(:disabled) { background: #5a6fd6; }
+.btn-build:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.report-files-list { max-height: 400px; overflow-y: auto; }
+.report-file-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.report-file-item:hover { background: #fafafa; }
+.file-icon { font-size: 14px; flex-shrink: 0; }
+.file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-size { color: #8c8c8c; font-size: 11px; flex-shrink: 0; }
+.btn-open-file {
+  padding: 2px 10px; background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff;
+  border-radius: 3px; cursor: pointer; font-size: 11px; flex-shrink: 0;
+}
+.btn-open-file:hover { background: #bae7ff; }
 </style>

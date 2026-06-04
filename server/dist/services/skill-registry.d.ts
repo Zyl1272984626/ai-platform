@@ -1,11 +1,13 @@
 export interface SkillMeta {
     name: string;
     description: string;
-    type: 'scene' | 'capability';
+    type: 'scene' | 'capability' | 'test' | 'base';
     path: string;
     allowedTools?: string[];
     dependencies?: string[];
     tags?: string[];
+    usage?: string;
+    constraints?: string[];
     content?: string;
 }
 /**

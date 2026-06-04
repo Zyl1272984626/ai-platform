@@ -93,3 +93,20 @@ export function chatWithReviewApi(runId: string, message: string) {
 export function generateTestPrompt(type: string, config: Record<string, unknown> = {}) {
   return api.post<{ prompt: string; cwd: string }>('/tests/generate-prompt', { type, config }).then(r => r.data)
 }
+
+/** 扫描报告目录文件列表 */
+export interface ReportFile {
+  name: string
+  path: string
+  type: 'html' | 'md'
+  size: number
+  mtime: string
+}
+export function listReportFiles(projectId: string) {
+  return api.get<{ reportsDir: string; files: ReportFile[] }>('/tests/codereview/report-files', { params: { projectId } }).then(r => r.data)
+}
+
+/** 从选中 MD 文件生成 HTML */
+export function buildHtmlFromMdFiles(projectId: string, mdFiles: string[]) {
+  return api.post<{ htmlPath: string; moduleCount: number }>('/tests/codereview/build-from-files', { projectId, mdFiles }).then(r => r.data)
+}

@@ -31,6 +31,7 @@
         <div class="skill-desc">{{ skill.description }}</div>
         <div class="skill-tags">
           <span v-for="tag in skill.tags?.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+          <span v-if="skill.constraints?.length" class="tag tag-constraint">{{ skill.constraints.length }} 条限制</span>
         </div>
         <div v-if="skill.dependencies?.length" class="skill-deps">
           依赖: {{ skill.dependencies.join(', ') }}
@@ -56,6 +57,15 @@
         </div>
         <div v-if="detailSkill.dependencies?.length" class="detail-deps">
           <strong>依赖:</strong> {{ detailSkill.dependencies.join(', ') }}
+        </div>
+        <div v-if="detailSkill.usage" class="detail-usage">
+          <strong>使用场景:</strong> {{ detailSkill.usage }}
+        </div>
+        <div v-if="detailSkill.constraints?.length" class="detail-constraints">
+          <strong>限制说明:</strong>
+          <ul>
+            <li v-for="c in detailSkill.constraints" :key="c">{{ c }}</li>
+          </ul>
         </div>
         <div class="detail-content" v-html="renderedContent"></div>
         <div v-if="detailSkill.type === 'scene'" class="detail-actions">
@@ -215,6 +225,11 @@ function tryInChat() {
   background: #f5f5f7;
   color: #999;
 }
+.tag-constraint {
+  background: #fff2f0;
+  color: #ff4d4f;
+  border: 1px solid #ffccc7;
+}
 .skill-deps {
   font-size: 11px;
   color: #bbb;
@@ -277,10 +292,36 @@ function tryInChat() {
 .detail-deps {
   font-size: 13px;
   color: #888;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   padding: 8px 12px;
   background: #f5f5f7;
   border-radius: 6px;
+}
+.detail-usage {
+  font-size: 13px;
+  color: #1890ff;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #e6f7ff;
+  border-radius: 6px;
+  line-height: 1.6;
+}
+.detail-constraints {
+  font-size: 13px;
+  color: #cf1322;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #fff2f0;
+  border-radius: 6px;
+  border: 1px solid #ffccc7;
+}
+.detail-constraints ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.detail-constraints li {
+  margin-bottom: 3px;
+  line-height: 1.5;
 }
 .detail-content {
   border-top: 1px solid #eee;

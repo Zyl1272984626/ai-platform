@@ -4,6 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports._runtimeConfig = exports.AI_PLATFORM_ROOT = exports.PROJECT_ROOT = void 0;
+exports.loadProjectPages = loadProjectPages;
+exports.saveProjectPages = saveProjectPages;
+exports.getGlobalParams = getGlobalParams;
+exports.saveGlobalParams = saveGlobalParams;
+exports.saveDiscoveryResult = saveDiscoveryResult;
+exports.applyClaudeConfig = applyClaudeConfig;
 exports.loadConfig = loadConfig;
 exports.getConfig = getConfig;
 exports.updateConfig = updateConfig;
@@ -15,6 +21,7 @@ exports.updateProject = updateProject;
 exports.deleteProject = deleteProject;
 exports.setDefaultProject = setDefaultProject;
 exports.updateProjectPages = updateProjectPages;
+exports.saveProjectPageSets = saveProjectPageSets;
 exports.checkConfig = checkConfig;
 /**
  * 全局配置管理
@@ -28,6 +35,7 @@ const uuid_1 = require("uuid");
 const __dirname = path_1.default.dirname((0, url_1.fileURLToPath)(import.meta.url));
 const DATA_DIR = path_1.default.resolve(__dirname, '../../data');
 const CONFIG_FILE = path_1.default.join(DATA_DIR, 'platform-config.json');
+const PROJECTS_DIR = path_1.default.join(DATA_DIR, 'projects');
 // ========== 默认项目 ==========
 function createDefaultProject(overrides) {
     return {
@@ -48,19 +56,72 @@ const DEFAULT_CONFIG = {
     projectRoot: process.env.PROJECT_ROOT || 'C:/FengSuKeJi/agent',
     aiPlatformRoot: process.env.AI_PLATFORM_ROOT || 'C:/FengSuKeJi/ai-platform',
     e2eDataDir: 'F:/e2e-test-data',
+    testDataDir: 'F:/e2e-test-data',
     mainFrontendPort: 5173,
     mainBackendPort: 9998,
     apiTestBaseUrl: 'http://localhost:3100',
     projects: [createDefaultProject()],
     defaultProjectId: 'agent-main',
+    claudeConfig: {
+        authToken: process.env.ANTHROPIC_AUTH_TOKEN || '',
+        baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
+        model: process.env.ANTHROPIC_MODEL || 'glm-5.1',
+    },
 };
 /** 运行时配置缓存 */
 let config = { ...DEFAULT_CONFIG, projects: [...DEFAULT_CONFIG.projects] };
 exports._runtimeConfig = config;
+// ========== 项目独立文件读写 ==========
+/** 获取项目数据目录 */
+function getProjectDir(projectId) {
+    return path_1.default.join(PROJECTS_DIR, projectId);
+}
+/** 从独立文件读取项目页面数据 */
+function loadProjectPages(projectId) {
+    const filePath = path_1.default.join(getProjectDir(projectId), 'project.json');
+    try {
+        if (fs_1.default.existsSync(filePath)) {
+            return JSON.parse(fs_1.default.readFileSync(filePath, 'utf-8'));
+        }
+    }
+    catch (e) {
+        console.warn(`[Config] 读取项目页面数据失败 (${projectId}):`, e.message);
+    }
+    return { pageSets: [] };
+}
+/** 将项目页面数据写入独立文件 */
+function saveProjectPages(projectId, data) {
+    const dir = getProjectDir(projectId);
+    if (!fs_1.default.existsSync(dir))
+        fs_1.default.mkdirSync(dir, { recursive: true });
+    fs_1.default.writeFileSync(path_1.default.join(dir, 'project.json'), JSON.stringify(data, null, 2), 'utf-8');
+}
+/** 读取项目公共参数 */
+function getGlobalParams(projectId) {
+    const data = loadProjectPages(projectId);
+    return data.globalParams || {};
+}
+/** 保存项目公共参数 */
+function saveGlobalParams(projectId, params) {
+    const data = loadProjectPages(projectId);
+    data.globalParams = params;
+    saveProjectPages(projectId, data);
+}
+/** 保存原始发现数据到独立文件 */
+function saveDiscoveryResult(projectId, discoveryResult) {
+    const dir = getProjectDir(projectId);
+    if (!fs_1.default.existsSync(dir))
+        fs_1.default.mkdirSync(dir, { recursive: true });
+    fs_1.default.writeFileSync(path_1.default.join(dir, 'discovery-result.json'), JSON.stringify(discoveryResult, null, 2), 'utf-8');
+}
 // ========== 旧配置迁移 ==========
 function migrateConfig(saved) {
     // 已有 projects 字段 → 新格式，直接用
     if (saved.projects && Array.isArray(saved.projects)) {
+        // 迁移 e2eDataDir → testDataDir
+        if (saved.e2eDataDir && !saved.testDataDir) {
+            saved.testDataDir = saved.e2eDataDir;
+        }
         return {
             ...DEFAULT_CONFIG,
             ...saved,
@@ -75,12 +136,35 @@ function migrateConfig(saved) {
         apiBaseUrl: `http://localhost:${saved.mainBackendPort || 9998}`,
         sourcePath: saved.projectRoot || DEFAULT_CONFIG.projectRoot,
     });
+    // 迁移 e2eDataDir → testDataDir
+    if (saved.e2eDataDir && !saved.testDataDir) {
+        saved.testDataDir = saved.e2eDataDir;
+    }
     return {
         ...DEFAULT_CONFIG,
         ...saved,
         projects: [defaultProject],
         defaultProjectId: defaultProject.id,
     };
+}
+// ========== Claude 配置注入 ==========
+/** 将 claudeConfig 同步到 process.env，让 SDK 和子进程能读取 */
+function applyClaudeConfig() {
+    const c = config.claudeConfig;
+    if (!c)
+        return;
+    if (c.authToken)
+        process.env.ANTHROPIC_AUTH_TOKEN = c.authToken;
+    if (c.baseUrl)
+        process.env.ANTHROPIC_BASE_URL = c.baseUrl;
+    if (c.model) {
+        process.env.ANTHROPIC_MODEL = c.model;
+        process.env.ANTHROPIC_DEFAULT_SONNET_MODEL = c.model;
+        process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = c.model;
+        process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = c.model;
+        process.env.ANTHROPIC_SMALL_FAST_MODEL = c.model;
+    }
+    console.log(`[Config] Claude 配置已注入 (model=${c.model}, baseUrl=${c.baseUrl})`);
 }
 // ========== 配置加载/保存 ==========
 /** 从文件加载配置 */
@@ -92,11 +176,36 @@ function loadConfig() {
             exports._runtimeConfig = config = migrateConfig(saved);
             console.log('[Config] 从文件加载配置:', CONFIG_FILE);
             console.log(`[Config] 已配置 ${config.projects.length} 个项目`);
+            // 自动迁移：将内联的 pageSets/discoveryResult 拆分到独立文件
+            let migrated = false;
+            for (const project of config.projects) {
+                if (project.pageSets && project.pageSets.length > 0) {
+                    const pageData = {
+                        pageSets: project.pageSets,
+                        discoveredAt: project.discoveredAt,
+                        totalPages: project.pageSets.reduce((s, ps) => s + ps.pages.length, 0),
+                    };
+                    saveProjectPages(project.id, pageData);
+                    if (project.discoveryResult) {
+                        saveDiscoveryResult(project.id, project.discoveryResult);
+                    }
+                    // 从主配置中移除内联数据
+                    delete project.pageSets;
+                    delete project.discoveredAt;
+                    delete project.discoveryResult;
+                    migrated = true;
+                }
+            }
+            if (migrated) {
+                saveConfig();
+                console.log('[Config] 已将内联数据迁移到独立文件');
+            }
         }
     }
     catch (e) {
         console.warn('[Config] 配置文件读取失败，使用默认值:', e.message);
     }
+    applyClaudeConfig();
     return config;
 }
 /** 获取当前配置 */
@@ -116,10 +225,14 @@ function saveConfig() {
             fs_1.default.mkdirSync(DATA_DIR, { recursive: true });
         }
         fs_1.default.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-        // 同步到 process.env，让 E2E 子进程也能读到
+        // 同步到 process.env，让子进程也能读到
         if (config.e2eDataDir) {
             process.env.E2E_DATA_DIR = config.e2eDataDir;
         }
+        if (config.testDataDir) {
+            process.env.TEST_DATA_DIR = config.testDataDir;
+        }
+        applyClaudeConfig();
         console.log('[Config] 配置已保存');
     }
     catch (e) {
@@ -127,13 +240,29 @@ function saveConfig() {
     }
 }
 // ========== 项目管理 ==========
-/** 获取所有项目 */
+/** 获取所有项目（动态合并页面数据） */
 function getProjects() {
-    return config.projects;
+    return config.projects.map(p => {
+        const pageData = loadProjectPages(p.id);
+        return {
+            ...p,
+            pageSets: pageData.pageSets,
+            discoveredAt: pageData.discoveredAt || p.discoveredAt,
+        };
+    });
 }
-/** 根据 ID 获取项目 */
+/** 根据 ID 获取项目（动态合并页面数据） */
 function getProjectById(id) {
-    return config.projects.find(p => p.id === id);
+    const p = config.projects.find(p => p.id === id);
+    if (!p)
+        return undefined;
+    const pageData = loadProjectPages(p.id);
+    return {
+        ...p,
+        pageSets: pageData.pageSets,
+        discoveredAt: pageData.discoveredAt || p.discoveredAt,
+        globalParams: pageData.globalParams,
+    };
 }
 /** 获取默认项目 */
 function getDefaultProject() {
@@ -172,6 +301,16 @@ function deleteProject(id) {
         config.defaultProjectId = config.projects[0].id;
     }
     saveConfig();
+    // 清理项目独立数据目录
+    const projectDir = getProjectDir(id);
+    try {
+        if (fs_1.default.existsSync(projectDir)) {
+            fs_1.default.rmSync(projectDir, { recursive: true, force: true });
+        }
+    }
+    catch (e) {
+        console.warn(`[Config] 清理项目数据目录失败:`, e.message);
+    }
     return true;
 }
 /** 设置默认项目 */
@@ -183,18 +322,39 @@ function setDefaultProject(id) {
     saveConfig();
     return true;
 }
-/** 更新项目的页面集（发现后更新） */
+/** 更新项目的页面集（发现后更新，写入独立文件） */
 function updateProjectPages(id, pageSets, discoveryResult) {
     const idx = config.projects.findIndex(p => p.id === id);
     if (idx === -1)
         return null;
-    config.projects[idx].pageSets = pageSets;
-    config.projects[idx].discoveredAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const totalPages = pageSets.reduce((s, ps) => s + ps.pages.length, 0);
+    // 写入独立文件（保留已有的 globalParams）
+    const existingData = loadProjectPages(id);
+    saveProjectPages(id, { pageSets, discoveredAt: now, totalPages, globalParams: existingData.globalParams });
     if (discoveryResult) {
-        config.projects[idx].discoveryResult = discoveryResult;
+        saveDiscoveryResult(id, discoveryResult);
     }
+    // 主配置只记录发现时间（用于列表展示）
+    config.projects[idx].discoveredAt = now;
+    config.projects[idx].pageSets = pageSets;
     saveConfig();
     return config.projects[idx];
+}
+/** 仅更新页面集数据（不更新发现结果，用于手动编辑） */
+function saveProjectPageSets(id, pageSets) {
+    const project = config.projects.find(p => p.id === id);
+    if (!project)
+        return null;
+    const existing = loadProjectPages(id);
+    const totalPages = pageSets.reduce((s, ps) => s + ps.pages.length, 0);
+    saveProjectPages(id, {
+        pageSets,
+        discoveredAt: existing.discoveredAt,
+        totalPages,
+        globalParams: existing.globalParams,
+    });
+    return pageSets;
 }
 // ========== 配置检查 ==========
 /** 检查配置项是否有效 */
@@ -204,6 +364,7 @@ async function checkConfig() {
     for (const [key, dirPath] of [
         ['aiPlatformRoot', config.aiPlatformRoot],
         ['e2eDataDir', config.e2eDataDir],
+        ['testDataDir', config.testDataDir || config.e2eDataDir],
     ]) {
         try {
             results[key] = {
@@ -233,10 +394,13 @@ async function checkConfig() {
     catch {
         results['claudeCode'] = { ok: false, msg: '未安装 Claude Code CLI，请运行: npm install -g @anthropic-ai/claude-code' };
     }
-    // ANTHROPIC_API_KEY
-    results['anthropicApiKey'] = {
-        ok: !!process.env.ANTHROPIC_API_KEY,
-        msg: process.env.ANTHROPIC_API_KEY ? 'API Key 已配置' : '未配置 ANTHROPIC_API_KEY 环境变量',
+    // Claude 配置（CodePlan）
+    const claudeCfg = config.claudeConfig;
+    results['claudeConfig'] = {
+        ok: !!(claudeCfg?.authToken),
+        msg: claudeCfg?.authToken
+            ? `已配置 (CodePlan, model=${claudeCfg.model || 'glm-5.1'})`
+            : '未配置 Claude CodePlan Token',
     };
     // Playwright 浏览器
     try {

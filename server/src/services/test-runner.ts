@@ -430,11 +430,9 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   const { query } = await import('@anthropic-ai/claude-code');
   console.log('[E2E] SDK 加载成功');
 
-  // 获取项目配置
   const projectId = config.projectId as string | undefined;
   const project = projectId ? getProjectById(projectId) : undefined;
 
-  // 解析 Skill 路径
   const skillBasePath = project?.skillPath
     ? path.dirname(project.skillPath)
     : path.resolve(getConfig().aiPlatformRoot, 'skills', 'tests', 'e2e-page-test');
@@ -452,8 +450,357 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 
   const mode = (config.mode as string) || 'standard';
   const scope = (config.scope as string) || 'all';
+  const projectSlug = project?.name ? project.name.replace(/[<>:"/\\|?*\s]+/g, '_') : '_default';
+  const e2eDataDir = getConfig().e2eDataDir || getConfig().testDataDir;
 
-  // 从项目配置解析页面列表
+  // 初始化 resumeInfo
+  if (!getResumeInfo(suite).cases || Object.keys(getResumeInfo(suite).cases).length === 0) {
+    setResumeInfo(suite, { cases: {} });
+  }
+  const resumeInfo = getResumeInfo(suite);
+
+  const pageSets = project?.pageSets || [];
+  const targetSets = scope === 'all'
+    ? pageSets
+    : pageSets.filter(ps => ps.id === scope);
+
+  // 如果只有一个 case 且没有对应的 pageSet（旧模式或无项目），走单会话模式
+  if (suite.cases.length === 1 && targetSets.length === 0) {
+    await runE2ESingleSession(suite, suite.cases[0], config, query, skillContent, project, mode, scope, projectSlug, e2eDataDir);
+    return;
+  }
+
+  // 按 PageSet 逐个执行
+  const suiteAbortController = new AbortController();
+  abortControllers.set(suite.id, suiteAbortController);
+
+  const totalCases = suite.cases.length;
+  let completedCount = 0;
+
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `# E2E ${mode} 模式测试\n共 ${totalCases} 个页面集，开始逐集执行...\n\n` });
+
+  for (let i = 0; i < suite.cases.length; i++) {
+    if (suiteAbortController.signal.aborted) {
+      for (let j = i; j < suite.cases.length; j++) {
+        suite.cases[j].status = 'error';
+        suite.cases[j].error = '用户手动停止';
+      }
+      break;
+    }
+
+    const tc = suite.cases[i];
+    const pageSet = targetSets[i];
+
+    // 检查 resumeInfo，跳过已完成的 PageSet
+    const resumeCase = resumeInfo.cases[tc.id];
+    if (resumeCase?.status === 'completed') {
+      tc.status = 'passed' as any;
+      completedCount++;
+      testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `⏭️ 跳过已完成: ${tc.name}\n\n` });
+      continue;
+    }
+
+    const resumeSessionId = resumeCase?.status === 'interrupted'
+      ? resumeCase.sessionId
+      : undefined;
+
+    // 解析该 PageSet 的页面
+    const pages = pageSet ? resolvePageSetPages(project!, pageSet) : [];
+    const baseUrl = project?.baseUrl || '';
+    const gp = project?.globalParams || {};
+    const paramsInfo = Object.keys(gp).length > 0
+      ? `\n## 动态参数映射\n${Object.entries(gp).map(([k, v]) => `- ${k} → ${v.join(', ')}`).join('\n')}\n`
+      : '';
+
+    const pageListPrompt = pageSet ? `
+## 当前页面集信息
+- 页面集: ${pageSet.name}
+- 待测试页面 (${pages.length}页)
+${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
+` : '';
+
+    const prompt = resumeSessionId
+      ? '请继续之前的 E2E 页面测试，从上次中断处继续。保持之前的测试进度。'
+      : `请使用 e2e-page-test 技能，以 ${mode} 模式测试页面集「${pageSet?.name || '全部'}」的页面。
+
+## 当前项目信息
+- 项目名称: ${project?.name}
+- 前端地址: ${baseUrl}
+- 后端 API: ${project?.apiBaseUrl}
+- 登录页: ${baseUrl}${project?.loginUrl}
+- 登录凭据: ${project?.username} / ${project?.password}
+${paramsInfo}
+${pageListPrompt}
+输入参数：
+\`\`\`json
+{"mode": "${mode}", "scope": "${scope}", "projectId": "${projectId}", "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"}
+\`\`\`
+
+请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 记录结果。`;
+
+    // 执行单个 PageSet 的测试
+    await runE2ESinglePageSet(
+      suite, tc, prompt, query, skillContent, project,
+      suiteAbortController, resumeSessionId,
+      projectSlug, e2eDataDir, mode,
+    );
+
+    completedCount++;
+    testBus.emit('agent:stream', {
+      suiteId: suite.id,
+      type: 'text',
+      content: `\n---\n📊 进度: ${completedCount}/${totalCases} 页面集完成\n\n`,
+    });
+  }
+
+  // 尝试读取报告路径
+  tryReadE2EReportPath(suite, projectSlug);
+
+  abortControllers.delete(suite.id);
+  saveRun(suite);
+}
+
+/** 解析 PageSet 中的页面（展开动态参数） */
+function resolvePageSetPages(project: TestProject, pageSet: { pages?: PageConfig[] }): PageConfig[] {
+  return resolvePagesFromList(project, pageSet.pages || []);
+}
+
+/** 从页面列表解析（展开动态参数） */
+function resolvePagesFromList(project: TestProject, rawPages: PageConfig[]): PageConfig[] {
+  const globalParams = project.globalParams || {};
+  const expanded: PageConfig[] = [];
+
+  for (const page of rawPages) {
+    const pathParams = page.path?.match(/:\w+/g) || [];
+    const pageParams = page.params || {};
+
+    if (pathParams.length > 0 && Object.keys(pageParams).length === 0) {
+      for (const p of pathParams) {
+        if (!(p in pageParams)) pageParams[p] = [];
+      }
+    }
+
+    if (Object.keys(pageParams).length === 0) {
+      expanded.push(page);
+      continue;
+    }
+
+    const mergedParams: Record<string, string[]> = {};
+    for (const [param, pageValues] of Object.entries(pageParams)) {
+      mergedParams[param] = pageValues.length > 0 ? pageValues : (globalParams[param] || []);
+    }
+
+    const allConfigured = Object.values(mergedParams).every(values => values.length > 0);
+    if (!allConfigured) {
+      expanded.push({ ...page, name: `${page.name} (参数未配置，已跳过)` });
+      continue;
+    }
+
+    const combinations = generateParamCombinations(mergedParams);
+    for (const combo of combinations) {
+      let resolvedUrl = page.url;
+      let resolvedPath = page.path;
+      for (const [param, value] of Object.entries(combo)) {
+        resolvedUrl = resolvedUrl!.replace(param, value);
+        resolvedPath = resolvedPath!.replace(param, value);
+      }
+      expanded.push({
+        ...page,
+        id: `${page.id}-${Object.values(combo).join('-')}`,
+        name: `${page.name} (${Object.values(combo).join('/')})`,
+        url: resolvedUrl,
+        path: resolvedPath,
+        hasDynamicParams: false,
+        params: undefined,
+      });
+    }
+  }
+  return expanded;
+}
+
+/** 执行单个 PageSet 的 E2E 测试 */
+async function runE2ESinglePageSet(
+  suite: TestSuite,
+  tc: TestCase,
+  prompt: string,
+  query: any,
+  skillContent: string,
+  project: TestProject | undefined,
+  suiteAbortController: AbortController,
+  resumeSessionId?: string,
+  projectSlug?: string,
+  e2eDataDir?: string,
+  mode?: string,
+): Promise<void> {
+  const moduleAbortController = new AbortController();
+  const onSuiteAbort = () => moduleAbortController.abort();
+  suiteAbortController.signal.addEventListener('abort', onSuiteAbort);
+
+  tc.status = 'running';
+  const prefix = resumeSessionId ? '🔄 恢复测试: ' : '🧪 开始测试: ';
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## ${prefix}${tc.name}\n\n` });
+  saveRun(suite);
+
+  const startTime = Date.now();
+  let fullOutput = '';
+  const blocks: StreamBlock[] = [];
+
+  try {
+    const e2eCwd = project?.sourcePath || getConfig().aiPlatformRoot;
+    const queryOptions: Record<string, any> = {
+      cwd: e2eCwd,
+      allowedTools: [
+        'Read', 'Write', 'Bash', 'Glob', 'Grep',
+        'mcp__playwright__browser_navigate',
+        'mcp__playwright__browser_snapshot',
+        'mcp__playwright__browser_take_screenshot',
+        'mcp__playwright__browser_click',
+        'mcp__playwright__browser_type',
+        'mcp__playwright__browser_fill_form',
+        'mcp__playwright__browser_press_key',
+        'mcp__playwright__browser_console_messages',
+        'mcp__playwright__browser_network_requests',
+        'mcp__playwright__browser_evaluate',
+        'mcp__playwright__browser_wait_for',
+        'mcp__playwright__browser_close',
+        'mcp__playwright__browser_select_option',
+        'mcp__playwright__browser_hover',
+        'mcp__playwright__browser_tabs',
+        'mcp__4_5v_mcp__analyze_image',
+      ],
+      maxTurns: 9999,
+      permissionMode: 'bypassPermissions',
+      abortController: moduleAbortController,
+      appendSystemPrompt: skillContent,
+      mcpServers: {
+        playwright: {
+          type: 'stdio' as const,
+          command: 'npx',
+          args: ['-y', '@executeautomation/playwright-mcp-server'],
+        },
+      },
+    };
+
+    if (resumeSessionId) {
+      queryOptions.resume = resumeSessionId;
+      queryOptions.forkSession = true;
+    }
+
+    console.log(`[E2E] 调用 query() for case: ${tc.name}...`);
+    const response = query({ prompt, options: queryOptions });
+
+    let capturedSessionId = '';
+    let msgCount = 0;
+
+    for await (const msg of response) {
+      if (moduleAbortController.signal.aborted) throw new Error('E2E 测试被中断');
+      msgCount++;
+      if (msgCount <= 3 || msgCount % 20 === 0) {
+        console.log(`[E2E] case=${tc.name} 消息 #${msgCount}: type=${msg.type}`);
+      }
+
+      switch (msg.type) {
+        case 'system': {
+          const sessionId = (msg as any).session_id;
+          if (sessionId) capturedSessionId = sessionId;
+          break;
+        }
+        case 'assistant': {
+          if ((msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'text') {
+                fullOutput += block.text;
+                blocks.push({ type: 'text', content: block.text });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
+              } else if (block.type === 'tool_use') {
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
+              }
+            }
+          }
+          break;
+        }
+        case 'user': {
+          if ('message' in msg && (msg as any).message?.content) {
+            for (const block of (msg as any).message.content) {
+              if (block.type === 'tool_result') {
+                const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_result', toolUseId: block.tool_use_id, content: resultContent?.slice(0, 5000) });
+              }
+            }
+          }
+          break;
+        }
+        case 'result': {
+          const resultMsg = msg as any;
+          if (resultMsg.subtype === 'success' && resultMsg.result && !fullOutput) {
+            fullOutput = resultMsg.result;
+          }
+          break;
+        }
+      }
+    }
+
+    tc.duration = Date.now() - startTime;
+    tc.output = fullOutput;
+    tc.blocks = blocks;
+    tc.status = fullOutput.length > 50 ? 'passed' : 'failed';
+    if (tc.status === 'failed') tc.error = '输出内容不足';
+
+    // 保存 resumeInfo：完成
+    if (capturedSessionId) {
+      const info = getResumeInfo(suite);
+      info.cases[tc.id] = { sessionId: capturedSessionId, status: 'completed', partialOutput: fullOutput };
+      setResumeInfo(suite, info);
+    }
+
+    testBus.emit('agent:stream', {
+      suiteId: suite.id, type: 'text',
+      content: `\n\n${tc.status === 'passed' ? '✅' : '❌'} 页面集测试完成: ${tc.name} (${(tc.duration / 1000).toFixed(1)}s)\n\n`,
+    });
+
+  } catch (err: any) {
+    tc.duration = Date.now() - startTime;
+    tc.status = 'error';
+    tc.error = err.message;
+    tc.blocks = blocks;
+
+    // 保存 resumeInfo：中断
+    const info = getResumeInfo(suite);
+    const existingResume = info.cases[tc.id];
+    const sessionIdToSave = existingResume?.sessionId || '';
+    if (sessionIdToSave) {
+      info.cases[tc.id] = { sessionId: sessionIdToSave, status: 'interrupted', partialOutput: fullOutput };
+      setResumeInfo(suite, info);
+    }
+
+    testBus.emit('agent:stream', {
+      suiteId: suite.id, type: 'text',
+      content: `\n\n💥 页面集测试中断: ${tc.name} - ${err.message}\n\n`,
+    });
+  } finally {
+    suiteAbortController.signal.removeEventListener('abort', onSuiteAbort);
+    saveRun(suite);
+  }
+}
+
+/** E2E 单会话模式（兼容无项目或单 case 场景） */
+async function runE2ESingleSession(
+  suite: TestSuite,
+  mainCase: TestCase,
+  config: Record<string, unknown>,
+  query: any,
+  skillContent: string,
+  project: TestProject | undefined,
+  mode: string,
+  scope: string,
+  projectSlug: string,
+  e2eDataDir: string,
+): Promise<void> {
+  const projectId = config.projectId as string | undefined;
+
   let pageListPrompt = '';
   if (project) {
     const pages = resolvePages(project, scope);
@@ -475,9 +822,6 @@ ${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
 `;
   }
 
-  const projectSlug = project?.name ? project.name.replace(/[<>:"/\\|?*\s]+/g, '_') : '_default';
-  const e2eDataDir = getConfig().e2eDataDir || getConfig().testDataDir;
-
   const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试${project ? ` ${project.name}` : ''} ${scope} 范围的页面。
 
 ${pageListPrompt}
@@ -486,24 +830,20 @@ ${pageListPrompt}
 {"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"}
 \`\`\`
 
-请严格按照 SKILL.md 中的流程执行：登录 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
+请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
 
-  const mainCase = suite.cases[0];
   mainCase.name = `E2E ${mode} 模式 (${scope})`;
   mainCase.status = 'running';
   saveRun(suite);
 
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
-  // 无超时限制，让 Claude Code 自然完成
-  const timer = setTimeout(() => {}, 0);
 
   const startTime = Date.now();
   let fullOutput = '';
   const blocks: StreamBlock[] = [];
 
   try {
-    console.log('[E2E] 调用 query()...');
     const e2eCwd = project?.sourcePath || getConfig().aiPlatformRoot;
     const response = query({
       prompt,
@@ -542,15 +882,8 @@ ${pageListPrompt}
       },
     });
 
-    console.log('[E2E] query() 返回，开始迭代消息...');
-    let msgCount = 0;
     for await (const msg of response) {
       if (abortController.signal.aborted) throw new Error('E2E test timeout');
-      msgCount++;
-      if (msgCount <= 5 || msgCount % 20 === 0) {
-        console.log(`[E2E] 消息 #${msgCount}: type=${msg.type}`);
-      }
-
       switch (msg.type) {
         case 'assistant': {
           if ((msg as any).message?.content) {
@@ -560,12 +893,7 @@ ${pageListPrompt}
                 blocks.push({ type: 'text', content: block.text });
                 testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: block.text });
               } else if (block.type === 'tool_use') {
-                blocks.push({
-                  type: 'tool_use',
-                  name: block.name,
-                  input: block.input,
-                  toolUseId: block.id,
-                });
+                blocks.push({ type: 'tool_use', name: block.name, input: block.input, toolUseId: block.id });
                 testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_use', name: block.name, input: block.input, id: block.id });
               }
             }
@@ -576,20 +904,10 @@ ${pageListPrompt}
           if ('message' in msg && (msg as any).message?.content) {
             for (const block of (msg as any).message.content) {
               if (block.type === 'tool_result') {
-                const resultContent = typeof block.content === 'string'
-                  ? block.content : JSON.stringify(block.content);
-                // 回填 blocks 中对应工具调用的结果
-                const existingBlock = blocks.find(
-                  b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id
-                );
-                if (existingBlock) {
-                  existingBlock.result = resultContent?.slice(0, 5000);
-                }
-                testBus.emit('agent:stream', {
-                  suiteId: suite.id, type: 'tool_result',
-                  toolUseId: block.tool_use_id,
-                  content: resultContent?.slice(0, 5000),
-                });
+                const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+                const existingBlock = blocks.find(b => b.type === 'tool_use' && b.toolUseId === block.tool_use_id);
+                if (existingBlock) existingBlock.result = resultContent?.slice(0, 5000);
+                testBus.emit('agent:stream', { suiteId: suite.id, type: 'tool_result', toolUseId: block.tool_use_id, content: resultContent?.slice(0, 5000) });
               }
             }
           }
@@ -605,47 +923,15 @@ ${pageListPrompt}
       }
     }
 
-    clearTimeout(timer);
-
     mainCase.duration = Date.now() - startTime;
     mainCase.output = fullOutput;
     mainCase.blocks = blocks;
     mainCase.status = fullOutput.length > 100 ? 'passed' : 'failed';
     if (mainCase.status === 'failed') mainCase.error = '输出内容不足';
 
-    // 尝试读取 e2e-test 生成的报告路径（优先按项目目录查找，兼容旧扁平目录）
-    try {
-      const searchDirs = [
-        path.join(getConfig().e2eDataDir, 'runs', projectSlug),  // 新路径：按项目隔离
-        path.join(getConfig().e2eDataDir, 'runs'),               // 旧路径：扁平目录（兼容）
-      ];
-      for (const e2eRunsBase of searchDirs) {
-        if (!fs.existsSync(e2eRunsBase)) continue;
-        const runDirs = fs.readdirSync(e2eRunsBase)
-          .filter(d => { try { return fs.statSync(path.join(e2eRunsBase, d)).isDirectory(); } catch { return false; } })
-          .map(d => ({ name: d, mtime: fs.statSync(path.join(e2eRunsBase, d)).mtimeMs }))
-          .sort((a, b) => b.mtime - a.mtime);
-        if (runDirs.length > 0) {
-          const runJsonPath = path.join(e2eRunsBase, runDirs[0].name, 'run.json');
-          if (fs.existsSync(runJsonPath)) {
-            const runData = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
-            if (runData.reportPath) {
-              suite.config.reportPath = runData.reportPath;
-              break;  // 找到就停止
-            }
-          }
-        }
-      }
-    } catch { /* ignore */ }
-
-    // 标记其他 case
-    for (let i = 1; i < suite.cases.length; i++) {
-      suite.cases[i].status = 'passed' as any;
-      suite.cases[i].output = '(包含在 AI Agent 主流程测试中)';
-    }
+    tryReadE2EReportPath(suite, projectSlug);
 
   } catch (err: any) {
-    clearTimeout(timer);
     abortControllers.delete(suite.id);
     mainCase.duration = Date.now() - startTime;
     mainCase.status = 'error';
@@ -655,6 +941,33 @@ ${pageListPrompt}
   abortControllers.delete(suite.id);
   saveRun(suite);
   testBus.emit('test:update', { suiteId: suite.id, caseId: mainCase.id, status: mainCase.status, duration: mainCase.duration });
+}
+
+/** 尝试读取 E2E 测试生成的报告路径 */
+function tryReadE2EReportPath(suite: TestSuite, projectSlug: string): void {
+  try {
+    const searchDirs = [
+      path.join(getConfig().e2eDataDir, 'runs', projectSlug),
+      path.join(getConfig().e2eDataDir, 'runs'),
+    ];
+    for (const e2eRunsBase of searchDirs) {
+      if (!fs.existsSync(e2eRunsBase)) continue;
+      const runDirs = fs.readdirSync(e2eRunsBase)
+        .filter(d => { try { return fs.statSync(path.join(e2eRunsBase, d)).isDirectory(); } catch { return false; } })
+        .map(d => ({ name: d, mtime: fs.statSync(path.join(e2eRunsBase, d)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+      if (runDirs.length > 0) {
+        const runJsonPath = path.join(e2eRunsBase, runDirs[0].name, 'run.json');
+        if (fs.existsSync(runJsonPath)) {
+          const runData = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
+          if (runData.reportPath) {
+            suite.config.reportPath = runData.reportPath;
+            break;
+          }
+        }
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 /** 根据项目配置和 scope 解析出要测试的页面列表，展开动态参数 */
@@ -740,6 +1053,20 @@ function generateParamCombinations(params: Record<string, string[]>): Record<str
 
 // ========== 前端单元测试（两阶段：生成 + 执行） ==========
 
+/** 从发现数据中自动检测前端源码目录（相对于项目根目录） */
+function detectFrontendSrcDir(discovery: any): string {
+  if (!discovery?.modules) return 'src';
+  for (const mod of discovery.modules) {
+    for (const file of mod.files || []) {
+      const p: string = file.path || '';
+      // 匹配 frontend/src、src、web/src 等常见前端源码目录
+      const match = p.match(/^(.+?)\/(utils|components|stores?|pages|hooks|composables|views|api|flow)\//);
+      if (match) return match[1];
+    }
+  }
+  return 'src';
+}
+
 /** 加载 frontend-test Skill 并替换模板变量 */
 function loadFrontendTestSkill(variables: Record<string, string>): string {
   const skillPath = path.resolve(AI_PLATFORM_ROOT, 'skills', 'tests', 'frontend-test', 'SKILL.md');
@@ -799,6 +1126,70 @@ function findTestFiles(dir: string): string[] {
   return results;
 }
 
+/** 根据模块匹配知识图谱中的页面，构建辅助上下文 */
+function buildPageContextSection(mod: any, pageContext: any[] | null): string {
+  if (!pageContext || pageContext.length === 0) {
+    return '暂无知识图谱数据。请仅基于源码分析生成测试。';
+  }
+
+  const matchedPages: any[] = [];
+
+  for (const page of pageContext) {
+    const apis = page.apiEndpoints || [];
+    const interactions = page.interactions || [];
+    const issues = page.commonIssues || [];
+    const pageName = page.pageName || '';
+    const modId = mod.id || '';
+    const modName = mod.name || '';
+
+    const isRelevant =
+      (modId === 'pages' && (pageName.includes(modName) || modName.includes(pageName))) ||
+      (modId === 'stores' && apis.length > 0) ||
+      (modId === 'components' && interactions.length > 0);
+
+    if (isRelevant || apis.length > 0) {
+      matchedPages.push({
+        pageName,
+        pageId: page.pageId || '',
+        description: page.description || '',
+        apiEndpoints: apis.slice(0, 5),
+        interactions: interactions.slice(0, 5),
+        commonIssues: issues.slice(0, 3),
+      });
+    }
+
+    if (matchedPages.length >= 5) break;
+  }
+
+  if (matchedPages.length === 0) {
+    return '暂无与当前模块直接相关的知识图谱数据。请仅基于源码分析生成测试。';
+  }
+
+  return matchedPages.map((p, i) => {
+    let text = `### 页面 ${i + 1}: ${p.pageName} (${p.pageId})\n`;
+    if (p.description) text += `- 功能: ${p.description}\n`;
+    if (p.apiEndpoints.length > 0) {
+      text += `- API 接口:\n`;
+      for (const api of p.apiEndpoints) {
+        text += `  - ${api.method} ${api.path} — ${api.description || ''}\n`;
+      }
+    }
+    if (p.interactions.length > 0) {
+      text += `- 交互操作:\n`;
+      for (const inter of p.interactions) {
+        text += `  - ${inter.action || ''} → ${inter.expected || ''}\n`;
+      }
+    }
+    if (p.commonIssues.length > 0) {
+      text += `- 常见问题:\n`;
+      for (const issue of p.commonIssues) {
+        text += `  - ${issue}\n`;
+      }
+    }
+    return text;
+  }).join('\n');
+}
+
 async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>): Promise<void> {
   console.log('[FrontendTest] 开始前端单元测试...');
   const { query } = await import('@anthropic-ai/claude-code');
@@ -833,7 +1224,8 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
   }
 
   const selectedModuleIds = (config.modules as string[]) || [];
-  const testsOutputDir = path.join(DATA_DIR, 'projects', projectId!, 'frontend-tests');
+  const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+  const testsOutputDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'frontend', projectSlug);
   if (!fs.existsSync(testsOutputDir)) fs.mkdirSync(testsOutputDir, { recursive: true });
 
   const abortController = new AbortController();
@@ -879,11 +1271,15 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
         : undefined;
 
       // 加载 Skill 并替换模板变量
+      const frontendSrcDir = detectFrontendSrcDir(discovery);
+      const frontendSrcPath = path.join(project.sourcePath!, frontendSrcDir).replace(/\\/g, '/');
       const skillContent = loadFrontendTestSkill({
         projectName: project.name,
         sourcePath: project.sourcePath!,
         moduleInfoSection: buildFrontendModuleInfo(mod),
         testsOutputDir: testsOutputDir.replace(/\\/g, '/'),
+        frontendSrcDir,
+        frontendSrcPath,
       });
 
       await runSingleModuleFrontendTest(suite, tc, mod, project.sourcePath!, abortController, skillContent, resumeSessionId);
@@ -891,7 +1287,9 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
 
     // ===== 阶段二：执行 vitest =====
     if (!abortController.signal.aborted) {
-      await executeVitestTests(suite, testsOutputDir, project.sourcePath!);
+      const frontendSrcDir = detectFrontendSrcDir(discovery);
+      const frontendSrcPath = path.join(project.sourcePath!, frontendSrcDir).replace(/\\/g, '/');
+      await executeVitestTests(suite, testsOutputDir, project.sourcePath!, frontendSrcPath);
     }
   } catch (err: any) {
     console.error('[FrontendTest] 出错:', err.message);
@@ -1035,7 +1433,7 @@ async function runSingleModuleFrontendTest(
 }
 
 /** 阶段二：执行 vitest 测试 */
-async function executeVitestTests(suite: TestSuite, testsDir: string, sourcePath: string): Promise<void> {
+async function executeVitestTests(suite: TestSuite, testsDir: string, sourcePath: string, frontendSrcPath?: string): Promise<void> {
   const testFiles = findTestFiles(testsDir);
   if (testFiles.length === 0) {
     testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## ⚠️ 未找到生成的测试文件\n\n` });
@@ -1045,16 +1443,25 @@ async function executeVitestTests(suite: TestSuite, testsDir: string, sourcePath
   testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `\n---\n## 执行 vitest (${testFiles.length} 个测试文件)...\n\n` });
 
   // 生成临时 vitest 配置
+  const aliasTarget = frontendSrcPath || `${sourcePath.replace(/\\/g, '/')}/src`;
   const vitestConfig = `
 import { defineConfig } from 'vitest/config'
+import vue from '@vitejs/plugin-vue'
+import path from 'path'
 export default defineConfig({
-  test: { globals: true, environment: 'happy-dom' },
-  resolve: { alias: { '@': '${sourcePath.replace(/\\/g, '/')}/src' } },
+  plugins: [vue()],
+  test: { globals: true, environment: 'happy-dom', testTimeout: 30000, hookTimeout: 30000 },
+  resolve: { alias: {
+    '@': '${aliasTarget}',
+    '${aliasTarget}': '${aliasTarget}',
+  } },
+  server: { fs: { allow: ['${testsDir.replace(/\\/g, '/')}', '${sourcePath.replace(/\\/g, '/')}'] } },
 })
 `;
   const configPath = path.join(testsDir, '_vitest.config.ts');
   fs.writeFileSync(configPath, vitestConfig, 'utf-8');
 
+  let rawJson = '';
   try {
     const { execSync } = await import('child_process');
     const result = execSync(`npx vitest run --reporter=json --config "${configPath}" 2>&1`, {
@@ -1066,8 +1473,9 @@ export default defineConfig({
     // 解析 JSON 报告
     const jsonMatch = result.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
     if (jsonMatch) {
+      rawJson = jsonMatch[0];
       try {
-        const report = JSON.parse(jsonMatch[0]);
+        const report = JSON.parse(rawJson);
         const total = report.numTotalTests || 0;
         const passed = report.numPassedTests || 0;
         const failed = report.numFailedTests || 0;
@@ -1084,8 +1492,9 @@ export default defineConfig({
     const stdout = err.stdout || '';
     const jsonMatch = stdout.match(/\{[\s\S]*"numTotalTests"[\s\S]*\}/);
     if (jsonMatch) {
+      rawJson = jsonMatch[0];
       try {
-        const report = JSON.parse(jsonMatch[0]);
+        const report = JSON.parse(rawJson);
         const total = report.numTotalTests || 0;
         const passed = report.numPassedTests || 0;
         const failed = report.numFailedTests || 0;
@@ -1104,6 +1513,177 @@ export default defineConfig({
       });
     }
   }
+
+  // 阶段三：生成 HTML 报告
+  if (rawJson) {
+    try {
+      const report = JSON.parse(rawJson);
+      const projectSlug = (suite.config.projectName as string || 'project').replace(/[<>:"/\\|?*\s]+/g, '_');
+      const html = buildFrontendTestHtml(report, projectSlug);
+      const reportsDir = path.resolve(getConfig().testDataDir || getConfig().e2eDataDir, 'frontend', 'reports', projectSlug);
+      if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const htmlPath = path.join(reportsDir, `frontend-test-${ts}.html`);
+      fs.writeFileSync(htmlPath, html, 'utf-8');
+      suite.config.reportPath = htmlPath;
+      // 同时保存 JSON 原始数据
+      const jsonPath = path.join(reportsDir, `frontend-test-${ts}.json`);
+      fs.writeFileSync(jsonPath, rawJson, 'utf-8');
+      testBus.emit('agent:stream', {
+        suiteId: suite.id,
+        type: 'text',
+        content: `\n\n📊 HTML 报告已生成: ${htmlPath}\n`,
+      });
+    } catch (e: any) {
+      console.error('[FrontendTest] HTML报告生成失败:', e.message);
+    }
+  }
+}
+
+/** 将 vitest JSON 报告转为独立 HTML 报告（固定模板，与代码审查报告风格统一） */
+export function buildFrontendTestHtml(vitestReport: any, projectSlug: string): string {
+  const totalTests = vitestReport.numTotalTests || 0;
+  const totalPassed = vitestReport.numPassedTests || 0;
+  const totalFailed = vitestReport.numFailedTests || 0;
+  const passRate = totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : '0';
+  const rateClass = Number(passRate) >= 90 ? 'score-good' : Number(passRate) >= 70 ? 'score-warn' : 'score-bad';
+  const now = new Date().toISOString().slice(0, 10);
+
+  // 按模块分类
+  const modMap: Record<string, { name: string; files: any[]; passed: number; failed: number }> = {
+    utils: { name: 'utils — API 接口层', files: [], passed: 0, failed: 0 },
+    components: { name: 'components — Vue 组件', files: [], passed: 0, failed: 0 },
+    pages: { name: 'pages — 页面 & Composable', files: [], passed: 0, failed: 0 },
+  };
+
+  const sourceMap: Record<string, string> = {
+    'client.test.ts': 'api/client.ts', 'projects.test.ts': 'api/projects.ts',
+    'schools.test.ts': 'api/schools.ts', 'sessions.test.ts': 'api/sessions.ts',
+    'settings.test.ts': 'api/settings.ts', 'skills.test.ts': 'api/skills.ts',
+    'tests.test.ts': 'api/tests.ts', 'workflows.test.ts': 'api/workflows.ts',
+    'ChatInput.test.ts': 'components/chat/ChatInput.vue', 'MessageBubble.test.ts': 'components/chat/MessageBubble.vue',
+    'SessionList.test.ts': 'components/chat/SessionList.vue', 'ToolCallBlock.test.ts': 'components/chat/ToolCallBlock.vue',
+    'EmptyState.test.ts': 'components/common/EmptyState.vue', 'StatusBadge.test.ts': 'components/common/StatusBadge.vue',
+    'AppSidebar.test.ts': 'components/layout/AppSidebar.vue', 'SchoolForm.test.ts': 'components/school/SchoolForm.vue',
+    'StepPipeline.test.ts': 'components/workflow/StepPipeline.vue', 'WorkflowParamsForm.test.ts': 'components/workflow/WorkflowParamsForm.vue',
+    'useSSE.test.ts': 'composables/useSSE.ts', 'ChatView.test.ts': 'views/ChatView.vue',
+    'DashboardView.test.ts': 'views/DashboardView.vue', 'SchoolView.test.ts': 'views/SchoolView.vue',
+    'SchoolDetailView.test.ts': 'views/SchoolDetailView.vue', 'SchoolDeployView.test.ts': 'views/SchoolDeployView.vue',
+    'SettingsView.test.ts': 'views/SettingsView.vue', 'SkillView.test.ts': 'views/SkillView.vue',
+    'TestView.test.ts': 'views/TestView.vue', 'WorkflowView.test.ts': 'views/WorkflowView.vue',
+  };
+
+  const allFailed: { fname: string; title: string; error: string }[] = [];
+
+  for (const tr of vitestReport.testResults || []) {
+    const raw = tr.name || '';
+    const parts = raw.split(/[/\\]/);
+    const fname = parts.slice(-2).join('/');
+    const mod = fname.startsWith('utils') ? 'utils' : fname.startsWith('components') ? 'components' : 'pages';
+    const cases = (tr.assertionResults || []).map((a: any) => {
+      if (a.status === 'failed') {
+        allFailed.push({ fname, title: a.title || '', error: (a.failureMessages?.[0] || '').split('\n')[0].substring(0, 200) });
+      }
+      return a;
+    });
+    const passed = cases.filter((a: any) => a.status === 'passed').length;
+    const failed = cases.filter((a: any) => a.status === 'failed').length;
+    modMap[mod].passed += passed;
+    modMap[mod].failed += failed;
+    modMap[mod].files.push({ fname, source: sourceMap[fname.split('/').pop() || ''] || fname, passed, failed, cases });
+  }
+
+  // 构建 HTML 片段
+  function esc(s: string) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  const modColors: Record<string, [string, string]> = {
+    utils: ['stat-blue', 'risk-utils'], components: ['stat-green', 'risk-components'], pages: ['stat-purple', 'risk-pages'],
+  };
+  const modIcons: Record<string, string> = { utils: '🔌', components: '🧩', pages: '📄' };
+
+  let scoreCards = '';
+  let sections = '';
+  let summaryRows = '';
+  let idx = 0;
+
+  for (const [key, mod] of Object.entries(modMap)) {
+    if (mod.files.length === 0) continue;
+    const rate = mod.passed + mod.failed > 0 ? ((mod.passed / (mod.passed + mod.failed)) * 100).toFixed(0) : '100';
+    const rc = Number(rate) >= 90 ? 'score-good' : Number(rate) >= 70 ? 'score-warn' : 'score-bad';
+    scoreCards += `<div class="score-card"><div class="module-name">${esc(mod.name)}</div><div class="score ${rc}">${rate}%</div><div class="score-label">通过率 · ${mod.passed}/${mod.passed + mod.failed}</div><span class="risk-badge ${modColors[key][1]}">${mod.files.length} 个文件 · ${mod.failed} 个失败</span></div>`;
+
+    sections += `<div class="section"><h2>${modIcons[key]} ${esc(mod.name)}（${mod.files.length} 个文件 · ${mod.passed + mod.failed} 个用例 · ${mod.failed} 个失败）</h2>`;
+    for (const f of mod.files) {
+      const icon = f.failed === 0 ? '✅' : '⚠️';
+      const tagCls = f.failed === 0 ? 'tag-render' : 'tag-edge';
+      sections += `<div class="module-header" onclick="toggleModule(this)"><h3>${icon} ${esc(f.fname.replace('.test.ts', ''))} <span class="test-tag ${tagCls}">${f.cases.length} 个用例 · ${f.passed} 通过 · ${f.failed} 失败</span></h3><span class="toggle">▸</span></div><div class="module-content"><div class="file-info"><span class="file-path">源码: web/src/${esc(f.source)}</span></div>`;
+      for (const c of f.cases) {
+        const ci = c.status === 'passed' ? '✅' : '❌';
+        const cc = c.status === 'passed' ? '' : ' test-failed';
+        const dur = c.duration != null ? (c.duration < 1000 ? c.duration.toFixed(0) + 'ms' : (c.duration / 1000).toFixed(1) + 's') : '';
+        sections += `<div class="test-case${cc}"><span class="test-icon">${ci}</span><span class="test-name">${esc(c.title)}</span><span class="test-duration">${dur}</span></div>`;
+        if (c.status === 'failed') {
+          const err = (c.failureMessages?.[0] || '').split('\n')[0].substring(0, 200);
+          sections += `<div class="error-detail"><span class="error-icon">⚠</span><code>${esc(err)}</code></div>`;
+        }
+      }
+      sections += `</div>`;
+    }
+    sections += `</div>`;
+
+    for (const f of mod.files) {
+      idx++;
+      const pr = f.cases.length > 0 ? ((f.passed / f.cases.length) * 100).toFixed(0) : '100';
+      summaryRows += `<tr><td class="count">${idx}</td><td class="file-name">${esc(f.fname)}</td><td>web/src/${esc(f.source)}</td><td><span class="module-tag ${modColors[key][1]}">${key === 'utils' ? 'utils' : key === 'components' ? '组件' : '页面'}</span></td><td class="count">${f.cases.length}</td><td class="count pass-count">${f.passed}</td><td class="count ${f.failed > 0 ? 'fail-count' : ''}">${f.failed}</td><td class="count">${pr}%</td></tr>`;
+    }
+  }
+
+  let failedSection = '';
+  if (allFailed.length > 0) {
+    failedSection = `<div class="section" style="border-left: 4px solid #ff4d4f;"><h2>❌ 失败用例汇总（${allFailed.length} 个）</h2>`;
+    for (const ft of allFailed) {
+      failedSection += `<div class="test-case test-failed"><span class="test-icon">❌</span><span class="test-name">${esc(ft.fname)} → ${esc(ft.title)}</span><span class="file-path" style="margin-left:auto">${esc(ft.fname)}</span></div><div class="error-detail"><span class="error-icon">⚠</span><code>${esc(ft.error)}</code></div>`;
+    }
+    failedSection += `</div>`;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>前端单元测试报告 — ${esc(projectSlug)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#2c3e50;line-height:1.6}.container{max-width:1200px;margin:0 auto;padding:20px}h1{text-align:center;font-size:28px;margin-bottom:8px;color:#1a1a2e}.subtitle{text-align:center;color:#7f8c8d;margin-bottom:30px;font-size:14px}
+.score-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:30px}.score-card{background:#fff;border-radius:12px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08);transition:transform .2s}.score-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.12)}.score-card .module-name{font-size:14px;color:#7f8c8d;margin-bottom:8px}.score-card .score{font-size:48px;font-weight:700}.score-card .score-label{font-size:12px;color:#95a5a6;margin-top:4px}.score-card .risk-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;margin-top:8px;font-weight:600}.risk-utils{background:#e6f7ff;color:#1890ff}.risk-components{background:#f0fff4;color:#52c41a}.risk-pages{background:#f9f0ff;color:#722ed1}.score-good{color:#27ae60}.score-warn{color:#fa8c16}.score-bad{color:#ff4d4f}
+.stats-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:30px}.stat-item{background:#fff;border-radius:8px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.06)}.stat-item .stat-num{font-size:28px;font-weight:700}.stat-item .stat-label{font-size:12px;color:#95a5a6;margin-top:4px}.stat-blue .stat-num{color:#1890ff}.stat-green .stat-num{color:#52c41a}.stat-red .stat-num{color:#ff4d4f}.stat-purple .stat-num{color:#722ed1}.stat-orange .stat-num{color:#fa8c16}
+.pass-rate-bar{height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-top:20px}.pass-rate-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#52c41a ${passRate}%,#ff4d4f ${passRate}%)}
+.section{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}.section h2{font-size:18px;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #f0f0f0;display:flex;align-items:center;gap:8px}
+.module-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px 16px;background:#f8f9fa;border-radius:8px;margin-bottom:4px;transition:background .15s}.module-header:hover{background:#eef1f5}.module-header h3{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}.module-header .toggle{font-size:14px;color:#95a5a6;transition:transform .2s}.module-content{display:none;padding:8px 16px 16px}.module-content.open{display:block}
+.test-case{padding:8px 14px;margin-bottom:2px;border-radius:6px;font-size:13px;display:flex;align-items:center;gap:8px;transition:background .1s}.test-case:hover{background:#f5f5f7}.test-case.test-failed{background:#fff2f0}.test-icon{font-size:14px;flex-shrink:0}.test-name{flex:1;color:#444}.test-tag{font-size:11px;padding:1px 8px;border-radius:10px;font-weight:500;white-space:nowrap}.tag-api{background:#e6f7ff;color:#1890ff}.tag-render{background:#f6ffed;color:#52c41a}.tag-event{background:#fff7e6;color:#fa8c16}.tag-state{background:#f9f0ff;color:#722ed1}.tag-edge{background:#fff2f0;color:#ff4d4f}.test-duration{font-size:11px;color:#bbb;white-space:nowrap}
+.error-detail{margin:0 0 6px 38px;padding:6px 12px;background:#fff7e6;border-left:3px solid #fa8c16;border-radius:0 4px 4px 0;font-size:12px;display:flex;align-items:flex-start;gap:6px}.error-detail code{color:#d4380d;word-break:break-all;font-size:11px;line-height:1.5}.error-icon{color:#fa8c16;flex-shrink:0;font-size:14px}
+.file-info{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;color:#999;border-bottom:1px solid #f5f5f5;margin-bottom:8px}.file-path{font-family:monospace;color:#888;font-size:12px}
+.summary-table{width:100%;border-collapse:collapse;font-size:13px}.summary-table th{background:#f8f9fa;padding:10px 12px;text-align:left;border-bottom:2px solid #dee2e6;font-weight:600}.summary-table td{padding:8px 12px;border-bottom:1px solid #f0f0f0}.summary-table tr:hover{background:#f8f9fa}.summary-table .file-name{font-family:monospace;color:#333;font-weight:500}.summary-table .count{text-align:center;font-weight:600}.pass-count{color:#52c41a}.fail-count{color:#ff4d4f}.module-tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:500}
+.note{background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;padding:12px 16px;margin-top:20px;font-size:13px;color:#ad6800;display:flex;align-items:flex-start;gap:8px}.note-icon{font-size:16px;flex-shrink:0}
+@media(max-width:768px){.score-overview{grid-template-columns:1fr}.stats-bar{grid-template-columns:repeat(3,1fr)}.summary-table{font-size:11px}}
+</style></head><body><div class="container">
+<h1>前端单元测试报告</h1>
+<p class="subtitle">${esc(projectSlug)} — Vue 3 + Vite | 执行日期: ${now} | 测试框架: Vitest + @vue/test-utils + happy-dom</p>
+<div class="score-overview">${scoreCards}</div>
+<div class="stats-bar">
+<div class="stat-item stat-blue"><div class="stat-num">${totalTests}</div><div class="stat-label">总用例数</div></div>
+<div class="stat-item stat-green"><div class="stat-num">${totalPassed}</div><div class="stat-label">通过</div></div>
+<div class="stat-item stat-red"><div class="stat-num">${totalFailed}</div><div class="stat-label">失败</div></div>
+<div class="stat-item stat-purple"><div class="stat-num">${passRate}%</div><div class="stat-label">通过率</div></div>
+<div class="stat-item stat-orange"><div class="stat-num">${vitestReport.numTotalTestSuites || 0}</div><div class="stat-label">测试文件</div></div>
+<div class="stat-item"><div class="stat-num">${(vitestReport.numPassedTestSuites || 0)}</div><div class="stat-label">全通过文件</div></div>
+</div>
+<div class="pass-rate-bar"><div class="pass-rate-fill"></div></div>
+${failedSection}
+${sections}
+<div class="section"><h2>📊 文件汇总表</h2>
+<table class="summary-table"><thead><tr><th>#</th><th>测试文件</th><th>源文件</th><th>分类</th><th>用例数</th><th>通过</th><th>失败</th><th>通过率</th></tr></thead>
+<tbody>${summaryRows}</tbody>
+<tfoot><tr style="background:#f8f9fa;font-weight:600"><td></td><td colspan="3">合计</td><td class="count">${totalTests}</td><td class="count pass-count">${totalPassed}</td><td class="count ${totalFailed > 0 ? 'fail-count' : ''}">${totalFailed}</td><td class="count">${passRate}%</td></tr></tfoot>
+</table></div>
+</div>
+<script>function toggleModule(h){const c=h.nextElementSibling,t=h.querySelector('.toggle'),o=c.classList.contains('open');if(o){c.classList.remove('open');t.style.transform='rotate(0deg)'}else{c.classList.add('open');t.style.transform='rotate(90deg)'}}</script>
+</body></html>`;
 }
 
 // ========== API 接口测试 ==========
@@ -1726,69 +2306,218 @@ async function runSingleModuleReview(
   testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
 }
 
+/** 扫描报告目录，返回所有 HTML/MD 文件 */
+export function listReportFiles(projectId: string): { reportsDir: string; files: { name: string; path: string; type: 'html' | 'md'; size: number; mtime: string }[] } {
+  const project = getProjectById(projectId);
+  if (!project) throw new Error('项目不存在');
+  const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+  const base = getConfig().testDataDir || getConfig().e2eDataDir;
+  const reportsDir = path.join(base, 'codereview', 'reports', projectSlug);
+  const files: { name: string; path: string; type: 'html' | 'md'; size: number; mtime: string }[] = [];
+  if (fs.existsSync(reportsDir)) {
+    for (const f of fs.readdirSync(reportsDir)) {
+      const ext = path.extname(f).toLowerCase();
+      if (ext !== '.html' && ext !== '.md') continue;
+      const full = path.join(reportsDir, f);
+      const stat = fs.statSync(full);
+      files.push({
+        name: f,
+        path: full,
+        type: ext === '.html' ? 'html' : 'md',
+        size: stat.size,
+        mtime: stat.mtime.toISOString(),
+      });
+    }
+  }
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  return { reportsDir, files };
+}
+
+/** 从选中的 MD 文件合并生成 HTML 报告 */
+export function buildHtmlFromMdFiles(projectId: string, mdFiles: string[]): { htmlPath: string; moduleCount: number } {
+  const project = getProjectById(projectId);
+  if (!project) throw new Error('项目不存在');
+  const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+  const base = getConfig().testDataDir || getConfig().e2eDataDir;
+  const reportsDir = path.join(base, 'codereview', 'reports', projectSlug);
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+
+  // 读取并合并 MD
+  const parts: string[] = [];
+  for (const f of mdFiles) {
+    // 安全检查：确保文件在报告目录内
+    const resolved = path.resolve(f);
+    if (!resolved.startsWith(path.resolve(reportsDir))) continue;
+    if (!fs.existsSync(resolved)) continue;
+    const content = fs.readFileSync(resolved, 'utf-8');
+    if (content.length < 50) continue;
+    const name = path.basename(resolved, '.md').replace(/^manual-/, '');
+    parts.push(`---\n## ${name}\n\n${content}`);
+  }
+  if (parts.length === 0) throw new Error('没有有效的 MD 文件');
+
+  const merged = parts.join('\n\n');
+  const html = buildReviewHtml(project.name, merged, 0);
+  const ts = new Date().toISOString().slice(0, 10);
+  const htmlPath = path.join(reportsDir, `review-${ts}.html`);
+  fs.writeFileSync(htmlPath, html, 'utf-8');
+  return { htmlPath, moduleCount: parts.length };
+}
+
 /** 将 Markdown 审查结果转为独立 HTML 报告（服务端渲染，无 CDN 依赖） */
 export function buildReviewHtml(projectName: string, markdown: string, duration: number): string {
   const durationSec = (duration / 1000).toFixed(1);
 
-  // 服务端完成 Markdown 解析，按模块分割并渲染为 HTML
-  const moduleRegex = /^---\s*\n##\s+(.+)$/gm;
-  const modules: { title: string; content: string; html: string }[] = [];
-  let match: RegExpExecArray | null;
-  const splits: { title: string; index: number; end: number }[] = [];
-  while ((match = moduleRegex.exec(markdown)) !== null) {
-    splits.push({ title: match[1].trim(), index: match.index, end: match.index + match[0].length });
+  // ====== 按 h1 标题分割模块（避免 ---\n## 被内部标题误匹配） ======
+  const h1Regex = /^# (.+)$/gm;
+  const modules: { title: string; content: string; html: string; score: number | null; risk: string; critical: number; warning: number; info: number }[] = [];
+  const splits: { title: string; index: number }[] = [];
+  let h1Match: RegExpExecArray | null;
+  while ((h1Match = h1Regex.exec(markdown)) !== null) {
+    // 提取纯模块名（去掉 "— 代码审查报告" 等后缀）
+    let title = h1Match[1].trim();
+    title = title.replace(/\s*[—–\-]+\s*(深度)?代码审查报告.*$/, '').replace(/(深度)?代码审查报告\s*[—–\-]+\s*/, '').trim();
+    splits.push({ title, index: h1Match.index });
   }
 
-  if (splits.length === 0) {
-    modules.push({ title: '完整审查报告', content: markdown, html: marked.parse(markdown) as string });
-  } else {
-    for (let i = 0; i < splits.length; i++) {
-      const start = splits[i].end;
-      const end = i + 1 < splits.length ? splits[i + 1].index : markdown.length;
-      const content = markdown.substring(start, end).trim();
-      modules.push({ title: splits[i].title, content, html: marked.parse(content) as string });
-    }
-  }
-
-  // 统计严重等级
-  let criticalCount = 0, warningCount = 0, infoCount = 0;
-  for (const m of modules) {
-    criticalCount += (m.content.match(/🔴/g) || []).length;
-    warningCount += (m.content.match(/🟡/g) || []).length;
-    infoCount += (m.content.match(/🔵/g) || []).length;
-  }
-
-  // 提取评分
   function extractScore(content: string): number | null {
-    const scoreMatch = content.match(/模块评分[：:]\s*(\d+)/);
-    if (scoreMatch) return parseInt(scoreMatch[1]);
-    const ratingMatch = content.match(/总体评分[：:]\s*(\d+)/);
-    if (ratingMatch) return parseInt(ratingMatch[1]);
+    const m1 = content.match(/模块评分[：:]\s*(\d+)/);
+    if (m1) return parseInt(m1[1]);
+    // 综合评分（0-100）\n**58 / 100** 或 综合评分（0-100）\n72
+    const m2 = content.match(/综合评分[^\n]*\n\s*\*{0,2}(\d{1,3})\s*(?:\/\s*100)?/);
+    if (m2 && parseInt(m2[1]) > 0) return parseInt(m2[1]);
+    const m3 = content.match(/总体评分[：:]\s*(\d+)/);
+    if (m3) return parseInt(m3[1]);
     return null;
   }
 
-  function extractRisk(title: string): string {
-    if (/高风险/.test(title)) return 'high';
-    if (/中风险/.test(title)) return 'medium';
-    if (/低风险/.test(title)) return 'low';
+  function extractRisk(content: string): string {
+    const m = content.match(/风险等级[：:]*\s*(high|medium|low|高|中|低)/i);
+    if (m) {
+      const v = m[1].toLowerCase();
+      if (v === 'high' || v === '高') return 'high';
+      if (v === 'medium' || v === '中') return 'medium';
+      if (v === 'low' || v === '低') return 'low';
+    }
     return '';
   }
 
-  // 构建侧边栏 HTML
-  let sidebarHtml = '';
+  function countSeverity(content: string): { critical: number; warning: number; info: number } {
+    let critical = 0, warning = 0, info = 0;
+    const headings = content.match(/^#{2,4}\s+.+$/gm) || [];
+    for (const h of headings) {
+      if (/🔴|\bCritical\b|P0/i.test(h)) critical++;
+      if (/🟡|\bWarning\b|\bHigh\b|P1/i.test(h)) warning++;
+      if (/🔵|\bInfo\b|\bMedium\b|P2/i.test(h)) info++;
+    }
+    return { critical, warning, info };
+  }
+
+  if (splits.length === 0) {
+    const html = marked.parse(markdown) as string;
+    const score = extractScore(markdown);
+    const risk = extractRisk(markdown);
+    const sev = countSeverity(markdown);
+    modules.push({ title: '完整审查报告', content: markdown, html, score, risk, ...sev });
+  } else {
+    for (let i = 0; i < splits.length; i++) {
+      // 从 h1 标题行结束位置开始取内容
+      const start = markdown.indexOf('\n', splits[i].index);
+      const end = i + 1 < splits.length ? splits[i + 1].index : markdown.length;
+      const content = markdown.substring(start !== -1 ? start + 1 : splits[i].index, end).trim();
+      const html = marked.parse(content) as string;
+      const score = extractScore(content);
+      const risk = extractRisk(content);
+      const sev = countSeverity(content);
+      modules.push({ title: splits[i].title, content, html, score, risk, ...sev });
+    }
+  }
+
+  // ====== 汇总统计 ======
+  let totalCritical = 0, totalWarning = 0, totalInfo = 0;
+  let scoreSum = 0, scoreCount = 0;
+  for (const m of modules) {
+    totalCritical += m.critical;
+    totalWarning += m.warning;
+    totalInfo += m.info;
+    if (m.score !== null) { scoreSum += m.score; scoreCount++; }
+  }
+  const avgScore = scoreCount > 0 ? Math.round(scoreSum / scoreCount) : null;
+
+  function scoreColor(s: number | null): string {
+    if (s === null) return '#8c8c8c';
+    if (s >= 80) return '#52c41a';
+    if (s >= 60) return '#1890ff';
+    if (s >= 40) return '#faad14';
+    return '#ff4d4f';
+  }
+  function scoreColorBg(s: number | null): string {
+    if (s === null) return '#f5f5f5';
+    if (s >= 80) return '#f6ffed';
+    if (s >= 60) return '#e6f7ff';
+    if (s >= 40) return '#fffbe6';
+    return '#fff1f0';
+  }
+  function riskLabel(r: string): string {
+    if (r === 'high') return '高风险';
+    if (r === 'medium') return '中风险';
+    if (r === 'low') return '低风险';
+    return '';
+  }
+
+  // ====== 构建侧边栏 ======
+  let sidebarHtml = `<div class="sidebar-item active" data-idx="-1"><span class="sidebar-icon">\u{1F4CA}</span><span class="name">总览</span></div>`;
   modules.forEach((m, i) => {
-    const score = extractScore(m.content);
-    const risk = extractRisk(m.title);
-    const riskTag = risk ? `<span class="risk ${risk}">${risk === 'high' ? '高' : risk === 'medium' ? '中' : '低'}</span>` : '';
-    const scoreTag = score !== null ? `<span class="score">${score}</span>` : '';
-    sidebarHtml += `<div class="sidebar-item${i === 0 ? ' active' : ''}" data-idx="${i}">${riskTag}<span class="name">${m.title}</span>${scoreTag}</div>`;
+    const riskTag = m.risk ? `<span class="risk ${m.risk}">${riskLabel(m.risk)}</span>` : '';
+    const scoreTag = m.score !== null ? `<span class="score-badge" style="background:${scoreColorBg(m.score)};color:${scoreColor(m.score)}">${m.score}</span>` : '';
+    sidebarHtml += `<div class="sidebar-item" data-idx="${i}">${riskTag}<span class="name">${m.title}</span>${scoreTag}</div>`;
   });
 
-  // 构建内容区 HTML
+  // ====== 构建总览卡片 ======
+  let overviewCards = '';
+  modules.forEach((m, i) => {
+    const sc = scoreColor(m.score);
+    const scBg = scoreColorBg(m.score);
+    const riskTag = m.risk ? `<span class="card-risk ${m.risk}">${riskLabel(m.risk)}</span>` : '';
+    overviewCards += `<div class="overview-card" data-idx="${i}">
+      <div class="card-header">
+        <span class="card-title">${m.title}</span>
+        ${riskTag}
+      </div>
+      <div class="card-score">
+        <span class="score-circle" style="border-color:${sc};color:${sc}">${m.score !== null ? m.score : '--'}</span>
+        <span class="score-label">/ 100</span>
+      </div>
+      <div class="card-stats">
+        <span class="stat critical">${m.critical} 严重</span>
+        <span class="stat warning">${m.warning} 警告</span>
+        <span class="stat info">${m.info} 建议</span>
+      </div>
+      <div class="card-action">查看详情 \u2192</div>
+    </div>`;
+  });
+
+  // ====== 构建模块内容区 ======
   let contentHtml = '';
   modules.forEach((m, i) => {
-    contentHtml += `<div class="module-section${i === 0 ? ' active' : ''}" id="module-${i}"><h1>${m.title}</h1><div>${m.html}</div></div>`;
+    contentHtml += `<div class="module-section" id="module-${i}">
+      <div class="module-header-bar">
+        <button class="btn-back" onclick="showOverview()">\u2190 返回总览</button>
+        <h1>${m.title}</h1>
+        ${m.score !== null ? `<span class="module-score-badge" style="background:${scBg(m.score)};color:${scoreColor(m.score)}">${m.score} 分</span>` : ''}
+        ${m.risk ? `<span class="module-risk ${m.risk}">${riskLabel(m.risk)}</span>` : ''}
+      </div>
+      <div class="module-body">${m.html}</div>
+    </div>`;
   });
+
+  // avoid unused var
+  void avgScore;
+  void scoreColorBg;
+
+  function scBg(s: number | null): string {
+    return scoreColorBg(s);
+  }
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1798,87 +2527,166 @@ export function buildReviewHtml(projectName: string, markdown: string, duration:
 <title>代码审查报告 - ${projectName}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
-  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 24px 32px; }
-  .header h1 { font-size: 24px; margin-bottom: 4px; }
-  .header .meta { font-size: 14px; opacity: 0.8; }
-  .header .engine-tag { display: inline-block; background: #667eea; color: white; padding: 2px 10px; border-radius: 4px; font-size: 12px; margin-left: 8px; }
-  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 32px; background: white; border-bottom: 1px solid #e8e8e8; }
-  .summary-card { text-align: center; padding: 16px; border-radius: 8px; background: #f9fafb; }
-  .summary-card .value { font-size: 32px; font-weight: 700; }
-  .summary-card .label { font-size: 13px; color: #666; margin-top: 4px; }
-  .pass { color: #52c41a; } .warn { color: #faad14; } .fail { color: #ff4d4f; } .info { color: #3182ce; }
-  .container { display: flex; min-height: calc(100vh - 260px); }
-  .sidebar { width: 280px; background: white; border-right: 1px solid #e8e8e8; overflow-y: auto; }
-  .sidebar-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .sidebar-item:hover { background: #f5f5f5; }
-  .sidebar-item.active { background: #e6f7ff; border-left: 3px solid #1890ff; }
-  .sidebar-item .score { font-size: 12px; color: #999; margin-left: auto; font-weight: 600; }
-  .sidebar-item .risk { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f0f2f5; color: #1f1f1f; }
+
+  /* ===== Header ===== */
+  .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 28px 40px; }
+  .header h1 { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  .header .engine-tag { display: inline-block; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 3px 12px; border-radius: 12px; font-size: 11px; font-weight: 500; letter-spacing: 0.5px; }
+  .header .meta { font-size: 13px; opacity: 0.7; margin-top: 6px; }
+
+  /* ===== Summary Strip ===== */
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 20px 40px; background: white; border-bottom: 1px solid #e8e8e8; }
+  .summary-card { text-align: center; padding: 14px 16px; border-radius: 10px; background: #fafbfc; border: 1px solid #f0f0f0; }
+  .summary-card .value { font-size: 28px; font-weight: 700; }
+  .summary-card .label { font-size: 12px; color: #8c8c8c; margin-top: 4px; }
+  .clr-module { color: #667eea; } .clr-critical { color: #ff4d4f; } .clr-warning { color: #faad14; } .clr-info { color: #1890ff; }
+
+  /* ===== Layout ===== */
+  .container { display: flex; min-height: calc(100vh - 240px); }
+  .sidebar { width: 260px; background: white; border-right: 1px solid #e8e8e8; overflow-y: auto; flex-shrink: 0; }
+  .content { flex: 1; padding: 0; overflow-y: auto; background: #f0f2f5; }
+
+  /* ===== Sidebar ===== */
+  .sidebar-item { padding: 12px 18px; cursor: pointer; border-bottom: 1px solid #f5f5f5; display: flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.15s; user-select: none; }
+  .sidebar-item:hover { background: #fafafa; }
+  .sidebar-item.active { background: #f0f5ff; border-left: 3px solid #667eea; padding-left: 15px; }
+  .sidebar-icon { font-size: 15px; }
+  .sidebar-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-item .score-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 600; flex-shrink: 0; }
+  .sidebar-item .risk { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 500; flex-shrink: 0; }
   .sidebar-item .risk.high { background: #fff1f0; color: #cf1322; }
   .sidebar-item .risk.medium { background: #fffbe6; color: #d48806; }
-  .sidebar-item .risk.low { background: #e6f7ff; color: #1890ff; }
-  .content { flex: 1; padding: 24px 32px; overflow-y: auto; }
+  .sidebar-item .risk.low { background: #e6f7ff; color: #0958d9; }
+
+  /* ===== Overview ===== */
+  .overview { padding: 28px 32px; }
+  .overview-title { font-size: 18px; font-weight: 600; color: #1a1a2e; margin-bottom: 20px; }
+  .overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+  .overview-card { background: white; border-radius: 12px; padding: 20px; cursor: pointer; transition: all 0.2s; border: 1px solid #f0f0f0; position: relative; }
+  .overview-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-2px); border-color: #d9d9d9; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .card-title { font-size: 15px; font-weight: 600; color: #1a1a2e; }
+  .card-risk { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .card-risk.high { background: #fff1f0; color: #cf1322; }
+  .card-risk.medium { background: #fffbe6; color: #d48806; }
+  .card-risk.low { background: #e6f7ff; color: #0958d9; }
+  .card-score { display: flex; align-items: baseline; gap: 4px; margin-bottom: 12px; }
+  .score-circle { font-size: 32px; font-weight: 700; }
+  .score-label { font-size: 14px; color: #8c8c8c; }
+  .card-stats { display: flex; gap: 12px; margin-bottom: 14px; }
+  .card-stats .stat { font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+  .card-stats .critical { background: #fff1f0; color: #cf1322; }
+  .card-stats .warning { background: #fffbe6; color: #d48806; }
+  .card-stats .info { background: #e6f7ff; color: #0958d9; }
+  .card-action { font-size: 12px; color: #667eea; font-weight: 500; }
+
+  /* ===== Module Detail ===== */
   .module-section { display: none; }
   .module-section.active { display: block; }
-  .module-section h1 { font-size: 20px; color: #1a1a2e; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #667eea; }
-  .module-section h2 { font-size: 17px; color: #2d3748; margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
-  .module-section h3 { font-size: 15px; color: #4a5568; margin: 16px 0 8px; }
-  .module-section p { margin: 6px 0; line-height: 1.8; font-size: 14px; }
-  .module-section ul, .module-section ol { padding-left: 20px; margin: 6px 0; }
-  .module-section li { margin: 3px 0; font-size: 14px; line-height: 1.7; }
-  .module-section code { background: #edf2f7; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #e53e3e; }
-  .module-section pre { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; font-size: 13px; line-height: 1.5; }
-  .module-section pre code { background: none; color: #cdd6f4; padding: 0; }
-  .module-section strong { color: #2d3748; }
-  .module-section table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
-  .module-section th { background: #f7f8fc; padding: 8px 12px; text-align: left; border: 1px solid #e8e8e8; font-weight: 600; }
-  .module-section td { padding: 8px 12px; border: 1px solid #e8e8e8; }
-  .module-section blockquote { border-left: 4px solid #667eea; padding: 8px 16px; background: #f0f0ff; margin: 12px 0; border-radius: 0 6px 6px 0; }
-  .module-section hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
-  .footer { text-align: center; padding: 16px; font-size: 12px; color: #a0aec0; background: white; border-top: 1px solid #e8e8e8; }
+  .module-header-bar { background: white; padding: 16px 32px; border-bottom: 1px solid #e8e8e8; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  .btn-back { background: none; border: 1px solid #d9d9d9; padding: 4px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #666; transition: all 0.15s; }
+  .btn-back:hover { border-color: #667eea; color: #667eea; }
+  .module-header-bar h1 { font-size: 18px; color: #1a1a2e; font-weight: 600; flex: 1; }
+  .module-score-badge { font-size: 14px; padding: 3px 12px; border-radius: 8px; font-weight: 600; }
+  .module-risk { font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
+  .module-risk.high { background: #fff1f0; color: #cf1322; }
+  .module-risk.medium { background: #fffbe6; color: #d48806; }
+  .module-risk.low { background: #e6f7ff; color: #0958d9; }
+  .module-body { padding: 24px 32px 40px; background: white; margin: 20px 24px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+
+  /* ===== Markdown 渲染样式 ===== */
+  .module-body h1 { display: none; }
+  .module-body h2 { font-size: 17px; color: #1a1a2e; margin: 28px 0 14px; padding-bottom: 8px; border-bottom: 2px solid #667eea; font-weight: 600; }
+  .module-body h2:first-child { margin-top: 0; }
+  .module-body h3 { font-size: 15px; color: #2d3748; margin: 20px 0 10px; padding-left: 10px; border-left: 3px solid #667eea; }
+  .module-body h4 { font-size: 14px; color: #4a5568; margin: 16px 0 8px; font-weight: 600; }
+  .module-body p { margin: 8px 0; line-height: 1.85; font-size: 14px; color: #333; }
+  .module-body ul, .module-body ol { padding-left: 22px; margin: 8px 0; }
+  .module-body li { margin: 4px 0; font-size: 14px; line-height: 1.8; }
+  .module-body code { background: #f0f0ff; padding: 2px 7px; border-radius: 4px; font-size: 13px; color: #667eea; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+  .module-body pre { background: #1e1e2e; color: #cdd6f4; padding: 18px 20px; border-radius: 10px; overflow-x: auto; margin: 14px 0; font-size: 13px; line-height: 1.6; border: 1px solid #313244; }
+  .module-body pre code { background: none; color: #cdd6f4; padding: 0; }
+  .module-body strong { color: #1a1a2e; font-weight: 600; }
+  .module-body table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+  .module-body th { background: #fafbfc; padding: 10px 14px; text-align: left; border: 1px solid #e8e8e8; font-weight: 600; color: #1a1a2e; }
+  .module-body td { padding: 10px 14px; border: 1px solid #e8e8e8; }
+  .module-body tr:nth-child(even) td { background: #fafbfc; }
+  .module-body blockquote { border-left: 4px solid #667eea; padding: 10px 18px; background: #f8f8ff; margin: 14px 0; border-radius: 0 8px 8px 0; color: #555; }
+  .module-body hr { border: none; border-top: 1px solid #e8e8e8; margin: 24px 0; }
+
+  /* ===== Footer ===== */
+  .footer { text-align: center; padding: 18px; font-size: 12px; color: #bfbfbf; background: white; border-top: 1px solid #f0f0f0; }
+
+  /* ===== Print ===== */
+  @media print { .sidebar, .btn-back { display: none !important; } .container { display: block; } .module-section { display: block !important; page-break-before: always; } .module-body { box-shadow: none; margin: 0; } }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>代码审查报告 <span class="engine-tag">Claude Code AI</span></h1>
-  <div class="meta">项目: ${projectName} | 耗时: ${durationSec}s | 生成时间: ${new Date().toLocaleString('zh-CN')}</div>
+  <div class="meta">项目: ${projectName} | 模块: ${modules.length} | 耗时: ${durationSec}s | ${new Date().toLocaleString('zh-CN')}</div>
 </div>
 
 <div class="summary">
   <div class="summary-card">
-    <div class="value">${modules.length}</div>
+    <div class="value clr-module">${modules.length}</div>
     <div class="label">审查模块</div>
   </div>
   <div class="summary-card">
-    <div class="value fail">${criticalCount}</div>
+    <div class="value clr-critical">${totalCritical}</div>
     <div class="label">严重问题</div>
   </div>
   <div class="summary-card">
-    <div class="value warn">${warningCount}</div>
+    <div class="value clr-warning">${totalWarning}</div>
     <div class="label">警告问题</div>
   </div>
   <div class="summary-card">
-    <div class="value info">${infoCount}</div>
+    <div class="value clr-info">${totalInfo}</div>
     <div class="label">建议改进</div>
   </div>
 </div>
 
 <div class="container">
   <div class="sidebar" id="sidebar">${sidebarHtml}</div>
-  <div class="content">${contentHtml}</div>
+  <div class="content" id="content">
+    <div class="overview active" id="overview">
+      <div class="overview-title">模块总览</div>
+      <div class="overview-grid">${overviewCards}</div>
+    </div>
+    ${contentHtml}
+  </div>
 </div>
 
 <div class="footer">由 AI Platform 自动生成</div>
 
 <script>
+function switchView(idx) {
+  document.querySelectorAll('.sidebar-item').forEach(function(el) { el.classList.remove('active'); });
+  var target = document.querySelector('.sidebar-item[data-idx="' + idx + '"]');
+  if (target) target.classList.add('active');
+  document.getElementById('overview').classList.remove('active');
+  document.getElementById('overview').style.display = 'none';
+  document.querySelectorAll('.module-section').forEach(function(el) { el.classList.remove('active'); });
+  if (idx === -1) {
+    document.getElementById('overview').style.display = 'block';
+    document.getElementById('overview').classList.add('active');
+  } else {
+    var mod = document.getElementById('module-' + idx);
+    if (mod) mod.classList.add('active');
+  }
+}
+function showOverview() { switchView(-1); }
+
 document.querySelectorAll('.sidebar-item').forEach(function(item) {
   item.addEventListener('click', function() {
-    document.querySelectorAll('.sidebar-item').forEach(function(el) { el.classList.remove('active'); });
-    item.classList.add('active');
-    document.querySelectorAll('.module-section').forEach(function(el) { el.classList.remove('active'); });
-    document.getElementById('module-' + item.getAttribute('data-idx')).classList.add('active');
+    switchView(parseInt(item.getAttribute('data-idx')));
+  });
+});
+document.querySelectorAll('.overview-card').forEach(function(card) {
+  card.addEventListener('click', function() {
+    switchView(parseInt(card.getAttribute('data-idx')));
   });
 });
 </script>
@@ -1904,8 +2712,28 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
       const scope = (config.scope as string) || 'all';
       const projectId = config.projectId as string | undefined;
       const project = projectId ? getProjectById(projectId) : undefined;
-      const label = project ? `${project.name} ${scope}` : scope;
-      cases.push({ id: uuid(), name: `E2E ${mode} 测试 (${label})`, type, status: 'pending' });
+      if (project && project.pageSets && project.pageSets.length > 0) {
+        // 按 PageSet 拆分为独立 case，支持逐 PageSet 执行和断点续跑
+        const targetSets = scope === 'all'
+          ? project.pageSets
+          : project.pageSets.filter(ps => ps.id === scope);
+        for (const ps of targetSets) {
+          const pageCount = ps.pages?.length || 0;
+          cases.push({
+            id: uuid(),
+            name: `${ps.name} (${pageCount}页)`,
+            type,
+            status: 'pending',
+          });
+        }
+        // 如果 scope 指定了单个 pageSet 但没匹配到，fallback
+        if (targetSets.length === 0) {
+          cases.push({ id: uuid(), name: `E2E ${mode} 测试`, type, status: 'pending' });
+        }
+      } else {
+        const label = project ? `${project.name} ${scope}` : scope;
+        cases.push({ id: uuid(), name: `E2E ${mode} 测试 (${label})`, type, status: 'pending' });
+      }
       break;
     }
     case 'frontend': {
@@ -2018,7 +2846,7 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
 export async function resumeTestRun(originalSuiteId: string): Promise<string> {
   const original = getTestRun(originalSuiteId);
   if (!original) throw new Error('未找到原始测试记录');
-  if (original.type !== 'codereview') throw new Error('仅支持代码审查类型的恢复');
+  if (original.type !== 'codereview' && original.type !== 'e2e') throw new Error('仅支持代码审查和 E2E 测试类型的恢复');
 
   // 检查是否有中断的 case
   const resumeInfo = getResumeInfo(original) as ResumeInfo | null;
@@ -2547,6 +3375,62 @@ ${pageList}
 注意：测试产物请写入 e2eDataDir 对应的目录结构中，路径中包含项目名 ${projectSlug}。`;
 
     return { prompt, cwd: project.sourcePath || base };
+  }
+
+  if (type === 'frontend') {
+    if (!project?.sourcePath) throw new Error('请选择项目并配置源码路径');
+    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+    const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'frontend-discovery.json');
+    let discovery: any = null;
+    try { discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8')); } catch { /* ignore */ }
+    if (!discovery?.modules) throw new Error('请先在设置页面点击「发现组件」');
+
+    const selectedModuleIds = (config.modules as string[]) || [];
+    const selectedModules = selectedModuleIds.length > 0
+      ? discovery.modules.filter((m: any) => selectedModuleIds.includes(m.id))
+      : discovery.modules;
+    if (selectedModules.length === 0) throw new Error('未找到选中的模块');
+
+    const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
+    const testsOutputDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'frontend', projectSlug).replace(/\\/g, '/');
+    const moduleParts = selectedModules.map((mod: any) => {
+      const moduleInfo = buildFrontendModuleInfo(mod);
+      return `${moduleInfo}\n\n测试文件输出目录: ${testsOutputDir}/${mod.id || 'unknown'}/`;
+    }).join('\n\n---\n\n');
+
+    // 知识图谱辅助
+    let pageContextSection = '暂无知识图谱数据。请仅基于源码分析生成测试。';
+    const pageContextPath = path.join(DATA_DIR, 'projects', projectId!, 'page-context.json');
+    try {
+      const pageContext = JSON.parse(fs.readFileSync(pageContextPath, 'utf-8'));
+      const sections = selectedModules.map((mod: any) => buildPageContextSection(mod, pageContext));
+      pageContextSection = sections.join('\n\n');
+    } catch { /* ignore */ }
+
+    // 加载 Skill 内容
+    const frontendSrcDir = detectFrontendSrcDir(discovery);
+    const frontendSrcPathAbs = path.join(project.sourcePath, frontendSrcDir).replace(/\\/g, '/');
+    const skillContent = loadFrontendTestSkill({
+      projectName: project.name,
+      sourcePath: project.sourcePath,
+      moduleInfoSection: moduleParts,
+      testsOutputDir,
+      pageContextSection,
+      frontendSrcDir,
+      frontendSrcPath: frontendSrcPathAbs,
+    });
+
+    const prompt = `请执行以下前端单元测试生成任务。
+
+${skillContent}
+
+## 执行方式
+1. 按 Skill 中的步骤逐模块生成 .test.ts 测试文件
+2. 用 Read 读取源码真实内容，基于实际实现生成测试用例
+3. 用 Write 将测试文件写入对应的输出目录
+4. 确保每个源码文件都有对应的 .test.ts 文件`;
+
+    return { prompt, cwd: project.sourcePath };
   }
 
   throw new Error(`类型 ${type} 暂不支持生成提示词`);

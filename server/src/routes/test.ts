@@ -19,6 +19,8 @@ import {
   generateTestPrompt,
   registerManualReport,
   buildReviewHtml,
+  listReportFiles,
+  buildHtmlFromMdFiles,
   type TestType,
 } from '../services/test-runner.js';
 import { testBus } from '../services/test-events.js';
@@ -94,6 +96,32 @@ testRouter.post('/build-review-html', (req: Request, res: Response) => {
     res.json({ ok: true, htmlPath, size: html.length });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// 扫描报告目录，返回所有 HTML/MD 文件
+testRouter.get('/codereview/report-files', (req: Request, res: Response) => {
+  const projectId = req.query.projectId as string;
+  if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+  try {
+    const result = listReportFiles(projectId);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 从选中的 MD 文件合并生成 HTML 报告
+testRouter.post('/codereview/build-from-files', (req: Request, res: Response) => {
+  const { projectId, mdFiles } = req.body;
+  if (!projectId || !Array.isArray(mdFiles) || mdFiles.length === 0) {
+    return res.status(400).json({ error: 'projectId and mdFiles[] are required' });
+  }
+  try {
+    const result = buildHtmlFromMdFiles(projectId, mdFiles);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
   }
 });
 

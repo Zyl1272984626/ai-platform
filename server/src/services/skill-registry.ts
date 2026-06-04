@@ -13,6 +13,8 @@ export interface SkillMeta {
   allowedTools?: string[];
   dependencies?: string[];
   tags?: string[];
+  usage?: string;
+  constraints?: string[];
   content?: string; // SKILL.md 原文
 }
 
@@ -62,7 +64,7 @@ export function getSkill(name: string): SkillMeta | undefined {
 function parseSkillFrontmatter(
   content: string,
   name: string,
-  type: 'scene' | 'capability' | 'test',
+  type: 'scene' | 'capability' | 'test' | 'base',
   filePath: string
 ): SkillMeta {
   const meta: SkillMeta = {
@@ -93,6 +95,18 @@ function parseSkillFrontmatter(
     const tagsMatch = fm.match(/tags:\s*\[(.+)\]/);
     if (tagsMatch) {
       meta.tags = tagsMatch[1].split(',').map((s) => s.trim().replace(/["']/g, ''));
+    }
+
+    const usageMatch = fm.match(/usage:\s*(.+)/);
+    if (usageMatch) meta.usage = usageMatch[1].trim();
+
+    // constraints 是 YAML 列表格式（每行 - xxx）
+    const constraintsMatch = fm.match(/constraints:\s*\n((?:\s+- .+\n?)+)/);
+    if (constraintsMatch) {
+      meta.constraints = constraintsMatch[1]
+        .split('\n')
+        .map((s) => s.replace(/^\s+-\s*/, '').trim())
+        .filter(Boolean);
     }
   }
 

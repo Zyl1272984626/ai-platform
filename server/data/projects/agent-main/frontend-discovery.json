@@ -1,0 +1,1279 @@
+{
+  "discoveredAt": "2026-06-04T00:00:00.000Z",
+  "projectId": "agent-main",
+  "sourceInfo": {
+    "frontendSrcDir": "frontend/src",
+    "totalVueFiles": 120,
+    "totalTsJsFiles": 158
+  },
+  "summary": {
+    "totalModules": 4,
+    "totalTestTargets": 87,
+    "scanDuration": 0
+  },
+  "modules": [
+    {
+      "id": "utils",
+      "name": "工具函数",
+      "description": "纯逻辑函数，无 DOM 依赖或轻度 DOM 依赖，适合单元测试",
+      "files": [
+        {
+          "path": "frontend/src/utils/index.js",
+          "exports": ["isNumberEmpty"],
+          "description": "数值空值判断工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "isNumberEmpty", "params": ["value"], "description": "判断数值是否为空(null/''/undefined)" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/string.js",
+          "exports": ["randomString", "uuid", "uuid16", "humpToUnderLine", "humpToMiddleLine"],
+          "description": "字符串工具函数集合",
+          "complexity": "low",
+          "functions": [
+            { "name": "randomString", "params": ["randomLen", "min", "max"], "description": "生成随机字符串" },
+            { "name": "uuid", "params": [], "description": "生成20位UUID" },
+            { "name": "uuid16", "params": [], "description": "生成16位UUID" },
+            { "name": "humpToUnderLine", "params": ["str"], "description": "驼峰转下划线" },
+            { "name": "humpToMiddleLine", "params": ["str"], "description": "驼峰转中划线" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/date.js",
+          "exports": ["default"],
+          "description": "日期格式化工具集合",
+          "complexity": "low",
+          "functions": [
+            { "name": "formatDate", "params": ["date", "fmt"], "description": "日期格式化为指定格式字符串" },
+            { "name": "parseDate", "params": ["str", "fmt"], "description": "将字符串解析为Date对象" },
+            { "name": "formatDateToFriendly", "params": ["date"], "description": "友好格式化日期（刚刚/x月x日等）" },
+            { "name": "isToday", "params": ["date"], "description": "判断日期是否是今天" },
+            { "name": "formatDurationToFriendly", "params": ["second"], "description": "时长转友好格式（2分27秒）" },
+            { "name": "formatTimeToFriendly", "params": ["second"], "description": "秒转MM:SS格式" },
+            { "name": "isLeapYear", "params": ["year"], "description": "判断闰年" },
+            { "name": "getMonthDays", "params": ["date", "month"], "description": "获取某月总天数" },
+            { "name": "countDays", "params": ["date1", "date2"], "description": "计算两日期之间天数" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/table.js",
+          "exports": ["default"],
+          "description": "表格合并行工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "objectSpan", "params": ["list", "column"], "description": "计算表格合并行的rowspan" },
+            { "name": "getSpanObject", "params": ["row", "column", "name"], "description": "获取合并行的span对象" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/auto.js",
+          "exports": ["getColumnWidth", "getTextWidth", "calculateWidth", "formattedSize"],
+          "description": "表格列宽自适应和文件大小格式化工具",
+          "complexity": "medium",
+          "functions": [
+            { "name": "getColumnWidth", "params": ["label", "prop", "tableData"], "description": "根据内容自适应计算列宽" },
+            { "name": "getTextWidth", "params": ["text"], "description": "计算文本渲染宽度（DOM依赖）" },
+            { "name": "calculateWidth", "params": ["str"], "description": "按中英文字符估算文本宽度" },
+            { "name": "formattedSize", "params": ["size"], "description": "格式化文件大小（B/KB/MB/GB等）" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/condition-builder.ts",
+          "exports": ["QueryCondition", "QueryBuilder", "default"],
+          "description": "查询条件构建器，链式调用构建AND/OR/分页/排序",
+          "complexity": "low",
+          "functions": [
+            { "name": "instance", "params": ["condition"], "description": "获取QueryBuilder实例" },
+            { "name": "getBuilder", "params": ["condition"], "description": "兼容旧方法的QueryBuilder实例" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/templateProcessor.js",
+          "exports": ["processTemplate", "resolveValue"],
+          "description": "模板字符串占位符处理，支持 {{变量}} {{变量.子变量}} {{变量[索引]}}",
+          "complexity": "low",
+          "functions": [
+            { "name": "processTemplate", "params": ["template", "params"], "description": "替换模板中的占位符" },
+            { "name": "resolveValue", "params": ["path", "params"], "description": "根据路径解析嵌套对象值" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/exportExcel.js",
+          "exports": ["csv2sheet", "getWorkbook", "addSheet", "workbook2blob", "sheet2blob", "openDownloadDialog"],
+          "description": "Excel导出工具，CSV转Sheet/Workbook/Blob下载",
+          "complexity": "medium",
+          "functions": [
+            { "name": "csv2sheet", "params": ["csv"], "description": "CSV字符串转Sheet对象" },
+            { "name": "getWorkbook", "params": [], "description": "创建空Workbook对象" },
+            { "name": "addSheet", "params": ["workbook", "sheet", "sheetName"], "description": "向Workbook添加Sheet" },
+            { "name": "workbook2blob", "params": ["workbook"], "description": "Workbook转Blob对象" },
+            { "name": "sheet2blob", "params": ["sheet", "sheetName"], "description": "Sheet转Blob对象" },
+            { "name": "openDownloadDialog", "params": ["url", "saveName"], "description": "触发浏览器下载对话框" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/errorHandler.js",
+          "exports": ["ErrorHandler", "ChatErrorHandler"],
+          "description": "统一错误处理类，包含API错误处理、聊天错误处理",
+          "complexity": "medium",
+          "functions": [
+            { "name": "ErrorHandler.handleApiError", "params": ["responseData", "options"], "description": "处理API响应错误" },
+            { "name": "ErrorHandler.showErrorMessage", "params": ["errorCode", "message"], "description": "显示错误消息" },
+            { "name": "ErrorHandler.checkAndHandle", "params": ["responseData", "expectedErrorCode", "handler"], "description": "检查并处理特定错误" },
+            { "name": "ErrorHandler.handleMultipleErrors", "params": ["responseData", "errorHandlers"], "description": "批量错误处理器" },
+            { "name": "ChatErrorHandler.handleChatError", "params": ["responseData", "context"], "description": "聊天专用错误处理" },
+            { "name": "ChatErrorHandler.handleQuotaExceeded", "params": ["responseData", "context"], "description": "额度超限错误处理" },
+            { "name": "ChatErrorHandler.handlePermissionDenied", "params": ["responseData", "context"], "description": "权限拒绝错误处理" },
+            { "name": "ChatErrorHandler.handleAgentDisabled", "params": ["responseData", "context"], "description": "智能体禁用错误处理" }
+          ]
+        },
+        {
+          "path": "frontend/src/constants/errorCodes.js",
+          "exports": ["ERROR_CODES", "ERROR_MESSAGES", "detectError", "getErrorMessage", "isError"],
+          "description": "统一错误码常量和错误检测工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "detectError", "params": ["responseData"], "description": "检测API响应中的错误码" },
+            { "name": "getErrorMessage", "params": ["errorCode"], "description": "获取错误码对应的友好消息" },
+            { "name": "isError", "params": ["responseData", "expectedErrorCode"], "description": "判断是否为特定错误类型" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/browser.js",
+          "exports": ["openWindow", "openTab", "goAnchor", "setHtmlTitle", "getParam", "isWxWork", "copyText"],
+          "description": "浏览器窗口操作工具集合",
+          "complexity": "medium",
+          "functions": [
+            { "name": "openWindow", "params": ["url", "title", "w", "h"], "description": "打开浏览器弹窗" },
+            { "name": "openTab", "params": ["link", "target"], "description": "打开浏览器Tab页" },
+            { "name": "goAnchor", "params": ["selector", "yOffset"], "description": "平滑滚动到锚点" },
+            { "name": "setHtmlTitle", "params": ["title"], "description": "设置浏览器Tab标题" },
+            { "name": "getParam", "params": ["name"], "description": "获取URL查询参数" },
+            { "name": "copyText", "params": ["text"], "description": "复制文本到剪贴板" }
+          ]
+        },
+        {
+          "path": "frontend/src/utils/passiveListener.js",
+          "exports": ["setupPassiveListeners", "restoreOriginalListeners", "addPassiveListener", "detectNonPassiveListeners"],
+          "description": "被动事件监听器修复工具",
+          "complexity": "medium",
+          "functions": [
+            { "name": "setupPassiveListeners", "params": [], "description": "重写addEventListener设置默认被动行为" },
+            { "name": "addPassiveListener", "params": ["element", "eventType", "handler", "options"], "description": "添加被动滚动事件监听器" },
+            { "name": "detectNonPassiveListeners", "params": [], "description": "检测非被动滚动事件监听器" }
+          ]
+        },
+        {
+          "path": "frontend/src/api/axios/security/aes.js",
+          "exports": ["default"],
+          "description": "AES加密解密工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "encrypt", "params": ["key", "word"], "description": "AES加密" },
+            { "name": "decrypt", "params": ["key", "word"], "description": "AES解密" },
+            { "name": "generateKey", "params": [], "description": "随机生成AES密钥" }
+          ]
+        },
+        {
+          "path": "frontend/src/api/axios/security/rsa.js",
+          "exports": ["default"],
+          "description": "RSA公钥加密解密工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "encrypt", "params": ["word"], "description": "RSA公钥加密" },
+            { "name": "decrypt", "params": ["word"], "description": "RSA公钥解密" }
+          ]
+        },
+        {
+          "path": "frontend/src/api/axios/security/security-flow.js",
+          "exports": ["default"],
+          "description": "安全加密流程：AES+RSA混合加密/解密",
+          "complexity": "medium",
+          "functions": [
+            { "name": "encryptPost", "params": ["data"], "description": "POST请求加密流程" },
+            { "name": "encryptGet", "params": ["params"], "description": "GET请求参数加密" },
+            { "name": "decryptFlow", "params": ["key", "word"], "description": "AES解密数据" },
+            { "name": "doubleEncodeURIComponent", "params": ["text"], "description": "双层URI编码" },
+            { "name": "hasFile", "params": ["data"], "description": "判断请求是否包含文件" }
+          ]
+        },
+        {
+          "path": "frontend/src/flow/workflowValidation.js",
+          "exports": ["validateConditionBranches", "validateEmptyPropertyNames", "validateBeforeRun"],
+          "description": "工作流验证：条件分支连接/空变量名/运行前校验",
+          "complexity": "high",
+          "functions": [
+            { "name": "validateConditionBranches", "params": ["workflowData"], "description": "验证条件分支节点连接完整性" },
+            { "name": "validateEmptyPropertyNames", "params": ["workflowData"], "description": "验证节点空变量名" },
+            { "name": "validateBeforeRun", "params": ["workflowData"], "description": "运行前综合验证" }
+          ]
+        },
+        {
+          "path": "frontend/src/flow/node/sortInputItems.js",
+          "exports": ["sortInputItems"],
+          "description": "节点输入参数排序工具，按配置顺序/字母顺序排序",
+          "complexity": "low",
+          "functions": [
+            { "name": "sortInputItems", "params": ["execResult", "nodeData"], "description": "按节点配置排序输入参数" }
+          ]
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/utils/mergeCurrentMessage.js",
+          "exports": ["mergeCurrentMessage"],
+          "description": "合并历史消息与流式消息，支持跨会话校验",
+          "complexity": "low",
+          "functions": [
+            { "name": "mergeCurrentMessage", "params": ["historyList", "currentMessage", "activeChatId"], "description": "合并历史消息列表与当前流式消息" }
+          ]
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/utils/parseReasoningContent.js",
+          "exports": ["parseReasoningContent"],
+          "description": "解析推理内容：纯文本/JSON数组(含思考+工具调用)/RELOAD前缀",
+          "complexity": "low",
+          "functions": [
+            { "name": "parseReasoningContent", "params": ["content"], "description": "解析reasoningContent为结构化数据" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/parser/ConfigParser.js",
+          "exports": ["parseMessageConfig", "extractConfigFromContent"],
+          "description": "消息配置解析器：将JSON/schema转换为节点树",
+          "complexity": "low",
+          "functions": [
+            { "name": "parseMessageConfig", "params": ["config"], "description": "解析消息配置为节点数组" },
+            { "name": "extractConfigFromContent", "params": ["content"], "description": "从消息内容中提取JSON配置" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/parser/ConfigValidator.js",
+          "exports": ["validateMessageConfig", "validateNode"],
+          "description": "消息配置校验器",
+          "complexity": "low",
+          "functions": [
+            { "name": "validateMessageConfig", "params": ["config", "schema"], "description": "验证消息配置是否合规" },
+            { "name": "validateNode", "params": ["node"], "description": "递归验证单个节点结构" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/renderer/RenderEngine.js",
+          "exports": ["buildRenderTree"],
+          "description": "渲染引擎核心：配置校验+解析节点树",
+          "complexity": "low",
+          "functions": [
+            { "name": "buildRenderTree", "params": ["config", "schemaDefinition"], "description": "校验并解析配置为渲染树" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/adapter/TextAdapter.js",
+          "exports": ["adaptTextContent"],
+          "description": "文本数据适配器",
+          "complexity": "low",
+          "functions": [
+            { "name": "adaptTextContent", "params": ["raw", "config"], "description": "将原始数据转为展示文本" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/adapter/TableAdapter.js",
+          "exports": ["adaptTableData"],
+          "description": "表格数据适配器",
+          "complexity": "low",
+          "functions": [
+            { "name": "adaptTableData", "params": ["rawData", "config"], "description": "适配原始数据为表格数据结构" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/adapter/ChartAdapter.js",
+          "exports": ["adaptChartData"],
+          "description": "图表数据适配器",
+          "complexity": "low",
+          "functions": [
+            { "name": "adaptChartData", "params": ["rawData", "config"], "description": "适配原始数据为图表数据结构" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/adapter/FormAdapter.js",
+          "exports": ["adaptFormConfig"],
+          "description": "表单配置适配器",
+          "complexity": "low",
+          "functions": [
+            { "name": "adaptFormConfig", "params": ["rawConfig"], "description": "适配原始配置为表单字段结构" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/chart/utils/dataConverter.js",
+          "exports": ["getDatasetSource", "isOneDimensionalChart", "buildEChartsOption"],
+          "description": "图表数据转换工具，统一使用echarts-dataset格式",
+          "complexity": "medium",
+          "functions": [
+            { "name": "getDatasetSource", "params": ["dataConfig"], "description": "获取dataset source数据" },
+            { "name": "isOneDimensionalChart", "params": ["chartType"], "description": "判断一维/二维图表" },
+            { "name": "buildEChartsOption", "params": ["{chartType, dataConfig, componentConfig}"], "description": "构建ECharts option对象" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/utils/adapter.js",
+          "exports": ["parseComponent", "parseData", "getTableColumns", "getTablePagination", "getTableItems", "getChartSource", "getLinkItems", "getDownloadItems", "isSqlDataSource"],
+          "description": "Page-Render组件数据适配器",
+          "complexity": "low",
+          "functions": [
+            { "name": "parseComponent", "params": ["rawData"], "description": "解析组件配置" },
+            { "name": "parseData", "params": ["rawData"], "description": "解析数据配置" },
+            { "name": "getTableColumns", "params": ["rawData"], "description": "获取表格列配置" },
+            { "name": "getTablePagination", "params": ["rawData"], "description": "获取表格分页配置" },
+            { "name": "getTableItems", "params": ["rawData"], "description": "获取表格数据项" },
+            { "name": "getChartSource", "params": ["rawData"], "description": "获取图表数据源" },
+            { "name": "getLinkItems", "params": ["rawData"], "description": "获取链接列表" },
+            { "name": "getDownloadItems", "params": ["rawData"], "description": "获取下载列表" },
+            { "name": "isSqlDataSource", "params": ["rawData"], "description": "判断是否为SQL数据源" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/utils/dataFormatter.js",
+          "exports": ["formatValue"],
+          "description": "数据格式化占位工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "formatValue", "params": ["value", "type"], "description": "格式化值（占位实现）" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/utils/errorHandler.js",
+          "exports": ["handleRenderError"],
+          "description": "消息渲染错误处理占位工具",
+          "complexity": "low",
+          "functions": [
+            { "name": "handleRenderError", "params": ["error", "context"], "description": "处理渲染错误（占位实现）" }
+          ]
+        },
+        {
+          "path": "frontend/src/flow/components/nodes/if-else/transform.js",
+          "exports": ["default"],
+          "description": "IF-ELSE条件分支节点数据转换器，将配置转为运行时组件/步骤",
+          "complexity": "high",
+          "functions": [
+            { "name": "toComponent", "params": ["data"], "description": "转换节点数据为组件" },
+            { "name": "toInput", "params": ["data"], "description": "转换输入参数" },
+            { "name": "toStep", "params": ["edge", "components"], "description": "转换边数据为条件步骤" }
+          ]
+        },
+        {
+          "path": "frontend/src/flow/components/nodes/loop/transform.js",
+          "exports": ["default"],
+          "description": "Loop循环节点数据转换器，将loopBody流程数据转为可运行子流程",
+          "complexity": "high",
+          "functions": [
+            { "name": "toComponent", "params": ["toRunData", "data", "input", "output"], "description": "转换循环节点为可运行组件" },
+            { "name": "toFlow", "params": ["toRunData", "data", "input"], "description": "将loopBody的flow数据转换为run数据" }
+          ]
+        },
+        {
+          "path": "frontend/src/pages/index/modules/constants/chatConstants.js",
+          "exports": ["AGENT_TYPE", "MESSAGE_ROLE", "STREAM_STATUS", "MESSAGE_STREAM_STATUS", "MESSAGE_SAVE_STATUS", "FLOW_RUN_STATE", "MENTION_TYPE", "MENTION_FORMAT", "FILE_TYPE", "FILE_STATUS", "UPLOAD_STATUS", "RATING_TYPE", "TOOL_CALL_STATUS", "POLLING_INTERVAL", "SSE_EVENT_TYPE", "MESSAGE_TYPE", "DEFAULT_CONFIG", "ERROR_MESSAGES", "SUCCESS_MESSAGES"],
+          "description": "聊天业务常量定义集合",
+          "complexity": "low",
+          "functions": []
+        },
+        {
+          "path": "frontend/src/pages/index/modules/constants/apiEndpoints.js",
+          "exports": ["API_AGENT", "API_CHAT", "API_CHAT_MSG", "API_LLM", "API_FLOW", "API_FILE", "API_CHAT_KNOWLEDGE", "API_MENTION"],
+          "description": "API端点统一管理常量",
+          "complexity": "low",
+          "functions": []
+        },
+        {
+          "path": "frontend/src/flow/constant.js",
+          "exports": ["MAIN_FLOW"],
+          "description": "流程常量定义",
+          "complexity": "low",
+          "functions": []
+        }
+      ]
+    },
+    {
+      "id": "components",
+      "name": "Vue 组件",
+      "description": "含计算属性、事件处理的 Vue 组件",
+      "files": [
+        {
+          "path": "frontend/src/components/ProvinceMapHeatmap.vue",
+          "exports": ["default"],
+          "description": "省份地图热力图组件",
+          "complexity": "medium",
+          "testableLogic": ["地图数据渲染", "热力值映射"]
+        },
+        {
+          "path": "frontend/src/components/chat/ProgressDisplay.vue",
+          "exports": ["default"],
+          "description": "聊天进度显示组件",
+          "complexity": "medium",
+          "testableLogic": ["进度状态计算", "步骤展示逻辑"]
+        },
+        {
+          "path": "frontend/src/components/chat/StepItem.vue",
+          "exports": ["default"],
+          "description": "步骤条目展示组件",
+          "complexity": "medium",
+          "testableLogic": ["步骤状态渲染", "条件展示"]
+        },
+        {
+          "path": "frontend/src/components/common/MarkdownViewer.vue",
+          "exports": ["default"],
+          "description": "Markdown渲染查看器",
+          "complexity": "medium",
+          "testableLogic": ["Markdown解析渲染", "内容展示"]
+        },
+        {
+          "path": "frontend/src/components/common/TeacherEvaluationCard.vue",
+          "exports": ["default"],
+          "description": "教师评价卡片组件",
+          "complexity": "medium",
+          "testableLogic": ["评价数据展示", "评分逻辑"]
+        },
+        {
+          "path": "frontend/src/flow/Flow.vue",
+          "exports": ["default"],
+          "description": "工作流编辑器主组件",
+          "complexity": "high",
+          "testableLogic": ["流程画布渲染", "节点拖拽", "连线逻辑"]
+        },
+        {
+          "path": "frontend/src/flow/FlowBar.vue",
+          "exports": ["default"],
+          "description": "工作流工具栏组件",
+          "complexity": "medium",
+          "testableLogic": ["工具栏操作", "节点添加"]
+        },
+        {
+          "path": "frontend/src/flow/node/Node.vue",
+          "exports": ["default"],
+          "description": "流程节点基础组件",
+          "complexity": "medium",
+          "testableLogic": ["节点数据展示", "状态管理"]
+        },
+        {
+          "path": "frontend/src/flow/node/ProxyNode.vue",
+          "exports": ["default"],
+          "description": "代理节点组件",
+          "complexity": "medium",
+          "testableLogic": ["代理节点渲染", "数据转发"]
+        },
+        {
+          "path": "frontend/src/flow/node/LoopBodyNode.vue",
+          "exports": ["default"],
+          "description": "循环体节点组件",
+          "complexity": "medium",
+          "testableLogic": ["循环节点嵌套流程管理"]
+        },
+        {
+          "path": "frontend/src/flow/node/NodeExecResult.vue",
+          "exports": ["default"],
+          "description": "节点执行结果展示组件",
+          "complexity": "medium",
+          "testableLogic": ["执行结果渲染", "数据格式化"]
+        },
+        {
+          "path": "frontend/src/flow/node/loop-node/LoopBodyFlow.vue",
+          "exports": ["default"],
+          "description": "循环体子流程画布组件",
+          "complexity": "high",
+          "testableLogic": ["子流程管理", "节点同步"]
+        },
+        {
+          "path": "frontend/src/flow/StartForm.vue",
+          "exports": ["default"],
+          "description": "开始节点表单组件",
+          "complexity": "medium",
+          "testableLogic": ["表单数据收集", "文件上传"]
+        },
+        {
+          "path": "frontend/src/flow/node-addtion/NodeAddition.vue",
+          "exports": ["default"],
+          "description": "节点添加面板组件",
+          "complexity": "medium",
+          "testableLogic": ["节点类型筛选", "节点创建"]
+        },
+        {
+          "path": "frontend/src/flow/prop-config/PropBar.vue",
+          "exports": ["default"],
+          "description": "属性配置面板组件",
+          "complexity": "medium",
+          "testableLogic": ["属性编辑", "配置同步"]
+        },
+        {
+          "path": "frontend/src/components/message-components/views/MessageRenderer.vue",
+          "exports": ["default"],
+          "description": "消息渲染器组件",
+          "complexity": "medium",
+          "testableLogic": ["消息类型分发", "组件动态渲染"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/core/DynamicRenderer.vue",
+          "exports": ["default"],
+          "description": "动态渲染器组件",
+          "complexity": "medium",
+          "testableLogic": ["动态组件加载", "插槽渲染"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/core/PageRenderer.vue",
+          "exports": ["default"],
+          "description": "页面渲染器组件",
+          "complexity": "high",
+          "testableLogic": ["页面结构解析", "多组件协调渲染"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/chart/index.vue",
+          "exports": ["default"],
+          "description": "图表预设组件",
+          "complexity": "medium",
+          "testableLogic": ["ECharts配置构建", "图表渲染"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/table/index.vue",
+          "exports": ["default"],
+          "description": "表格预设组件",
+          "complexity": "medium",
+          "testableLogic": ["表格数据渲染", "分页逻辑"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/display/PresetDownload.vue",
+          "exports": ["default"],
+          "description": "下载预设组件",
+          "complexity": "medium",
+          "testableLogic": ["文件列表渲染", "下载触发"]
+        },
+        {
+          "path": "frontend/src/components/message-components/components/preset/display/PresetLink.vue",
+          "exports": ["default"],
+          "description": "链接预设组件",
+          "complexity": "low",
+          "testableLogic": ["链接列表渲染"]
+        },
+        {
+          "path": "frontend/src/pages/setting-system/App.vue",
+          "exports": ["default"],
+          "description": "系统设置主应用组件",
+          "complexity": "medium",
+          "testableLogic": ["路由管理", "布局控制"]
+        },
+        {
+          "path": "frontend/src/pages/setting-system/common/SideBar.vue",
+          "exports": ["default"],
+          "description": "系统设置侧边栏",
+          "complexity": "medium",
+          "testableLogic": ["菜单渲染", "路由导航"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/CodeEditor.vue",
+          "exports": ["default"],
+          "description": "代码编辑器输入组件",
+          "complexity": "medium",
+          "testableLogic": ["代码编辑", "语法高亮"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/AceEditor.vue",
+          "exports": ["default"],
+          "description": "Ace代码编辑器组件",
+          "complexity": "medium",
+          "testableLogic": ["Ace编辑器集成", "代码格式化"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/ObjectSchemaConfigurer.vue",
+          "exports": ["default"],
+          "description": "对象Schema配置器组件",
+          "complexity": "high",
+          "testableLogic": ["对象结构定义", "嵌套属性编辑"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/SelectDataSet.vue",
+          "exports": ["default"],
+          "description": "数据集选择器组件",
+          "complexity": "medium",
+          "testableLogic": ["数据集列表加载", "选择交互"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/SelectDataSource.vue",
+          "exports": ["default"],
+          "description": "数据源选择器组件",
+          "complexity": "medium",
+          "testableLogic": ["数据源列表加载", "选择交互"]
+        },
+        {
+          "path": "frontend/src/flow/input-type/SelectKnowledge.vue",
+          "exports": ["default"],
+          "description": "知识库选择器组件",
+          "complexity": "medium",
+          "testableLogic": ["知识库列表加载", "选择交互"]
+        },
+        {
+          "path": "frontend/src/flow/edge/CustomEdge.vue",
+          "exports": ["default"],
+          "description": "自定义边组件",
+          "complexity": "medium",
+          "testableLogic": ["边渲染", "连线样式"]
+        }
+      ]
+    },
+    {
+      "id": "stores",
+      "name": "状态管理",
+      "description": "Pinia/Vuex Store",
+      "files": [
+        {
+          "path": "frontend/src/store/plugin.js",
+          "exports": ["usePluginStore"],
+          "description": "插件管理Store，管理插件列表和获取",
+          "complexity": "medium",
+          "functions": [
+            { "name": "fetchPlugins", "params": [], "description": "从API获取插件列表" }
+          ]
+        },
+        {
+          "path": "frontend/src/pages/setting-system/stores/breadcrumb.js",
+          "exports": ["useBreadcrumbStore"],
+          "description": "面包屑导航Store",
+          "complexity": "low",
+          "functions": [
+            { "name": "addItem", "params": ["item"], "description": "添加面包屑项" },
+            { "name": "setItems", "params": ["newItems"], "description": "重设面包屑集合" }
+          ]
+        },
+        {
+          "path": "frontend/src/pages/setting-system/stores/counter.js",
+          "exports": ["useCounterStore"],
+          "description": "计数器Store（示例/通用）",
+          "complexity": "low",
+          "functions": [
+            { "name": "increment", "params": [], "description": "计数+1" }
+          ]
+        },
+        {
+          "path": "frontend/src/components/message-components/core/registry/MessageComponentRegistry.js",
+          "exports": ["createMessageComponentRegistry", "provideMessageComponentRegistry", "useMessageComponentRegistry"],
+          "description": "消息组件注册中心（reactive状态管理）",
+          "complexity": "medium",
+          "functions": [
+            { "name": "register", "params": ["type", "component"], "description": "注册消息组件" },
+            { "name": "unregister", "params": ["type"], "description": "注销消息组件" },
+            { "name": "get", "params": ["type"], "description": "获取指定类型组件" },
+            { "name": "list", "params": [], "description": "列出所有注册类型" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pages",
+      "name": "页面交互逻辑",
+      "description": "多组件协同的页面级逻辑（composables/hooks）",
+      "files": [
+        {
+          "path": "frontend/src/flow/useFlow.js",
+          "exports": ["useFlow"],
+          "description": "工作流主流程hook，管理流程数据获取和操作",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useFlowData.js",
+          "exports": ["useFlowData"],
+          "description": "工作流数据管理hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useFlowNode.js",
+          "exports": ["useFlowNode"],
+          "description": "工作流节点操作hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useFlowNodeSync.js",
+          "exports": ["useFlowNodeSync"],
+          "description": "工作流节点同步hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useFlowRefNodes.js",
+          "exports": ["useFlowRefNodes"],
+          "description": "工作流引用节点hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useNodeModel.js",
+          "exports": ["useNodeModel"],
+          "description": "节点模型管理hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useLoop.js",
+          "exports": ["useLoop"],
+          "description": "循环节点管理hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/useNodeModelChangeCompare.js",
+          "exports": ["useNodeModelChangeCompare"],
+          "description": "节点模型变化比对hook，检测变量变更并更新引用",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/flow/components/useMeta.js",
+          "exports": ["useMeta"],
+          "description": "节点元数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/flow/input-type/useInput.js",
+          "exports": ["useInput"],
+          "description": "流程输入类型通用hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/flow/useStartFormFileUpload.js",
+          "exports": ["useStartFormFileUpload"],
+          "description": "开始节点文件上传hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/flow/node/loop-node/useLoopFlowDrag.js",
+          "exports": ["useLoopFlowDrag"],
+          "description": "循环体流程拖拽hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useApp.ts",
+          "exports": ["useApp"],
+          "description": "应用级通用hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useAxios.ts",
+          "exports": ["useAxios"],
+          "description": "Axios请求封装hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useEnv.ts",
+          "exports": ["useEnv"],
+          "description": "环境变量hook",
+          "complexity": "low"
+        },
+        {
+          "path": "frontend/src/hooks/useDelete.ts",
+          "exports": ["useDelete"],
+          "description": "通用删除操作hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useFile.ts",
+          "exports": ["useFile"],
+          "description": "文件操作hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useIcon.ts",
+          "exports": ["useIcon"],
+          "description": "图标hook",
+          "complexity": "low"
+        },
+        {
+          "path": "frontend/src/hooks/useUpdate.ts",
+          "exports": ["useUpdate"],
+          "description": "通用更新操作hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/usePathXGenerator.js",
+          "exports": ["usePathXGenerator"],
+          "description": "路径生成器hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useQueryList.ts",
+          "exports": ["useQueryList"],
+          "description": "列表查询通用hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/useQueryCode.ts",
+          "exports": ["useQueryCode"],
+          "description": "代码查询hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/element/useLoading.ts",
+          "exports": ["useLoading"],
+          "description": "Element Plus Loading封装hook",
+          "complexity": "low"
+        },
+        {
+          "path": "frontend/src/hooks/element/useForm.ts",
+          "exports": ["useForm"],
+          "description": "Element Plus表单封装hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/hooks/element/useMessage.ts",
+          "exports": ["useMessage"],
+          "description": "Element Plus消息提示封装hook",
+          "complexity": "low"
+        },
+        {
+          "path": "frontend/src/hooks/chat/useChat.js",
+          "exports": ["useChat"],
+          "description": "聊天功能hook（旧版）",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/hooks/chat/useChatMsg.js",
+          "exports": ["useChatMsg"],
+          "description": "聊天消息管理hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/hooks/chat/useSSEStream.ts",
+          "exports": ["useSSEStream"],
+          "description": "SSE流式响应hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/hooks/login/useLoginTo.ts",
+          "exports": ["useLoginTo"],
+          "description": "登录跳转hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/chat/useChat.js",
+          "exports": ["useChat"],
+          "description": "聊天核心模块hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/agent/useAgent.js",
+          "exports": ["useAgent"],
+          "description": "智能体模块hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/input/useChatInput.js",
+          "exports": ["useChatInput"],
+          "description": "聊天输入模块hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/input/mention/useMention.js",
+          "exports": ["useMention"],
+          "description": "@提及功能hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/input/file/useFileUpload.js",
+          "exports": ["useFileUpload"],
+          "description": "文件上传模块hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/input/file/useFile.js",
+          "exports": ["useFile"],
+          "description": "文件管理hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/useMessageList.js",
+          "exports": ["useMessageList"],
+          "description": "消息列表模块hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/current/useCurrentMessages.js",
+          "exports": ["useCurrentMessages"],
+          "description": "当前消息状态管理hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/current/useLlmStrategy.js",
+          "exports": ["useLlmStrategy"],
+          "description": "LLM模式消息策略hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/current/useFlowStrategy.js",
+          "exports": ["useFlowStrategy"],
+          "description": "对话流模式消息策略hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/rating/useMessageRating.js",
+          "exports": ["useMessageRating"],
+          "description": "消息评价hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/utils/useSSEStream.js",
+          "exports": ["useSSEStream"],
+          "description": "SSE流式工具hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/message/utils/useProgress.js",
+          "exports": ["useProgress"],
+          "description": "消息进度hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/flow/useFlowList.js",
+          "exports": ["useFlowList"],
+          "description": "工作流列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/plugin/usePluginList.js",
+          "exports": ["usePluginList"],
+          "description": "插件列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/voice/useVoiceRecorder.js",
+          "exports": ["useVoiceRecorder"],
+          "description": "语音录制hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/modules/tool/useToolContext.js",
+          "exports": ["useToolContext"],
+          "description": "工具调用上下文hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/message/hooks/ui/useMessageScroll.js",
+          "exports": ["useMessageScroll"],
+          "description": "PC端消息滚动控制hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/message/hooks/ui/useMessageList.js",
+          "exports": ["useMessageList"],
+          "description": "PC端消息列表UI hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/message/hooks/ui/useMessageActions.js",
+          "exports": ["useMessageActions"],
+          "description": "PC端消息操作hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/message/hooks/bridge/useMessageList.js",
+          "exports": ["useMessageList"],
+          "description": "PC端消息列表桥接hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/ui/useFileUpload.js",
+          "exports": ["useFileUpload"],
+          "description": "PC端文件上传UI hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/ui/useMention.js",
+          "exports": ["useMention"],
+          "description": "PC端提及UI hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/ui/useChatInput.js",
+          "exports": ["useChatInput"],
+          "description": "PC端聊天输入UI hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/bridge/useMention.js",
+          "exports": ["useMention"],
+          "description": "PC端提及桥接hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/bridge/useFileUpload.js",
+          "exports": ["useFileUpload"],
+          "description": "PC端文件上传桥接hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/pc/input/hooks/bridge/useChatInput.js",
+          "exports": ["useChatInput"],
+          "description": "PC端聊天输入桥接hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/index/views/hooks/usePluginList.js",
+          "exports": ["usePluginList"],
+          "description": "视图层插件列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/hooks/useIconList.js",
+          "exports": ["useIconList"],
+          "description": "视图层图标列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/hooks/useActivateAgent.js",
+          "exports": ["useActivateAgent"],
+          "description": "视图层激活智能体hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/hooks/useFlowList.js",
+          "exports": ["useFlowList"],
+          "description": "视图层工作流列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/index/views/user-portal/composables/usePortalTheme.js",
+          "exports": ["usePortalTheme"],
+          "description": "用户门户主题composable",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/useMenu.js",
+          "exports": ["useMenu"],
+          "description": "应用设置菜单hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/useIconList.js",
+          "exports": ["useIconList"],
+          "description": "应用设置图标列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/agentList.js",
+          "exports": ["useAgentList"],
+          "description": "智能体列表数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/flowList.js",
+          "exports": ["useFlowList"],
+          "description": "工作流列表数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/pluginList.js",
+          "exports": ["usePluginList"],
+          "description": "插件列表数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/mcpList.js",
+          "exports": ["useMcpList"],
+          "description": "MCP列表数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/skillList.js",
+          "exports": ["useSkillList"],
+          "description": "技能列表数据hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/activateAgent.js",
+          "exports": ["useActivateAgent"],
+          "description": "激活智能体hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/common/initBusinessSystem.js",
+          "exports": ["useInitBusinessSystem"],
+          "description": "业务系统初始化hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/table/useTableColumns.js",
+          "exports": ["useTableColumns"],
+          "description": "系统表格列配置hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/page/usePageClassifyTree.js",
+          "exports": ["usePageClassifyTree"],
+          "description": "页面分类树hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/nav/useNavTree.js",
+          "exports": ["useNavTree"],
+          "description": "导航树hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/nav/useAppPages.js",
+          "exports": ["useAppPages"],
+          "description": "应用页面列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/mention/useMentionTest.js",
+          "exports": ["useMentionTest"],
+          "description": "提及测试hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/sys/mention/useMentionEdit.js",
+          "exports": ["useMentionEdit"],
+          "description": "提及编辑hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/permission/resource/useResourceTree.js",
+          "exports": ["useResourceTree"],
+          "description": "资源权限树hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/permission/resource/useResourceType.js",
+          "exports": ["useResourceType"],
+          "description": "资源类型hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/permission/resource/usePageData.js",
+          "exports": ["usePageData"],
+          "description": "页面数据权限hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/setting/permission/common/useUserDynamicVariable.js",
+          "exports": ["useUserDynamicVariable"],
+          "description": "用户动态变量hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/knowledge-base/knowledgeList.js",
+          "exports": ["useKnowledgeList"],
+          "description": "知识库列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/data-table/useTableColumns.js",
+          "exports": ["useTableColumns"],
+          "description": "数据表列配置hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/data-table/dataTableList.js",
+          "exports": ["useDataTableList"],
+          "description": "数据表列表hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/comp/composables/useCompQueries.js",
+          "exports": ["useCompQueries"],
+          "description": "组件查询composable",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/comp/composables/useCompFiles.js",
+          "exports": ["useCompFiles"],
+          "description": "组件文件管理composable",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/analytics-detail/composables/useAnalyticsData.js",
+          "exports": ["useAnalyticsData"],
+          "description": "分析数据composable",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/analytics-detail/composables/useCharts.js",
+          "exports": ["useCharts"],
+          "description": "图表配置composable",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/agent/agentList.js",
+          "exports": ["useAgentList"],
+          "description": "智能体列表管理hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/agent/edit/promptConfig.js",
+          "exports": ["usePromptConfig"],
+          "description": "提示词配置hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/agent/edit/agentConfig.js",
+          "exports": ["useAgentConfig"],
+          "description": "智能体配置hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/agent/edit/conversation/flowValidation.js",
+          "exports": ["useFlowValidation"],
+          "description": "对话流验证hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/pages/setting-app/views/app/agent/edit/components/share-url.js",
+          "exports": ["useShareUrl"],
+          "description": "分享链接hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useRequest.js",
+          "exports": ["useRequest"],
+          "description": "图表组件请求hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useDrill.js",
+          "exports": ["useDrill"],
+          "description": "图表下钻hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useDrillDown.js",
+          "exports": ["useDrillDown"],
+          "description": "图表下钻操作hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useDrillTable.js",
+          "exports": ["useDrillTable"],
+          "description": "图表下钻表格hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useDataset.js",
+          "exports": ["useDataset"],
+          "description": "图表数据集hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/usePage.js",
+          "exports": ["usePage"],
+          "description": "图表分页hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useChartPipeline.js",
+          "exports": ["useChartPipeline"],
+          "description": "图表渲染管线hook",
+          "complexity": "high"
+        },
+        {
+          "path": "frontend/src/components/agent/components/core/useTheme.js",
+          "exports": ["useTheme"],
+          "description": "图表主题hook",
+          "complexity": "medium"
+        },
+        {
+          "path": "frontend/src/components/message-components/utils/useFileUtils.js",
+          "exports": ["useFileUtils"],
+          "description": "文件处理工具函数集合（格式化/类型名/图标/下载）",
+          "complexity": "medium"
+        }
+      ]
+    }
+  ]
+}

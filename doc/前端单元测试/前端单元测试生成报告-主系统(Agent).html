@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>前端单元测试生成报告 — 主系统(Agent)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #2c3e50; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+    .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+
+    /* Score Cards */
+    .score-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px; }
+    .score-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s; }
+    .score-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+    .score-card .module-name { font-size: 14px; color: #7f8c8d; margin-bottom: 8px; }
+    .score-card .score { font-size: 48px; font-weight: 700; }
+    .score-card .score-label { font-size: 12px; color: #95a5a6; margin-top: 4px; }
+    .score-card .risk-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; margin-top: 8px; font-weight: 600; }
+    .risk-utils { background: #e6f7ff; color: #1890ff; }
+    .risk-components { background: #f0fff4; color: #52c41a; }
+    .risk-pages { background: #f9f0ff; color: #722ed1; }
+    .score-good { color: #27ae60; }
+
+    /* Stats Bar */
+    .stats-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 30px; }
+    .stat-item { background: white; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .stat-item .stat-num { font-size: 28px; font-weight: 700; }
+    .stat-item .stat-label { font-size: 12px; color: #95a5a6; margin-top: 4px; }
+    .stat-blue .stat-num { color: #1890ff; }
+    .stat-green .stat-num { color: #52c41a; }
+    .stat-purple .stat-num { color: #722ed1; }
+    .stat-orange .stat-num { color: #fa8c16; }
+
+    /* Section */
+    .section { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .section h2 { font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0; display: flex; align-items: center; gap: 8px; }
+
+    /* Module Header */
+    .module-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 4px; transition: background 0.15s; }
+    .module-header:hover { background: #eef1f5; }
+    .module-header h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .module-header .toggle { font-size: 14px; color: #95a5a6; transition: transform 0.2s; }
+    .module-content { display: none; padding: 8px 16px 16px; }
+    .module-content.open { display: block; }
+
+    /* Test Case Items */
+    .test-case { padding: 8px 14px; margin-bottom: 4px; border-radius: 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+    .test-case:hover { background: #f5f5f7; }
+    .test-icon { font-size: 14px; flex-shrink: 0; }
+    .test-name { flex: 1; color: #444; }
+    .test-tag { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500; }
+    .tag-api { background: #e6f7ff; color: #1890ff; }
+    .tag-render { background: #f6ffed; color: #52c41a; }
+    .tag-event { background: #fff7e6; color: #fa8c16; }
+    .tag-state { background: #f9f0ff; color: #722ed1; }
+    .tag-edge { background: #fff2f0; color: #ff4d4f; }
+
+    /* File Info Bar */
+    .file-info { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 12px; color: #999; border-bottom: 1px solid #f5f5f5; margin-bottom: 8px; }
+    .file-path { font-family: monospace; color: #888; font-size: 12px; }
+    .file-stats { display: flex; gap: 12px; }
+    .file-stat { display: flex; align-items: center; gap: 3px; }
+
+    /* Summary Table */
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .summary-table th { background: #f8f9fa; padding: 10px 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-weight: 600; }
+    .summary-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+    .summary-table tr:hover { background: #f8f9fa; }
+    .summary-table .file-name { font-family: monospace; color: #333; font-weight: 500; }
+    .summary-table .count { text-align: center; font-weight: 600; }
+    .summary-table .module-tag { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+
+    /* Note */
+    .note { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #ad6800; display: flex; align-items: flex-start; gap: 8px; }
+    .note-icon { font-size: 16px; flex-shrink: 0; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .score-overview { grid-template-columns: 1fr; }
+      .stats-bar { grid-template-columns: repeat(3, 1fr); }
+      .summary-table { font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>前端单元测试生成报告</h1>
+  <p class="subtitle">主系统(Agent) — Vue 3 + Vite + Pinia | 生成日期: 2026-06-03 | 测试框架: Vitest + @vue/test-utils + happy-dom</p>
+
+  <!-- Score Overview -->
+  <div class="score-overview">
+    <div class="score-card">
+      <div class="module-name">utils — API 接口层</div>
+      <div class="score score-good">8</div>
+      <div class="score-label">测试文件数</div>
+      <span class="risk-badge risk-utils">66 个用例</span>
+    </div>
+    <div class="score-card">
+      <div class="module-name">components — Vue 组件</div>
+      <div class="score score-good">10</div>
+      <div class="score-label">测试文件数</div>
+      <span class="risk-badge risk-components">76 个用例</span>
+    </div>
+    <div class="score-card">
+      <div class="module-name">pages — 页面 & Composable</div>
+      <div class="score score-good">10</div>
+      <div class="score-label">测试文件数</div>
+      <span class="risk-badge risk-pages">67 个用例</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-item stat-blue">
+      <div class="stat-num">28</div>
+      <div class="stat-label">测试文件</div>
+    </div>
+    <div class="stat-item stat-green">
+      <div class="stat-num">209</div>
+      <div class="stat-label">测试用例</div>
+    </div>
+    <div class="stat-item stat-purple">
+      <div class="stat-num">3,493</div>
+      <div class="stat-label">代码行数</div>
+    </div>
+    <div class="stat-item stat-orange">
+      <div class="stat-num">31</div>
+      <div class="stat-label">源文件覆盖</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">文件覆盖率</div>
+    </div>
+  </div>
+
+  <!-- Note -->
+  <div class="note">
+    <span class="note-icon">ℹ️</span>
+    <div>
+      <strong>输出目录：</strong><code>F:/test/frontend/主系统(Agent)/</code>（按 utils / components / pages 子目录分类）<br>
+      <strong>未覆盖：</strong><code>types.ts</code>（纯类型定义，无运行时逻辑）、<code>stores/</code>（项目未使用 Pinia store，目录不存在）
+    </div>
+  </div>
+
+  <!-- ==================== utils 模块 ==================== -->
+  <div class="section">
+    <h2>🔌 utils — API 接口层（8 个文件 · 66 个用例）</h2>
+
+    <!-- client.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 client.test.ts <span class="test-tag tag-api">3 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/client.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ axios 实例配置</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该使用正确的 baseURL 和 timeout 创建 axios 实例</span><span class="test-tag tag-api">配置</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该注册 response 拦截器</span><span class="test-tag tag-api">拦截器</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该导出默认 api 实例</span><span class="test-tag tag-api">导出</span></div>
+    </div>
+
+    <!-- projects.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 projects.test.ts <span class="test-tag tag-api">16 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/projects.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ CRUD + SSE 发现</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getProjects 应该调用 GET /projects</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getProject 应该调用 GET /projects/:id</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">addProject 应该调用 POST /projects</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">updateProject 应该调用 POST /projects/:id/update</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deleteProject 应该调用 POST /projects/:id/delete</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">setDefaultProject 应该调用 POST /projects/:id/default</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">checkProject 应该调用 POST /projects/:id/check</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getProjectPages 应该调用 GET /projects/:id/pages</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">saveProjectPages 应该调用 POST /projects/:id/pages/save</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">createPageSet 应该调用 POST /projects/:id/page-sets/create</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deletePageSet 应该调用 POST /projects/:id/page-sets/delete</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">discoverProject 应该通过 fetch 发起 POST 请求</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">discoverProject 应该在 HTTP 错误时 reject</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">discoverProject 应该支持 onProgress 回调</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getApiDiscovery 应该调用 GET /projects/:id/api-discovery</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getPageContext 应该调用 GET /projects/:id/page-context</span><span class="test-tag tag-api">GET</span></div>
+    </div>
+
+    <!-- schools.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 schools.test.ts <span class="test-tag tag-api">8 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/schools.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ CRUD + 部署下载</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listSchools 应该调用 GET /schools 并返回数据</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getSchool 应该调用 GET /schools/:code</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">addSchool 应该调用 POST /schools</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">updateSchool 应该调用 PUT /schools/:code</span><span class="test-tag tag-api">PUT</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deleteSchool 应该调用 DELETE /schools/:code</span><span class="test-tag tag-api">DELETE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deploySchool 应该通过 fetch POST 并触发下载</span><span class="test-tag tag-event">部署</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deploySchool 应该在 HTTP 错误时抛出异常</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deploySchoolFull 应该发送部署参数并触发下载</span><span class="test-tag tag-event">部署</span></div>
+    </div>
+
+    <!-- sessions.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 sessions.test.ts <span class="test-tag tag-api">6 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/sessions.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ CRUD + SSE 消息</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listSessions 应该调用 GET /sessions</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">createSession 应该调用 POST /sessions</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">createSession 无参数时应该发送空对象</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getSession 应该调用 GET /sessions/:id</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deleteSession 应该调用 DELETE /sessions/:id</span><span class="test-tag tag-api">DELETE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">sendMessage 应该调用 useSSE 并返回流控制对象</span><span class="test-tag tag-event">SSE</span></div>
+    </div>
+
+    <!-- settings.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 settings.test.ts <span class="test-tag tag-api">5 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/settings.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ 配置管理</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getSettings 应该调用 GET /settings</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">updateSettings 应该调用 POST /settings</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">checkSettings 应该调用 GET /settings/check</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">testClaude 应该调用 POST /settings/test-claude</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">generateDiscoveryPrompt 应该调用 POST 并返回 data</span><span class="test-tag tag-api">POST</span></div>
+    </div>
+
+    <!-- skills.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 skills.test.ts <span class="test-tag tag-api">3 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/skills.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ Skill 查询</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listSkills 应该调用 GET /skills 并返回数据</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getSkill 应该调用 GET /skills/:name</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listSkills 空列表应该返回空数组</span><span class="test-tag tag-edge">边界</span></div>
+    </div>
+
+    <!-- tests.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 tests.test.ts <span class="test-tag tag-api">18 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/tests.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ 测试管理 + SSE + 报告</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listTestTypes 应该调用 GET /tests/types</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listTestRuns 应该调用 GET /tests/runs</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listTestRuns 应该支持 type 过滤</span><span class="test-tag tag-state">过滤</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getTestRun 应该调用 GET /tests/runs/:id</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">runTest 应该调用 POST /tests/run</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">runTest 默认 config 为空对象</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">deleteTestRun 应该调用 DELETE /tests/runs/:id</span><span class="test-tag tag-api">DELETE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">abortTestRun 应该调用 POST /tests/runs/:id/abort</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">resumeTestRun 应该调用 POST /tests/runs/:id/resume</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getReportUrl 应该返回正确的报告 URL</span><span class="test-tag tag-state">辅助</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">subscribeTestStream 应该返回 EventSource 实例</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getConcurrency 应该调用 GET /tests/concurrency</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">setConcurrency 应该调用 POST /tests/concurrency</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">generateTestPrompt 应该调用 POST /tests/generate-prompt</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listReportFiles 应该调用 GET /tests/codereview/report-files</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">buildHtmlFromMdFiles 应该调用 POST /tests/codereview/build-from-files</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">chatWithReviewApi 应该调用 POST /tests/runs/:id/chat</span><span class="test-tag tag-api">POST</span></div>
+    </div>
+
+    <!-- workflows.test.ts -->
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 workflows.test.ts <span class="test-tag tag-api">7 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info">
+        <span class="file-path">源码: web/src/api/workflows.ts</span>
+        <div class="file-stats"><span class="file-stat">⚡ 工作流管理 + SSE</span></div>
+      </div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listTemplates 应该调用 GET /workflows</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">listRuns 应该调用 GET /workflows/runs</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getRun 应该调用 GET /workflows/runs/:id</span><span class="test-tag tag-api">GET</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">runWorkflow 应该调用 useSSE 并返回流控制</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">resumeRun 应该调用 useSSE</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">confirmStep 应该调用 POST /workflows/runs/:id/confirm</span><span class="test-tag tag-api">POST</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">abortRun 应该调用 POST /workflows/runs/:id/abort</span><span class="test-tag tag-api">POST</span></div>
+    </div>
+  </div>
+
+  <!-- ==================== components 模块 ==================== -->
+  <div class="section">
+    <h2>🧩 components — Vue 组件（10 个文件 · 76 个用例）</h2>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 ChatInput.test.ts <span class="test-tag tag-render">9 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/chat/ChatInput.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染 textarea 和发送按钮</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">disabled 状态下发送按钮应禁用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">空文本时发送按钮应禁用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">输入文本后发送按钮应启用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击发送应该触发 send 事件并清空输入</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">Enter 键应该触发发送</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">disabled 时 Enter 不应发送</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">空文本不应触发发送</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">setInput expose 方法应该设置输入值</span><span class="test-tag tag-api">Expose</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 MessageBubble.test.ts <span class="test-tag tag-render">4 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/chat/MessageBubble.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">用户消息应该渲染文本内容</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">助手消息应该使用 marked 渲染</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">空内容不应该崩溃</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">用户消息不应该使用 v-html（XSS 防护）</span><span class="test-tag tag-edge">安全</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SessionList.test.ts <span class="test-tag tag-render">9 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/chat/SessionList.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染新会话按钮</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染会话列表</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">空消息会话应显示"新会话"</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击新会话按钮应触发 create 事件</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击会话项应触发 select 事件</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击删除按钮应触发 delete 事件</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">当前会话应高亮</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染快捷命令按钮</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击快捷命令应触发 command 事件</span><span class="test-tag tag-event">事件</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 ToolCallBlock.test.ts <span class="test-tag tag-render">10 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/chat/ToolCallBlock.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染工具名称</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">默认应该是收起状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击 header 应该切换展开/收起</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">done=true 时显示完成状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">done=false 时显示加载状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">input 应该显示预览（超过60字符截断）</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">短 input 应该完整显示</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">长 result 应该显示截断和"显示全部"按钮</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击"显示全部"应该切换完整结果显示</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">没有 input 不应该显示预览</span><span class="test-tag tag-edge">边界</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 EmptyState.test.ts <span class="test-tag tag-render">4 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/common/EmptyState.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染 icon 和 title</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染 description</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">没有 description 时不渲染描述</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染 slot 内容</span><span class="test-tag tag-render">插槽</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 StatusBadge.test.ts <span class="test-tag tag-render">9 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/common/StatusBadge.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该根据 status 渲染正确的中文标签（8种状态批量验证）</span><span class="test-tag tag-state">映射</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">未知状态应该显示原始值</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该根据 status 添加正确的颜色 class</span><span class="test-tag tag-state">样式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">error 状态应该使用 error 颜色</span><span class="test-tag tag-state">样式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">running 状态应该使用 running 颜色</span><span class="test-tag tag-state">样式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">size=small 应该使用 badge-sm class</span><span class="test-tag tag-state">尺寸</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">size=medium 应该使用 badge-md class</span><span class="test-tag tag-state">尺寸</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">未指定 size 默认使用 badge-md</span><span class="test-tag tag-edge">默认</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">waiting_confirm 状态应该显示"等待确认"</span><span class="test-tag tag-state">映射</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 AppSidebar.test.ts <span class="test-tag tag-render">5 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/layout/AppSidebar.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染品牌标识</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染所有导航项</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该显示健康状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">fetch 失败时应显示异常状态</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该设置健康检查定时器</span><span class="test-tag tag-event">定时</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SchoolForm.test.ts <span class="test-tag tag-render">8 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/school/SchoolForm.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该显示"添加学校"标题</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">提交按钮应该显示"添加"</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">提交应该包含默认值</span><span class="test-tag tag-state">数据</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">code 字段应该是可编辑的（add 模式）</span><span class="test-tag tag-state">模式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该显示"编辑学校"标题</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">code 字段应该是禁用的（edit 模式）</span><span class="test-tag tag-state">模式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该预填充学校数据</span><span class="test-tag tag-state">数据</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">取消按钮应该触发 cancel 事件</span><span class="test-tag tag-event">事件</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 StepPipeline.test.ts <span class="test-tag tag-render">9 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/workflow/StepPipeline.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染所有步骤节点</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该显示步骤 ID</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">success 状态应该显示 ✓</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">running 状态应该显示 spinner</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">failed 状态应该显示 ✕</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">pending 状态应该显示序号</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">步骤之间应该渲染连线</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">success 步骤的连线应该高亮</span><span class="test-tag tag-state">样式</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">空步骤列表不应该崩溃</span><span class="test-tag tag-edge">边界</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 WorkflowParamsForm.test.ts <span class="test-tag tag-render">8 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/components/workflow/WorkflowParamsForm.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该渲染标题和描述</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应该为每个参数渲染输入框</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">输入框 placeholder 应该是参数名</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">提交应该触发 run 事件并传递值</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">取消按钮应该触发 cancel 事件</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击 overlay 应该触发 cancel 事件</span><span class="test-tag tag-event">事件</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无参数时不应渲染输入框</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无 description 时不应该显示描述</span><span class="test-tag tag-edge">边界</span></div>
+    </div>
+  </div>
+
+  <!-- ==================== pages 模块 ==================== -->
+  <div class="section">
+    <h2>📄 pages — 页面 & Composable（10 个文件 · 67 个用例）</h2>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 useSSE.test.ts <span class="test-tag tag-api">10 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/composables/useSSE.ts</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">初始状态 isStreaming 应为 false</span><span class="test-tag tag-state">初始</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 调用 fetch 并解析 SSE data: 行</span><span class="test-tag tag-event">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 应跳过心跳行（以 : 开头的行）</span><span class="test-tag tag-state">SSE</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 处理跨 chunk 的 partial data</span><span class="test-tag tag-edge">边界</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 在 HTTP 错误时应抛出异常</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 在 HTTP 错误且无响应体时应使用状态码</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 在 JSON 解析错误时应跳过该事件</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">abort 应中止请求并将 isStreaming 设为 false</span><span class="test-tag tag-event">中断</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">start 应正确设置 fetch 请求参数</span><span class="test-tag tag-api">参数</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">streaming 过程中 isStreaming 应为 true</span><span class="test-tag tag-state">状态</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 ChatView.test.ts <span class="test-tag tag-render">5 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/ChatView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应调用 listSessions 和 listSkills</span><span class="test-tag tag-api">API</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无会话时应渲染空状态（EmptyState）</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击开始对话按钮应创建新会话</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">有会话时不应显示空状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">删除会话应调用 deleteSession API</span><span class="test-tag tag-event">交互</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 DashboardView.test.ts <span class="test-tag tag-render">6 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/DashboardView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应渲染统计卡片</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应加载统计数据并正确显示数值</span><span class="test-tag tag-api">数据</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染快捷操作区域</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染最近工作流列表</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无工作流记录时应显示空提示</span><span class="test-tag tag-state">空态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染系统状态信息</span><span class="test-tag tag-render">渲染</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SchoolView.test.ts <span class="test-tag tag-render">6 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/SchoolView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应调用 listSchools 并渲染学校列表</span><span class="test-tag tag-api">API</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">学校列表为空时应显示空状态</span><span class="test-tag tag-state">空态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击添加学校按钮应显示表单</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击编辑按钮应设置 editingSchool</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">密码切换按钮应切换显示/隐藏状态</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应正确显示学校访问地址</span><span class="test-tag tag-render">渲染</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SchoolDetailView.test.ts <span class="test-tag tag-render">6 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/SchoolDetailView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应调用 getSchool 并渲染学校详情表单</span><span class="test-tag tag-api">API</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">保存配置时应调用 updateSchool</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">加载中时应显示加载状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">getSchool 失败时应显示错误提示</span><span class="test-tag tag-edge">异常</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">DB 类型切换时端口号应自动调整</span><span class="test-tag tag-state">逻辑</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染所有配置区块标题</span><span class="test-tag tag-render">渲染</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SchoolDeployView.test.ts <span class="test-tag tag-render">9 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/SchoolDeployView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应调用 getSchool 并渲染配置摘要</span><span class="test-tag tag-api">API</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染部署步骤选择区域</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">warMissingFields 应检测缺失的必填字段</span><span class="test-tag tag-state">计算</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">配置完整时生成按钮应可用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">配置不完整时生成按钮应禁用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击生成部署包时应调用 deploySchoolFull</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">加载中时应显示加载状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应正确显示服务器系统类型（Linux）</span><span class="test-tag tag-state">计算</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">Windows 服务器应显示对应脚本名称</span><span class="test-tag tag-state">计算</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SettingsView.test.ts <span class="test-tag tag-render">5 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/SettingsView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应渲染设置表单</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染 Claude 配置区域</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染 API 测试配置区域</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">加载中时应显示加载状态</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染项目管理区域</span><span class="test-tag tag-render">渲染</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 SkillView.test.ts <span class="test-tag tag-render">7 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/SkillView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应调用 listSkills 并渲染 Skill 列表</span><span class="test-tag tag-api">API</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">搜索过滤应根据关键字筛选</span><span class="test-tag tag-state">过滤</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">类型过滤应根据 type 筛选</span><span class="test-tag tag-state">过滤</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无匹配结果时应显示提示</span><span class="test-tag tag-state">空态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击 Skill 卡片应调用 getSkill 显示详情</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应正确显示 Skill 类型标签</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">过滤标签应正确高亮当前选中的类型</span><span class="test-tag tag-state">样式</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 TestView.test.ts <span class="test-tag tag-render">6 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/TestView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应渲染测试类型 tabs</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">Agent 类型无 agentId 时开始测试按钮应禁用</span><span class="test-tag tag-state">状态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染页面标题和描述</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无历史记录时应显示空提示</span><span class="test-tag tag-state">空态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">有历史记录时应渲染历史列表</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">点击测试类型 tab 应切换 activeType</span><span class="test-tag tag-event">交互</span></div>
+    </div>
+
+    <div class="module-header" onclick="toggleModule(this)">
+      <h3>📄 WorkflowView.test.ts <span class="test-tag tag-render">7 个用例</span></h3>
+      <span class="toggle">▸</span>
+    </div>
+    <div class="module-content">
+      <div class="file-info"><span class="file-path">源码: web/src/views/WorkflowView.vue</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">挂载时应渲染工作流模板列表</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应正确渲染模板的步骤数和触发命令</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">Tab 切换应从模板切换到执行历史</span><span class="test-tag tag-event">交互</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">无执行历史时应显示空提示</span><span class="test-tag tag-state">空态</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">应渲染页面标题和描述</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">模板卡片应显示执行按钮</span><span class="test-tag tag-render">渲染</span></div>
+      <div class="test-case"><span class="test-icon">✅</span><span class="test-name">历史 tab 应显示运行数量 badge</span><span class="test-tag tag-render">渲染</span></div>
+    </div>
+  </div>
+
+  <!-- ==================== 文件汇总表 ==================== -->
+  <div class="section">
+    <h2>📊 文件汇总表</h2>
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>测试文件</th>
+          <th>源文件</th>
+          <th>分类</th>
+          <th>用例数</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="file-name">client.test.ts</td><td>api/client.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">3</td></tr>
+        <tr><td class="file-name">projects.test.ts</td><td>api/projects.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">16</td></tr>
+        <tr><td class="file-name">schools.test.ts</td><td>api/schools.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">8</td></tr>
+        <tr><td class="file-name">sessions.test.ts</td><td>api/sessions.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">6</td></tr>
+        <tr><td class="file-name">settings.test.ts</td><td>api/settings.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">5</td></tr>
+        <tr><td class="file-name">skills.test.ts</td><td>api/skills.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">3</td></tr>
+        <tr><td class="file-name">tests.test.ts</td><td>api/tests.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">18</td></tr>
+        <tr><td class="file-name">workflows.test.ts</td><td>api/workflows.ts</td><td><span class="module-tag risk-utils">utils</span></td><td class="count">7</td></tr>
+        <tr><td class="file-name">ChatInput.test.ts</td><td>components/chat/ChatInput.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">9</td></tr>
+        <tr><td class="file-name">MessageBubble.test.ts</td><td>components/chat/MessageBubble.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">4</td></tr>
+        <tr><td class="file-name">SessionList.test.ts</td><td>components/chat/SessionList.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">9</td></tr>
+        <tr><td class="file-name">ToolCallBlock.test.ts</td><td>components/chat/ToolCallBlock.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">10</td></tr>
+        <tr><td class="file-name">EmptyState.test.ts</td><td>components/common/EmptyState.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">4</td></tr>
+        <tr><td class="file-name">StatusBadge.test.ts</td><td>components/common/StatusBadge.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">9</td></tr>
+        <tr><td class="file-name">AppSidebar.test.ts</td><td>components/layout/AppSidebar.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">5</td></tr>
+        <tr><td class="file-name">SchoolForm.test.ts</td><td>components/school/SchoolForm.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">8</td></tr>
+        <tr><td class="file-name">StepPipeline.test.ts</td><td>components/workflow/StepPipeline.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">9</td></tr>
+        <tr><td class="file-name">WorkflowParamsForm.test.ts</td><td>components/workflow/WorkflowParamsForm.vue</td><td><span class="module-tag risk-components">组件</span></td><td class="count">8</td></tr>
+        <tr><td class="file-name">useSSE.test.ts</td><td>composables/useSSE.ts</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">10</td></tr>
+        <tr><td class="file-name">ChatView.test.ts</td><td>views/ChatView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">5</td></tr>
+        <tr><td class="file-name">DashboardView.test.ts</td><td>views/DashboardView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">6</td></tr>
+        <tr><td class="file-name">SchoolView.test.ts</td><td>views/SchoolView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">6</td></tr>
+        <tr><td class="file-name">SchoolDetailView.test.ts</td><td>views/SchoolDetailView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">6</td></tr>
+        <tr><td class="file-name">SchoolDeployView.test.ts</td><td>views/SchoolDeployView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">9</td></tr>
+        <tr><td class="file-name">SettingsView.test.ts</td><td>views/SettingsView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">5</td></tr>
+        <tr><td class="file-name">SkillView.test.ts</td><td>views/SkillView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">7</td></tr>
+        <tr><td class="file-name">TestView.test.ts</td><td>views/TestView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">6</td></tr>
+        <tr><td class="file-name">WorkflowView.test.ts</td><td>views/WorkflowView.vue</td><td><span class="module-tag risk-pages">页面</span></td><td class="count">7</td></tr>
+      </tbody>
+      <tfoot>
+        <tr style="background:#f8f9fa;font-weight:600">
+          <td colspan="3">合计</td>
+          <td class="count">209</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+</div>
+
+<script>
+function toggleModule(header) {
+  const content = header.nextElementSibling
+  const toggle = header.querySelector('.toggle')
+  const isOpen = content.classList.contains('open')
+  if (isOpen) {
+    content.classList.remove('open')
+    toggle.style.transform = 'rotate(0deg)'
+  } else {
+    content.classList.add('open')
+    toggle.style.transform = 'rotate(90deg)'
+  }
+}
+</script>
+</body>
+</html>

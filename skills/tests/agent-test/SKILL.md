@@ -1,6 +1,11 @@
 ---
 name: agent-id-test-workflow
 description: Generate and execute AgentId + userXgh driven AI-agent stream tests, collect runtime tools/skills/database context, validate SSE behavior, and produce Markdown/JSON reports.
+usage: 在测试中心选择 Agent 测试时自动加载。输入 Agent ID 和可选的 userXgh，AI 会模拟用户对话，验证 Agent 的工具调用、技能匹配和流式响应是否正常。
+constraints:
+  - 仅支持已注册的 Agent ID
+  - 测试不修改生产数据
+  - 需要后端 Agent 服务正常运行
 ---
 
 # AgentId Test Workflow

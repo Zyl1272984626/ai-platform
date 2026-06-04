@@ -48,11 +48,17 @@ const SKILLS_DIR = path.resolve(config_js_1.AI_PLATFORM_ROOT, 'skills');
  */
 function listSkills() {
     const skills = [];
-    for (const dirName of ['scenes', 'capabilities']) {
+    for (const dirName of ['scenes', 'capabilities', 'tests', 'base']) {
         const typeDir = path.join(SKILLS_DIR, dirName);
         if (!fs.existsSync(typeDir))
             continue;
-        const skillType = dirName === 'scenes' ? 'scene' : 'capability';
+        const typeMap = {
+            scenes: 'scene',
+            capabilities: 'capability',
+            tests: 'test',
+            base: 'base',
+        };
+        const skillType = typeMap[dirName];
         for (const name of fs.readdirSync(typeDir)) {
             const skillFile = path.join(typeDir, name, 'SKILL.md');
             if (!fs.existsSync(skillFile))
@@ -99,6 +105,17 @@ function parseSkillFrontmatter(content, name, type, filePath) {
         const tagsMatch = fm.match(/tags:\s*\[(.+)\]/);
         if (tagsMatch) {
             meta.tags = tagsMatch[1].split(',').map((s) => s.trim().replace(/["']/g, ''));
+        }
+        const usageMatch = fm.match(/usage:\s*(.+)/);
+        if (usageMatch)
+            meta.usage = usageMatch[1].trim();
+        // constraints 是 YAML 列表格式（每行 - xxx）
+        const constraintsMatch = fm.match(/constraints:\s*\n((?:\s+- .+\n?)+)/);
+        if (constraintsMatch) {
+            meta.constraints = constraintsMatch[1]
+                .split('\n')
+                .map((s) => s.replace(/^\s+-\s*/, '').trim())
+                .filter(Boolean);
         }
     }
     return meta;

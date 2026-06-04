@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>代码审查报告 — 主系统(Agent)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #2c3e50; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #1a1a2e; }
+    .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+
+    /* Score Cards */
+    .score-overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 30px; }
+    .score-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: transform 0.2s; }
+    .score-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+    .score-card .module-name { font-size: 14px; color: #7f8c8d; margin-bottom: 8px; }
+    .score-card .score { font-size: 48px; font-weight: 700; }
+    .score-card .score-label { font-size: 12px; color: #95a5a6; margin-top: 4px; }
+    .score-card .risk-badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; margin-top: 8px; font-weight: 600; }
+    .risk-high { background: #ffeaea; color: #e74c3c; }
+    .risk-medium { background: #fff3e0; color: #e67e22; }
+    .score-good { color: #27ae60; }
+    .score-warn { color: #e67e22; }
+    .score-bad { color: #e74c3c; }
+
+    /* Summary Stats */
+    .stats-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 30px; }
+    .stat-item { background: white; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .stat-item .stat-num { font-size: 28px; font-weight: 700; }
+    .stat-item .stat-label { font-size: 12px; color: #95a5a6; margin-top: 4px; }
+    .stat-critical .stat-num { color: #e74c3c; }
+    .stat-warning .stat-num { color: #e67e22; }
+    .stat-info .stat-num { color: #3498db; }
+    .stat-pass .stat-num { color: #27ae60; }
+
+    /* Section */
+    .section { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .section h2 { font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #f0f0f0; }
+    .section h3 { font-size: 15px; margin: 16px 0 8px; color: #34495e; }
+
+    /* Module Section */
+    .module-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; }
+    .module-header:hover { background: #eef1f5; }
+    .module-header h3 { margin: 0; font-size: 16px; }
+    .module-header .toggle { font-size: 18px; color: #95a5a6; transition: transform 0.2s; }
+    .module-content { display: none; padding: 0 16px 16px; }
+    .module-content.open { display: block; }
+
+    /* Issue Items */
+    .issue { padding: 12px 16px; border-left: 4px solid #ddd; margin-bottom: 10px; background: #fafafa; border-radius: 0 6px 6px 0; }
+    .issue-critical { border-left-color: #e74c3c; background: #fff5f5; }
+    .issue-warning { border-left-color: #e67e22; background: #fffbf0; }
+    .issue-info { border-left-color: #3498db; background: #f0f7ff; }
+    .issue-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .issue-meta { font-size: 12px; color: #7f8c8d; margin-bottom: 6px; }
+    .issue-desc { font-size: 13px; color: #555; }
+    .issue-fix { font-size: 13px; color: #27ae60; margin-top: 6px; }
+
+    /* Rule Coverage Table */
+    .rule-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .rule-table th { background: #f8f9fa; padding: 8px 12px; text-align: left; border-bottom: 2px solid #dee2e6; }
+    .rule-table td { padding: 6px 12px; border-bottom: 1px solid #f0f0f0; }
+    .rule-table tr:hover { background: #f8f9fa; }
+    .pass { color: #27ae60; font-weight: 600; }
+    .warn { color: #e67e22; font-weight: 600; }
+    .fail { color: #e74c3c; font-weight: 600; }
+
+    /* Priority Table */
+    .priority-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .priority-table th { background: #f8f9fa; padding: 8px 12px; text-align: left; border-bottom: 2px solid #dee2e6; font-size: 13px; }
+    .priority-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .score-overview { grid-template-columns: repeat(2, 1fr); }
+      .stats-bar { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>代码审查报告</h1>
+  <p class="subtitle">主系统(Agent) — Vue 3 + Vite + Pinia | 审查日期: 2026-06-03</p>
+
+  <!-- Score Overview -->
+  <div class="score-overview">
+    <div class="score-card">
+      <div class="module-name">模块1 · 应用设置管理</div>
+      <div class="score score-warn">72</div>
+      <div class="score-label">满分 100</div>
+      <span class="risk-badge risk-medium">Medium 风险</span>
+    </div>
+    <div class="score-card">
+      <div class="module-name">模块2 · 系统设置管理</div>
+      <div class="score score-warn">72</div>
+      <div class="score-label">满分 100</div>
+      <span class="risk-badge risk-high">High 风险</span>
+    </div>
+    <div class="score-card">
+      <div class="module-name">模块3 · 权限与认证</div>
+      <div class="score score-bad">58</div>
+      <div class="score-label">满分 100</div>
+      <span class="risk-badge risk-high">High 风险</span>
+    </div>
+    <div class="score-card">
+      <div class="module-name">模块4 · 语音录制与识别</div>
+      <div class="score score-good">78</div>
+      <div class="score-label">满分 100</div>
+      <span class="risk-badge risk-medium">Medium 风险</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-item stat-critical">
+      <div class="stat-num">8</div>
+      <div class="stat-label">🔴 Critical</div>
+    </div>
+    <div class="stat-item stat-warning">
+      <div class="stat-num">24</div>
+      <div class="stat-label">🟡 Warning</div>
+    </div>
+    <div class="stat-item stat-info">
+      <div class="stat-num">9</div>
+      <div class="stat-label">🔵 Info</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">4</div>
+      <div class="stat-label">审查模块</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">70</div>
+      <div class="stat-label">综合均分</div>
+    </div>
+  </div>
+
+  <!-- Critical Issues Summary -->
+  <div class="section">
+    <h2>🔴 Critical 问题汇总（需立即修复）</h2>
+    <table class="priority-table">
+      <thead>
+        <tr><th>模块</th><th>问题</th><th>规则</th><th>文件</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>权限与认证</td>
+          <td><strong>开放重定向漏洞</strong> — localStorage 中 originalUrl 未校验即用于 location.replace()，XSS 可注入恶意 URL</td>
+          <td>SEC007</td>
+          <td>useLoginTo.ts:5-10</td>
+        </tr>
+        <tr>
+          <td>权限与认证</td>
+          <td><strong>企微 OAuth 暴露完整页面 URL</strong> — requestUrl 编码了含所有参数的 location.href</td>
+          <td>SEC007</td>
+          <td>permission.js:31-32</td>
+        </tr>
+        <tr>
+          <td>权限与认证</td>
+          <td><strong>Token 存储在 localStorage</strong> — SSE 请求从 localStorage 明文读取 token</td>
+          <td>SEC004</td>
+          <td>msg-chat-panel.vue:172</td>
+        </tr>
+        <tr>
+          <td>应用设置管理</td>
+          <td><strong>XSS: flowList.js 拼接 onclick HTML</strong> — agent 数据未转义直接拼接到 HTML 属性</td>
+          <td>SEC001</td>
+          <td>flowList.js:136</td>
+        </tr>
+        <tr>
+          <td>应用设置管理</td>
+          <td><strong>XSS: CompPreviewPage innerHTML 注入</strong> — 异常信息直接拼接到 innerHTML</td>
+          <td>SEC001</td>
+          <td>CompPreviewPage.vue:234</td>
+        </tr>
+        <tr>
+          <td>应用设置管理</td>
+          <td><strong>XSS: dangerouslyUseHTMLString 工作流导入</strong> — reason 变量未净化拼接 HTML</td>
+          <td>SEC001</td>
+          <td>import-dialog.vue:341</td>
+        </tr>
+        <tr>
+          <td>应用设置管理</td>
+          <td><strong>内存泄漏: eChart.js resize 监听器</strong> — 每次初始化注册监听器从不移除</td>
+          <td>PERF001</td>
+          <td>eChart.js:101</td>
+        </tr>
+        <tr>
+          <td>系统设置管理</td>
+          <td><strong>敏感数据明文传输</strong> — 密码/Token/API Key 以明文在前端存储和传输</td>
+          <td>SEC002</td>
+          <td>datasource/edit.vue 等</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Module Details -->
+  <div class="section">
+    <h2>各模块详细审查结果</h2>
+
+    <!-- Module 1 -->
+    <div class="module-header" onclick="toggleModule('m1')">
+      <h3>模块1: 应用设置管理 — 72/100</h3>
+      <span class="toggle" id="toggle-m1">▼</span>
+    </div>
+    <div class="module-content" id="m1">
+      <h3>关键问题</h3>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC001 | flowList.js deleteFlow 构造含 onclick 的 HTML — XSS</div>
+        <div class="issue-meta">common/flowList.js:136 | 规则 SEC001</div>
+        <div class="issue-desc">agent.nameX、agent.id 等字段直接拼接到 HTML onclick 属性中，通过 alertHtml() 渲染。如果字段包含引号或尖括号可导致 XSS 注入。</div>
+        <div class="issue-fix">修复: 对所有动态值进行 HTML 属性转义，或改用 Vue 组件渲染引用列表。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC001 | CompPreviewPage innerHTML 注入未净化内容</div>
+        <div class="issue-meta">views/app/comp/CompPreviewPage.vue:234 | 规则 SEC001</div>
+        <div class="issue-desc">e.message 来自动态组件加载异常，直接拼接到 innerHTML 中存在 XSS 风险。</div>
+        <div class="issue-fix">修复: 使用 document.createElement 构建错误提示 DOM。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC001 | dangerouslyUseHTMLString 工作流导入提示</div>
+        <div class="issue-meta">views/app/workflow/import-dialog.vue:341 | 规则 SEC001</div>
+        <div class="issue-desc">reason 来自导入文件解析逻辑，如果文件内容被精心构造，可能导致 XSS。</div>
+        <div class="issue-fix">修复: 避免使用 dangerouslyUseHTMLString，改用纯文本展示。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 PERF001 | eChart.js resize 监听器未清理 — 内存泄漏</div>
+        <div class="issue-meta">views/app/analytics/eChart.js:101 | 规则 PERF001</div>
+        <div class="issue-desc">每次调用 initChart 都会注册新的 resize 监听器且从不移除，echarts 实例也未被 dispose。</div>
+        <div class="issue-fix">修复: 保存监听器引用，在组件卸载时 removeEventListener 并 chart.dispose()。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW001 | 模块级 ref 导致全局状态共享</div>
+        <div class="issue-meta">common/agentList.js, flowList.js, activateAgent.js | 规则 FW001</div>
+        <div class="issue-desc">多个 composable 在模块顶层创建 ref()，导致状态全局共享，多路由切换时可能串数据。</div>
+        <div class="issue-fix">修复: 全局共享状态迁移到 Pinia store，组件级状态移入 composable 函数内部。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 PERF001 | UploadDialog 轮询无 AbortController</div>
+        <div class="issue-meta">views/app/knowledge-base/UploadDialog.vue:335-361 | 规则 PERF001</div>
+        <div class="issue-desc">pollStatus 函数使用 setTimeout 轮询最多 120 次（约 6 分钟），弹窗关闭后轮询仍继续执行。</div>
+        <div class="issue-fix">修复: 引入 AbortController 或取消标志，弹窗关闭时中止轮询。</div>
+      </div>
+      <div class="issue issue-info">
+        <div class="issue-title">🔵 MNT003 | console.error/warn 残留约 20+ 处</div>
+        <div class="issue-meta">多处文件 | 规则 MNT003</div>
+        <div class="issue-desc">开发调试用的 console 语句残留在生产代码中，可能泄露内部逻辑细节。</div>
+      </div>
+    </div>
+
+    <!-- Module 2 -->
+    <div class="module-header" onclick="toggleModule('m2')">
+      <h3>模块2: 系统设置管理 — 72/100</h3>
+      <span class="toggle" id="toggle-m2">▼</span>
+    </div>
+    <div class="module-content" id="m2">
+      <h3>关键问题</h3>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC002 | 敏感数据（密码/Token/API Key）明文处理</div>
+        <div class="issue-meta">datasource/edit.vue, BuiltInConfigForm.vue, MilvusConfigForm.vue, openclaw/ | 规则 SEC002</div>
+        <div class="issue-desc">所有密码/Token/API Key 均以明文形式存储在前端响应式变量中，提交时也以明文发送到后端。openclaw 中 Token 支持一键复制到剪贴板。</div>
+        <div class="issue-fix">修复: 密码字段统一使用 show-password；后端保存时加密，前端仅传输加密后的值。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC004 | SSE 流式请求绕过统一 API 封装</div>
+        <div class="issue-meta">views/msg/msg-chat-panel.vue:172-179 | 规则 SEC004/SEC005</div>
+        <div class="issue-desc">直接从 localStorage 读取 token，使用非标准 header 'token' 传递鉴权，绕过了统一 API 封装。</div>
+        <div class="issue-fix">修复: 使用项目统一的 API 封装发起请求，或至少使用标准 Authorization header。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 ERR001 | 数据源测试连接缺少 catch 处理</div>
+        <div class="issue-meta">views/datasource/edit.vue:216 | 规则 ERR001</div>
+        <div class="issue-desc">.then() 后没有 .catch() 处理网络错误，失败会导致未捕获的 Promise rejection。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 MNT001 | 深拷贝/恢复原始数据模式在 7+ 个文件中重复</div>
+        <div class="issue-meta">model-edit.vue, datasource/edit.vue, storage/edit.vue 等 | 规则 MNT001</div>
+        <div class="issue-desc">originalData + JSON.parse(JSON.stringify()) + clearValidate 模式大量重复。</div>
+        <div class="issue-fix">修复: 抽取为公共 composable（如 useEditDialog）。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 MNT003 | 约 15 处 console.error/warn 散布</div>
+        <div class="issue-meta">多处文件 | 规则 MNT003</div>
+        <div class="issue-desc">调试日志残留在生产代码中。</div>
+      </div>
+      <div class="issue issue-info">
+        <div class="issue-title">🔵 FW004 | 全模块无 TypeScript 类型定义</div>
+        <div class="issue-meta">全部 .vue 文件 | 规则 FW004</div>
+        <div class="issue-desc">所有文件使用 script setup 而非 script setup lang="ts"。</div>
+      </div>
+    </div>
+
+    <!-- Module 3 -->
+    <div class="module-header" onclick="toggleModule('m3')">
+      <h3>模块3: 权限与认证 — 58/100</h3>
+      <span class="toggle" id="toggle-m3">▼</span>
+    </div>
+    <div class="module-content" id="m3">
+      <h3>关键问题</h3>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC007 | 开放重定向漏洞 — originalUrl 未校验</div>
+        <div class="issue-meta">useLoginTo.ts:5-10, permission.js 两处 | 规则 SEC007</div>
+        <div class="issue-desc">localStorage 中 originalUrl 被 location.replace() 直接跳转，未做域名校验。XSS 攻击可注入恶意 URL 将用户重定向到钓鱼站点。</div>
+        <div class="issue-fix">修复: 在 routeTo() 中做域名校验，只允许同源跳转。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC007 | 企微 OAuth requestUrl 暴露完整页面 URL</div>
+        <div class="issue-meta">permission.js:31-32 | 规则 SEC007</div>
+        <div class="issue-desc">将含所有参数的 window.location.href 编码后传递给 OAuth 接口，敏感参数可能出现在服务端日志中。</div>
+      </div>
+      <div class="issue issue-critical">
+        <div class="issue-title">🔴 SEC004 | SSE 请求从 localStorage 明文读取 token</div>
+        <div class="issue-meta">msg-chat-panel.vue:172 | 规则 SEC004/SEC005</div>
+        <div class="issue-desc">localStorage 中的 token 可被 XSS 窃取，没有过期机制。</div>
+        <div class="issue-fix">修复: 迁移到 HttpOnly + Secure + SameSite cookie 方案。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW005 | 路由守卫异步操作缺少 try-catch</div>
+        <div class="issue-meta">两个 permission.js | 规则 ERR001/FW005</div>
+        <div class="issue-desc">api.get() 网络请求失败时抛出未捕获异常，路由导航中断，NProgress 永远不结束。</div>
+        <div class="issue-fix">修复: 在 router.beforeEach 回调中添加 try-catch，异常时 NProgress.done() + 跳转错误页。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW005 | 两个入口路由守卫代码几乎完全重复</div>
+        <div class="issue-meta">index/permission.js, setting-system/permission.js | 规则 MNT001</div>
+        <div class="issue-desc">修改鉴权逻辑时极易遗漏其中一个入口，造成安全漏洞。</div>
+        <div class="issue-fix">修复: 抽取公共路由守卫逻辑为独立模块。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW005 | permiss.ts hasUrl() 权限校验失效</div>
+        <div class="issue-meta">api/permiss.ts:51-59, 77-79 | 规则 FW005</div>
+        <div class="issue-desc">init() 方法体被注释，urlHash 永远为空，hasUrl() 永远返回 false，前端权限控制形同虚设。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW005 | appId 从路由参数未校验即设为全局 header</div>
+        <div class="issue-meta">permission.js:21-22 | 规则 FW005</div>
+        <div class="issue-desc">appId 直接从 URL 参数获取设为全局 HTTP header，可能存在 CRLF 注入。</div>
+        <div class="issue-fix">修复: 对 appId 做格式校验，只允许字母数字下划线短横线。</div>
+      </div>
+    </div>
+
+    <!-- Module 4 -->
+    <div class="module-header" onclick="toggleModule('m4')">
+      <h3>模块4: 语音录制与识别 — 78/100</h3>
+      <span class="toggle" id="toggle-m4">▼</span>
+    </div>
+    <div class="module-content" id="m4">
+      <h3>关键问题</h3>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 ERR001 | AudioUtils.convertToWav 缺少 try-catch，AudioContext 泄漏</div>
+        <div class="issue-meta">AudioUtils.js:9-31 | 规则 ERR001</div>
+        <div class="issue-desc">AudioContext 创建后若 decodeAudioData 抛出异常，audioContext.close() 不会执行。浏览器限制同时存在的 AudioContext 数量（约6个），多次失败将导致录音无法初始化。</div>
+        <div class="issue-fix">修复: 使用 try-finally 确保 AudioContext 关闭。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 FW004 | 全部文件为 JS，无 TypeScript 类型安全</div>
+        <div class="issue-meta">VoiceRecorder.js, AudioUtils.js, useVoiceRecorder.js | 规则 FW004</div>
+        <div class="issue-desc">options 对象、方法参数和返回值均无类型约束。</div>
+      </div>
+      <div class="issue issue-warning">
+        <div class="issue-title">🟡 MNT004 | Magic Number 未提取为命名常量</div>
+        <div class="issue-meta">多处 | 规则 MNT004</div>
+        <div class="issue-desc">500ms（最短时长）、60s（最大时长）、16000Hz（采样率）、44（WAV头大小）等数字直接出现在逻辑中。</div>
+      </div>
+      <div class="issue issue-info">
+        <div class="issue-title">🔵 SEC006 | 文件上传无大小限制</div>
+        <div class="issue-meta">VoiceRecorder.js:94 | 规则 SEC006</div>
+        <div class="issue-desc">VoiceRecorder 类本身没有录制时长或文件大小硬限制，如果被其他场景复用可能上传超大文件。</div>
+      </div>
+      <p style="margin-top:12px;color:#27ae60;font-size:13px;font-weight:600;">✅ 亮点: 两阶段录音方案、stream tracks 正确释放、Timer 全路径清理、composable 分层设计优秀</p>
+    </div>
+  </div>
+
+  <!-- Cross-Module Issues -->
+  <div class="section">
+    <h2>跨模块共性问题</h2>
+    <table class="priority-table">
+      <thead>
+        <tr><th>问题类型</th><th>涉及模块</th><th>严重度</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>localStorage 存储 Token</strong></td>
+          <td>模块2、模块3</td>
+          <td>🔴 Critical</td>
+          <td>Token 存储在 localStorage 中，SSE 请求直接读取，XSS 可窃取</td>
+        </tr>
+        <tr>
+          <td><strong>XSS 风险</strong></td>
+          <td>模块1、模块2</td>
+          <td>🔴 Critical</td>
+          <td>多处 v-html / innerHTML / dangerouslyUseHTMLString 未净化</td>
+        </tr>
+        <tr>
+          <td><strong>无 TypeScript</strong></td>
+          <td>全部模块</td>
+          <td>🟡 Warning</td>
+          <td>全项目使用 JS，无类型安全保护</td>
+        </tr>
+        <tr>
+          <td><strong>console 残留</strong></td>
+          <td>模块1、模块2、模块4</td>
+          <td>🔵 Info</td>
+          <td>约 37+ 处 console.error/warn 散布在生产代码中</td>
+        </tr>
+        <tr>
+          <td><strong>重复代码</strong></td>
+          <td>模块1、模块2、模块3</td>
+          <td>🟡 Warning</td>
+          <td>编辑表单模式、路由守卫逻辑大量重复</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Priority Recommendations -->
+  <div class="section">
+    <h2>修复优先级建议</h2>
+    <table class="priority-table">
+      <thead>
+        <tr><th>优先级</th><th>改进项</th><th>影响模块</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background:#fff5f5">
+          <td><strong>🔴 立即</strong></td>
+          <td>修复 originalUrl 开放重定向，添加域名校验</td>
+          <td>权限与认证</td>
+        </tr>
+        <tr style="background:#fff5f5">
+          <td><strong>🔴 立即</strong></td>
+          <td>修复 flowList.js deleteFlow XSS 漏洞</td>
+          <td>应用设置管理</td>
+        </tr>
+        <tr style="background:#fff5f5">
+          <td><strong>🔴 立即</strong></td>
+          <td>修复 CompPreviewPage innerHTML XSS</td>
+          <td>应用设置管理</td>
+        </tr>
+        <tr style="background:#fff5f5">
+          <td><strong>🔴 立即</strong></td>
+          <td>路由守卫添加 try-catch 异常处理</td>
+          <td>权限与认证</td>
+        </tr>
+        <tr style="background:#fffbf0">
+          <td><strong>🟡 短期</strong></td>
+          <td>审查 Token 存储方案，迁移到 HttpOnly Cookie</td>
+          <td>跨模块</td>
+        </tr>
+        <tr style="background:#fffbf0">
+          <td><strong>🟡 短期</strong></td>
+          <td>合并两个 permission.js 为统一模块</td>
+          <td>权限与认证</td>
+        </tr>
+        <tr style="background:#fffbf0">
+          <td><strong>🟡 短期</strong></td>
+          <td>修复 eChart.js 内存泄漏（resize 监听器 + dispose）</td>
+          <td>应用设置管理</td>
+        </tr>
+        <tr style="background:#fffbf0">
+          <td><strong>🟡 短期</strong></td>
+          <td>AudioUtils 添加 try-finally 保护 AudioContext</td>
+          <td>语音录制</td>
+        </tr>
+        <tr style="background:#f0f7ff">
+          <td><strong>🔵 中期</strong></td>
+          <td>抽取公共 composable（useEditDialog、usePermissionGuard）</td>
+          <td>跨模块</td>
+        </tr>
+        <tr style="background:#f0f7ff">
+          <td><strong>🔵 中期</strong></td>
+          <td>渐进式 TypeScript 迁移</td>
+          <td>跨模块</td>
+        </tr>
+        <tr style="background:#f0f7ff">
+          <td><strong>🔵 中期</strong></td>
+          <td>清理 console 残留，引入统一日志工具</td>
+          <td>跨模块</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="text-align:center;color:#95a5a6;font-size:12px;margin-top:20px;">
+    由 Claude Code 自动生成 | 审查规则覆盖 27 项 | 2026-06-03
+  </p>
+
+</div>
+
+<script>
+function toggleModule(id) {
+  const content = document.getElementById(id);
+  const toggle = document.getElementById('toggle-' + id);
+  content.classList.toggle('open');
+  toggle.style.transform = content.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+// Auto-open module 3 (lowest score)
+toggleModule('m3');
+</script>
+</body>
+</html>

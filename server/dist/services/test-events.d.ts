@@ -6,6 +6,6 @@
  */
 import { EventEmitter } from 'events';
 export declare const testBus: EventEmitter<any>;
-export type TestEventName = 'test:start' | 'test:update' | 'agent:stream' | 'test:done' | 'test:error';
+export type TestEventName = 'test:start' | 'test:update' | 'agent:stream' | 'test:done' | 'test:error' | 'test:resumed' | 'agent:chat';
 export declare function subscribeSuite(suiteId: string, handler: (evt: any) => void): () => void;
 //# sourceMappingURL=test-events.d.ts.map

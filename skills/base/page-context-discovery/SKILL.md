@@ -3,6 +3,12 @@ name: page-context-discovery
 description: 使用 Playwright MCP 逐页打开项目页面，分析页面结构、元素、API调用和交互行为，自动生成 E2E 测试用的知识图谱
 allowed-tools: ["mcp__playwright__browser_navigate", "mcp__playwright__browser_snapshot", "mcp__playwright__browser_take_screenshot", "mcp__playwright__browser_console_messages", "mcp__playwright__browser_network_requests", "mcp__playwright__browser_wait_for", "mcp__playwright__browser_click", "mcp__playwright__browser_close", "Read", "Write", "Bash"]
 tags: ["e2e", "discovery", "knowledge", "page-context"]
+usage: 在设置页面的项目操作区点击「生成图谱」时自动加载。需要先完成页面发现（E2E 发现页面）。生成的知识图谱会在 E2E 测试时作为上下文参考。
+constraints:
+  - 同时打开的浏览器标签页不超过 5 个
+  - 每页分析控制在 30 秒以内
+  - 不修改页面上的任何数据
+  - 需要先完成页面发现
 ---
 
 # 页面知识图谱发现

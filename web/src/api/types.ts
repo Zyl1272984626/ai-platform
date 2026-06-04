@@ -144,6 +144,8 @@ export interface Skill {
   dependencies?: string[]
   content?: string
   allowedTools?: string[]
+  usage?: string
+  constraints?: string[]
   trigger?: { command: string; params?: string[] }
 }
 

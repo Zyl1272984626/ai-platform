@@ -3,6 +3,10 @@ name: api-discovery
 description: 扫描源码发现所有 HTTP API 接口，分析后端路由和前端调用，按业务模块分组，生成可执行的测试定义
 allowed-tools: ["Read", "Glob", "Grep", "Write"]
 tags: ["api", "discovery", "test"]
+usage: 在设置页面的项目操作区点击「发现接口」时自动加载。扫描源码中的路由定义，生成按模块分组的 API 测试定义文件。生成的数据用于测试中心的 API 接口测试。
+constraints:
+  - 只允许使用 Read、Glob、Grep、Write 四个工具
+  - 需要项目已配置正确的源码路径
 ---
 
 # API 接口发现
