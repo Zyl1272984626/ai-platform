@@ -3293,7 +3293,7 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
 
     // 读取审查规则
     const rulesPath = path.join(DATA_DIR, 'projects', projectId!, 'review-rules.json');
-    let rulesSection = '## 审查维度\n请从安全性、性能、错误处理、Vue最佳实践、可维护性五个维度审查。';
+    let rulesSection = '## 审查维度\n请从安全性、性能、错误处理、框架最佳实践、可维护性五个维度审查。';
     if (fs.existsSync(rulesPath)) {
       try {
         const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
@@ -3301,18 +3301,28 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
       } catch { /* ignore */ }
     }
 
-    // 读取模块信息并筛选选中的
+    // 读取模块信息和技术栈
     const discoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json');
     let allModules: any[] = [];
+    let promptDiscovery: any = null;
     if (fs.existsSync(discoveryPath)) {
       try {
         const discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8'));
         allModules = discovery.modules || [];
+        promptDiscovery = discovery;
       } catch { /* ignore */ }
     }
 
+    // 从 discovery 提取技术栈信息
+    const promptStruct = promptDiscovery?.projectStructure || {};
+    const promptFe = promptStruct.frontend || {};
+    const promptBe = promptStruct.backend || {};
+    const promptTechParts: string[] = [];
+    if (promptFe.framework && promptFe.framework !== '无') promptTechParts.push(`前端: ${promptFe.framework}`);
+    if (promptBe.framework && promptBe.framework !== '无') promptTechParts.push(`后端: ${promptBe.framework}`);
+    const techLine = promptTechParts.length > 0 ? promptTechParts.join(' + ') : '未知';
+
     const selectedModules = allModules.filter((m: any) => selectedModuleIds.includes(m.id));
-    const framework = (project as any).framework || 'Vue 3 + Vite + Pinia';
     const now = new Date();
     const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
     const registerUrl = `http://localhost:3100/api/tests/register-manual-report`;
@@ -3326,9 +3336,12 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
         const riskText = riskIndicators.length > 0 ? riskIndicators.map((r: string) => `   - ${r}`).join('\n') : '无';
         const modSlug = mod.name.replace(/[<>:"/\\|?*]+/g, '_');
         const reportPath = path.join(reportsDir, `manual-${modSlug}.md`).replace(/\\/g, '/');
+        const layer = (mod as any).layer || 'frontend';
+        const layerLabel = layer === 'backend' ? '后端' : '前端';
 
         return `### ${mod.name}
 - 模块路径: ${mod.path}
+- 层级: ${layerLabel}
 - 文件数量: ${mod.files}
 - 风险等级: ${mod.riskLevel || 'unknown'}
 - 关注方向:
@@ -3350,7 +3363,7 @@ Skill 文件: ${skillFile.replace(/\\/g, '/')}
 ## 项目信息
 - 项目名称: ${project.name}
 - 源码路径: ${project.sourcePath}
-- 前端框架: ${framework}
+- 技术栈: ${techLine}
 
 ${rulesSection}
 
@@ -3373,6 +3386,13 @@ ${moduleParts}
     const htmlReportPath = path.join(reportsDir, `review-${ts}.html`).replace(/\\/g, '/');
     const buildHtmlUrl = `http://localhost:3100/api/tests/build-review-html`;
 
+    // 构建全量审查范围（基于 discovery 结果的实际路径）
+    const fullScopeParts: string[] = ['请扫描项目源码全面审查，重点关注以下目录：'];
+    if (promptFe.sourceRoot) fullScopeParts.push(`- ${promptFe.sourceRoot}（前端源码）`);
+    if (promptBe.sourceRoot) fullScopeParts.push(`- ${promptBe.sourceRoot}（后端源码）`);
+    if (!promptFe.sourceRoot && !promptBe.sourceRoot) fullScopeParts.push('- src/ 下的所有源码文件');
+    const fullScopeText = fullScopeParts.join('\n');
+
     const prompt = `请先 Read 以下 Skill 文件理解审查流程，然后对项目进行全面代码审查。
 
 Skill 文件: ${skillFile.replace(/\\/g, '/')}
@@ -3380,12 +3400,12 @@ Skill 文件: ${skillFile.replace(/\\/g, '/')}
 ## 项目信息
 - 项目名称: ${project.name}
 - 源码路径: ${project.sourcePath}
-- 前端框架: ${framework}
+- 技术栈: ${techLine}
 
 ${rulesSection}
 
 ## 审查范围
-请扫描项目源码全面审查，重点关注 src/pages/、src/components/、src/utils/、src/api/ 等目录。
+${fullScopeText}
 
 ## 执行方式
 1. 按 Skill 中定义的格式生成 Markdown 报告，用 Write 工具写入: ${reportPath}
