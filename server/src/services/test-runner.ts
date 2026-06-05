@@ -448,7 +448,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
     console.log('[E2E] Skill 加载失败:', e.message);
   }
 
-  const mode = (config.mode as string) || 'standard';
+  const mode = 'deep';
   const scope = (config.scope as string) || 'all';
   const projectSlug = project?.name ? project.name.replace(/[<>:"/\\|?*\s]+/g, '_') : '_default';
   const e2eDataDir = getConfig().e2eDataDir || getConfig().testDataDir;
@@ -481,7 +481,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   const totalCases = suite.cases.length;
   let completedCount = 0;
 
-  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `# E2E ${mode} 模式测试\n共 ${totalCases} 个页面集，开始逐集执行...\n\n` });
+  testBus.emit('agent:stream', { suiteId: suite.id, type: 'text', content: `# E2E 深度测试\n共 ${totalCases} 个页面集，开始逐集执行...\n\n` });
 
   for (let i = 0; i < suite.cases.length; i++) {
     if (suiteAbortController.signal.aborted) {
@@ -520,27 +520,34 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 ## 当前页面集信息
 - 页面集: ${pageSet.name}
 - 待测试页面 (${pages.length}页)
-${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
+
+| 序号 | 页面名称 | URL | 备注 |
+|------|----------|-----|------|
+${pages.map((p, i) => `| ${i + 1} | ${p.name} | ${p.url.includes(':') ? '需从上级页面进入' : baseUrl + p.url} | ${p.url.includes(':') ? '不能直接URL访问' : ''} |`).join('\n')}
 ` : '';
 
     const prompt = resumeSessionId
       ? '请继续之前的 E2E 页面测试，从上次中断处继续。保持之前的测试进度。'
-      : `请使用 e2e-page-test 技能，以 ${mode} 模式测试页面集「${pageSet?.name || '全部'}」的页面。
+      : `我需要你执行 E2E 页面深度测试。请严格按照 Skill 文件的规范执行。
 
 ## 当前项目信息
 - 项目名称: ${project?.name}
 - 前端地址: ${baseUrl}
 - 后端 API: ${project?.apiBaseUrl}
 - 登录页: ${baseUrl}${project?.loginUrl}
-- 登录凭据: ${project?.username} / ${project?.password}
+- 登录账号: ${project?.username} / ${project?.password}
 ${paramsInfo}
 ${pageListPrompt}
-输入参数：
-\`\`\`json
-{"mode": "${mode}", "scope": "${scope}", "projectId": "${projectId}", "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"${knowledgeGraphPath ? `, "knowledgeGraphPath": "${knowledgeGraphPath}"` : ''}}
-\`\`\`
+## 特别注意
 
-${knowledgeGraphPath ? `知识图谱文件路径：\`${knowledgeGraphPath}\`（请使用 Read 工具读取该文件加载知识图谱数据）\n` : ''}请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 记录结果。`;
+1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图
+2. **URL含动态参数的页面**：必须从上级列表页点击进入
+3. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
+4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
+5. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
+
+${knowledgeGraphPath ? `知识图谱文件路径：\`${knowledgeGraphPath}\`（请使用 Read 工具读取）\n` : ''}
+请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 保存结果。`;
 
     // 执行单个 PageSet 的测试
     await runE2ESinglePageSet(
@@ -819,10 +826,13 @@ async function runE2ESingleSession(
 - 前端地址: ${baseUrl}
 - 后端 API: ${project.apiBaseUrl}
 - 登录页: ${baseUrl}${project.loginUrl}
-- 登录凭据: ${project.username} / ${project.password}
+- 登录账号: ${project.username} / ${project.password}
 ${paramsInfo}
 ## 待测试页面 (${pages.length}页)
-${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
+
+| 序号 | 页面名称 | URL | 备注 |
+|------|----------|-----|------|
+${pages.map((p, i) => `| ${i + 1} | ${p.name} | ${p.url.includes(':') ? '需从上级页面进入' : baseUrl + p.url} | ${p.url.includes(':') ? '不能直接URL访问' : ''} |`).join('\n')}
 `;
   }
 
@@ -830,17 +840,21 @@ ${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
     ? path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data'), 'projects', projectId, 'page-context.json').replace(/\\/g, '/')
     : '';
 
-  const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试${project ? ` ${project.name}` : ''} ${scope} 范围的页面。
+  const prompt = `我需要你执行 E2E 页面深度测试。请严格按照 Skill 文件的规范执行。
 
 ${pageListPrompt}
-输入参数：
-\`\`\`json
-{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"${kgPath ? `, "knowledgeGraphPath": "${kgPath}"` : ''}}
-\`\`\`
+## 特别注意
 
-${kgPath ? `知识图谱文件路径：\`${kgPath}\`（请使用 Read 工具读取该文件加载知识图谱数据）\n` : ''}请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
+1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图
+2. **URL含动态参数的页面**（标注"不能直接URL访问"）：必须从上级列表页点击进入
+3. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
+4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
+5. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
 
-  mainCase.name = `E2E ${mode} 模式 (${scope})`;
+${kgPath ? `知识图谱文件路径：\`${kgPath}\`（请使用 Read 工具读取）\n` : ''}
+请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 保存结果。`;
+
+  mainCase.name = `E2E 深度测试 (${scope})`;
   mainCase.status = 'running';
   saveRun(suite);
 
@@ -2857,7 +2871,7 @@ export function createTestSuite(type: TestType, config: Record<string, unknown> 
       );
       break;
     case 'e2e': {
-      const mode = (config.mode as string) || 'standard';
+      const mode = 'deep';
       const scope = (config.scope as string) || 'all';
       const projectId = config.projectId as string | undefined;
       const project = projectId ? getProjectById(projectId) : undefined;
@@ -3499,7 +3513,7 @@ ${fullScopeText}
   if (type === 'e2e') {
     if (!project) throw new Error('请选择项目');
     const skillFile = path.resolve(base, 'skills', 'tests', 'e2e-page-test', 'SKILL.md');
-    const mode = (config.mode as string) || 'standard';
+    const mode = 'deep';
     const scope = (config.scope as string) || 'all';
     const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
     const e2eDataDir = (getConfig().testDataDir || getConfig().e2eDataDir).replace(/\\/g, '/');
@@ -3517,36 +3531,68 @@ ${fullScopeText}
       ? `动态参数映射：\n${Object.entries(project.globalParams).map(([k, v]) => `  - ${k}: ${(v as string[]).join(', ')}`).join('\n')}`
       : '';
 
-    const prompt = `请先 Read 以下 Skill 文件，理解测试流程，然后执行 E2E 页面测试。
+    // 构建页面列表（按 pageSet 分组）
+    const pages = resolvePages(project, scope);
+    const pagesBySet = new Map<string, typeof pages>();
+    for (const p of pages) {
+      const set = p.pageSet || 'default';
+      if (!pagesBySet.has(set)) pagesBySet.set(set, []);
+      pagesBySet.get(set)!.push(p);
+    }
 
-Skill 文件: ${skillFile.replace(/\\/g, '/')}
-工作目录: ${project.sourcePath || base}
+    let pageListSections = '';
+    let totalIndex = 0;
+    for (const [setName, setPages] of pagesBySet) {
+      const tableRows = setPages.map(p => {
+        const url = p.url.includes(':') ? `需从上级页面进入（路径含动态参数）` : `${project.baseUrl}${p.url}`;
+        const remark = p.url.includes(':') ? '不能直接URL访问' : '';
+        totalIndex++;
+        return `| ${totalIndex} | ${p.name} | ${url} | ${remark} |`;
+      }).join('\n');
+      pageListSections += `\n### ${setName}（${setPages.length} 页）\n\n| 序号 | 页面名称 | URL | 备注 |\n|------|----------|-----|------|\n${tableRows}\n`;
+    }
 
-## 项目信息
-- 项目名称: ${project.name}
-- 前端地址: ${project.baseUrl}
-- 后端 API: ${project.apiBaseUrl || project.baseUrl}
-- 登录页: ${project.baseUrl}${project.loginUrl || ''}
-- 登录凭据: ${project.username} / ${project.password}
-${paramsInfo ? `\n${paramsInfo}\n` : ''}
+    // 构建参数映射
+    const paramsInfo = project.globalParams && Object.keys(project.globalParams).length > 0
+      ? `动态参数映射：\n${Object.entries(project.globalParams).map(([k, v]) => `  - ${k}: ${(v as string[]).join(', ')}`).join('\n')}`
+      : '';
+
+    const prompt = `我需要你执行 E2E 页面深度测试。请严格按照 Skill 文件的规范执行。
+
 ## 测试配置
-- 模式: ${mode}
-- 范围: ${scope}
-- e2eDataDir: ${e2eDataDir}
-- projectName: ${projectSlug}
-${knowledgeGraphPath ? `- 知识图谱路径: ${knowledgeGraphPath}` : ''}
 
-## 待测试页面 (${pages.length}页)
-${pageList}
+- 项目名称：${project.name}
+- 前端地址：${project.baseUrl}
+- 后端 API：${project.apiBaseUrl || project.baseUrl}
+- 登录页：${project.baseUrl}${project.loginUrl || ''}
+- 登录账号：${project.username} / ${project.password}
+- 测试产物输出目录：${e2eDataDir}
+- 知识图谱路径：${knowledgeGraphPath || '（未配置）'}
+- Skill 文件：${skillFile.replace(/\\/g, '/')}
+${paramsInfo ? `\n${paramsInfo}\n` : ''}
+请先读取 Skill 文件了解完整的测试规范和硬性最低标准${knowledgeGraphPath ? '，然后读取知识图谱文件获取页面上下文信息' : ''}。
 
-请严格按照 Skill 文件中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。
+## 测试范围
 
-输入参数（Skill 中引用的变量）：
-\`\`\`json
-{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir}", "projectName": "${projectSlug}"${knowledgeGraphPath ? `, "knowledgeGraphPath": "${knowledgeGraphPath}"` : ''}}
-\`\`\`
+本次测试共 ${pages.length} 页。${scope !== 'all' ? `范围：${scope}` : '全部页面。'}
+${pageListSections}
+## 特别注意
 
-注意：测试产物请写入 e2eDataDir 对应的目录结构中，路径中包含项目名 ${projectSlug}。`;
+1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图。"页面加载"不算有效interaction，必须真实操作按钮/输入框。
+2. **URL 含动态参数的页面**（标注"不能直接URL访问"）：必须从上级列表页点击进入，不能直接URL访问。
+3. **CRUD 管理页**：必须走完 新增→验证→编辑→验证→删除→验证 完整生命周期。
+4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入，API报错时记录详细错误信息。
+5. **每步必截**：每次操作后都要截图，截图命名格式为 \`{pageId}-{操作描述}.png\`。
+
+## 执行要求
+
+1. 先登录系统（${project.baseUrl}${project.loginUrl || ''}）
+2. 严格按照 Skill 中的硬性最低标准逐页执行测试
+3. 每页测完立即保存 JSON 结果和截图到磁盘
+4. 全部完成后汇总 cross-page-issues.json 和 run.json
+5. 产物写入 \`${e2eDataDir}/runs/${projectSlug}/{runId}/\` 目录
+
+现在开始执行测试。`;
 
     return { prompt, cwd: project.sourcePath || base };
   }

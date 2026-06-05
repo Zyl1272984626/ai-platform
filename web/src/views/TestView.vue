@@ -57,14 +57,6 @@
             </select>
           </div>
           <div class="param-row">
-            <label>测试模式</label>
-            <select v-model="e2eMode" class="param-input">
-              <option value="quick">quick — 只观察不操作</option>
-              <option value="standard">standard — 观察+主交互</option>
-              <option value="deep">deep — 全面交互+边界测试</option>
-            </select>
-          </div>
-          <div class="param-row">
             <label>测试范围</label>
             <select v-model="e2eScope" class="param-input" :disabled="!selectedProjectId">
               <option value="all">全部页面</option>
@@ -441,7 +433,6 @@ const agentId = ref('')
 const userXgh = ref('')
 
 // E2E 测试参数
-const e2eMode = ref('standard')
 const e2eScope = ref('all')
 
 // 多项目支持
@@ -689,7 +680,7 @@ const promptCopied = ref(false)
 async function doGeneratePrompt() {
   const config: Record<string, unknown> = {}
   if (activeType.value === 'e2e') {
-    config.mode = e2eMode.value
+    config.mode = 'deep'
     config.scope = e2eScope.value
     config.projectId = selectedProjectId.value
   }
@@ -791,7 +782,7 @@ async function startTest() {
     config.userXgh = userXgh.value.trim()
   }
   if (activeType.value === 'e2e') {
-    config.mode = e2eMode.value
+    config.mode = 'deep'
     config.scope = e2eScope.value
     config.projectId = selectedProjectId.value
   }
