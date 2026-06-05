@@ -1,7 +1,11 @@
 export interface SkillMeta {
     name: string;
     description: string;
+<<<<<<< Updated upstream
     type: 'scene' | 'capability' | 'test' | 'base';
+=======
+    type: 'scene' | 'capability' | 'test';
+>>>>>>> Stashed changes
     path: string;
     allowedTools?: string[];
     dependencies?: string[];

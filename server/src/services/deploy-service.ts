@@ -5,19 +5,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import AdmZip from 'adm-zip';
-import { getConfig } from './config.js';
+import { getConfig, getDefaultProject } from './config.js';
 import { getSchool } from './school-manager.js';
 import { previewConfigs } from './config-generator.js';
 import { generateDeployScripts, type DeployScriptParams } from './deploy-script-generator.js';
 
 /** 获取主系统 backend 目录 */
 function getBackendDir(): string {
-  return path.resolve(getConfig().projectRoot, 'backend');
+  const projectRoot = getDefaultProject()?.sourcePath || getConfig().projectRoot;
+  return path.resolve(projectRoot, 'backend');
+}
+
+/** 获取主系统 frontend 目录 */
+function getFrontendDir(): string {
+  const projectRoot = getDefaultProject()?.sourcePath || getConfig().projectRoot;
+  return path.resolve(projectRoot, 'frontend');
 }
 
 /** 获取主系统 WAR 路径 */
 function getSourceWarPath(): string {
-  return path.resolve(getConfig().projectRoot, 'backend', 'target', 'agent-1.0.war');
+  return path.resolve(getBackendDir(), 'target', 'agent-1.0.war');
 }
 
 /** 输出目录 */
@@ -38,29 +45,276 @@ function getDeployAssetPath(fileName: string): string | null {
   return fs.existsSync(filePath) ? filePath : null;
 }
 
-/**
- * 执行 mvn clean package -DskipTests
- */
-function mvnPackage(): Promise<void> {
-  const backendDir = getBackendDir();
-  const cmd = process.platform === 'win32' ? 'mvn.cmd' : 'mvn';
-  const args = ['clean', 'package', '-DskipTests'];
+interface FrontendBuildPlan {
+  configPath: string | null;
+  entryNames: string[];
+}
+
+function findOnPath(fileName: string): string | null {
+  const pathValue = process.env.PATH || process.env.Path || '';
+  for (const entry of pathValue.split(path.delimiter)) {
+    if (!entry) continue;
+    const candidate = path.join(entry.replace(/^"|"$/g, ''), fileName);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findWindowsCommandShell(): string {
+  const candidates = [
+    process.env.ComSpec,
+    process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'cmd.exe') : '',
+    process.env.windir ? path.join(process.env.windir, 'System32', 'cmd.exe') : '',
+    'C:\\Windows\\System32\\cmd.exe',
+  ].filter(Boolean) as string[];
+
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!found) {
+    throw new Error('未找到 Windows 命令解释器 cmd.exe，请检查 ComSpec/SystemRoot 环境变量。');
+  }
+  return found;
+}
+
+function findMavenCommand(backendDir: string): string {
+  const wrapper = process.platform === 'win32' ? 'mvnw.cmd' : 'mvnw';
+  const wrapperPath = path.join(backendDir, wrapper);
+  if (fs.existsSync(wrapperPath)) return wrapperPath;
+
+  const command = process.platform === 'win32'
+    ? findOnPath('mvn.cmd') || findOnPath('mvn.bat')
+    : findOnPath('mvn') || 'mvn';
+
+  if (!command) {
+    throw new Error('未找到 Maven 命令，请安装 Maven 并确保 mvn.cmd 在 PATH 中，或在项目 backend 目录提供 mvnw.cmd。');
+  }
+  return command;
+}
+
+function findNpmCommand(): string {
+  const command = process.platform === 'win32'
+    ? findOnPath('npm.cmd') || findOnPath('npm.bat')
+    : findOnPath('npm') || 'npm';
+
+  if (!command) {
+    throw new Error('未找到 npm 命令，请安装 Node.js 并确保 npm 在 PATH 中。');
+  }
+  return command;
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+  label: string,
+  maxBuffer = 10 * 1024 * 1024,
+): Promise<{ stdout: string; stderr: string }> {
+  const isWindowsBatch = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
+  const actualCommand = isWindowsBatch ? findWindowsCommandShell() : command;
+  const actualArgs = isWindowsBatch ? ['/d', '/c', 'call', command, ...args] : args;
 
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, {
-      cwd: backendDir,
-      maxBuffer: 10 * 1024 * 1024,
-      shell: true,
+    execFile(actualCommand, actualArgs, {
+      cwd,
+      maxBuffer,
       env: { ...process.env },
     }, (error, stdout, stderr) => {
       if (error) {
-        const detail = (stderr?.toString().trim() || stdout?.toString().trim() || error.message).slice(-500);
-        reject(new Error(`Maven 构建失败: ${detail}`));
+        const detail = (stderr?.toString().trim() || stdout?.toString().trim() || error.message).slice(-2000);
+        reject(new Error(`${label}失败: ${detail}`));
       } else {
-        resolve();
+        resolve({ stdout: stdout?.toString() || '', stderr: stderr?.toString() || '' });
       }
     });
   });
+}
+
+function runMaven(
+  command: string,
+  commandArgs: string[],
+  backendDir: string,
+  label: string,
+): Promise<{ stdout: string; stderr: string }> {
+  return runCommand(command, commandArgs, backendDir, `Maven ${label}`);
+}
+
+function mavenCommandArgs(mavenCommand: string, args: string[]): string[] {
+  return args;
+}
+
+function isMavenCleanDeleteFailure(error: Error): boolean {
+  return /Failed to delete|Unable to delete|Cannot delete/i.test(error.message);
+}
+
+function execFileAsync(
+  command: string,
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, {
+      cwd: options.cwd,
+      env: options.env || { ...process.env },
+      timeout: options.timeout,
+      maxBuffer: 1024 * 1024,
+    }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error((stderr?.toString().trim() || stdout?.toString().trim() || error.message).slice(-1000)));
+      } else {
+        resolve({ stdout: stdout?.toString() || '', stderr: stderr?.toString() || '' });
+      }
+    });
+  });
+}
+
+async function releaseWindowsBuildResources(backendDir: string): Promise<void> {
+  if (process.platform !== 'win32') return;
+
+  const targetDir = path.join(backendDir, 'target');
+  const script = [
+    '$backend = [IO.Path]::GetFullPath($env:BACKEND_DIR).TrimEnd("\\").ToLowerInvariant()',
+    '$target = [IO.Path]::GetFullPath($env:TARGET_DIR).TrimEnd("\\").ToLowerInvariant()',
+    '$matched = Get-CimInstance Win32_Process | Where-Object {',
+    '  ($_.Name -eq "java.exe" -or $_.Name -eq "javaw.exe") -and $_.CommandLine -and (',
+    '    $_.CommandLine.Replace("/", "\\").ToLowerInvariant().Contains($target) -or',
+    '    $_.CommandLine.Replace("/", "\\").ToLowerInvariant().Contains($backend)',
+    '  )',
+    '}',
+    'foreach ($p in $matched) {',
+    '  Write-Output ("Stopping process {0} {1}" -f $p.ProcessId, $p.Name)',
+    '  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue',
+    '}',
+  ].join('; ');
+
+  try {
+    const result = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      env: {
+        ...process.env,
+        BACKEND_DIR: backendDir,
+        TARGET_DIR: targetDir,
+      },
+      timeout: 10000,
+    });
+    const output = result.stdout.trim();
+    if (output) console.log(`[Deploy] 已尝试释放 Java 构建资源:\n${output}`);
+  } catch (error) {
+    console.warn(`[Deploy] 释放 Java 构建资源失败，继续执行 Maven clean: ${(error as Error).message}`);
+  }
+}
+
+function prepareBuildWorkspace(backendDir: string): void {
+  const targetDir = path.join(backendDir, 'target');
+  if (!fs.existsSync(targetDir)) return;
+
+  try {
+    fs.rmSync(targetDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 300,
+    });
+    console.log(`[Deploy] 已清理构建目录: ${targetDir}`);
+    return;
+  } catch (error) {
+    console.warn(`[Deploy] 构建目录被占用，无法完整删除，尝试隔离: ${(error as Error).message}`);
+  }
+
+  const staleDir = path.join(backendDir, `target.stale-${Date.now()}`);
+  try {
+    fs.renameSync(targetDir, staleDir);
+    console.log(`[Deploy] 已隔离被占用的构建目录: ${staleDir}`);
+  } catch (error) {
+    console.warn(`[Deploy] 构建目录仍被占用，跳过 clean，直接增量 package: ${(error as Error).message}`);
+  }
+}
+
+function createFrontendBuildPlan(frontendDir: string): FrontendBuildPlan {
+  const viteConfigPath = path.join(frontendDir, 'vite.config.ts');
+  const defaultEntries = ['index', 'setting-app', 'setting-system'];
+  if (!fs.existsSync(viteConfigPath)) return { configPath: null, entryNames: defaultEntries };
+
+  const original = fs.readFileSync(viteConfigPath, 'utf-8');
+  const entryPattern = /^(\s*)(['"]?[\w-]+['"]?)\s*:\s*resolve\(['"]([^'"]+)['"]\),?\s*$/gm;
+  const entryNames: string[] = [];
+  let removed = false;
+
+  const nextConfig = original.replace(entryPattern, (line, _indent, rawName, entryPath) => {
+    const cleanName = String(rawName).replace(/^['"]|['"]$/g, '');
+    const htmlPath = path.resolve(frontendDir, entryPath);
+    if (!fs.existsSync(htmlPath)) {
+      removed = true;
+      console.warn(`[Deploy] 前端入口不存在，临时跳过: ${cleanName} -> ${entryPath}`);
+      return '';
+    }
+    entryNames.push(cleanName);
+    return line;
+  });
+
+  if (!removed) return { configPath: null, entryNames: entryNames.length ? entryNames : defaultEntries };
+
+  const configPath = path.join(frontendDir, '.ai-platform.vite.config.ts');
+  fs.writeFileSync(configPath, nextConfig, 'utf-8');
+  return { configPath, entryNames: entryNames.length ? entryNames : defaultEntries };
+}
+
+/**
+ * 构建主项目前端，产物由 Vite 写入 backend/src/main/resources/static。
+ */
+async function buildFrontendAssets(): Promise<void> {
+  const frontendDir = getFrontendDir();
+  const backendDir = getBackendDir();
+  const staticDir = path.join(backendDir, 'src', 'main', 'resources', 'static');
+
+  if (!fs.existsSync(frontendDir)) {
+    throw new Error(`主系统 frontend 目录不存在: ${frontendDir}。请在设置页把默认项目源码路径配置为实际 Agent 项目根目录。`);
+  }
+  if (!fs.existsSync(path.join(frontendDir, 'package.json'))) {
+    throw new Error(`主系统 frontend 缺少 package.json: ${frontendDir}`);
+  }
+  if (!fs.existsSync(path.join(frontendDir, 'node_modules'))) {
+    throw new Error(`主系统 frontend 尚未安装依赖: ${frontendDir}\\node_modules。请先在 frontend 目录执行 npm install。`);
+  }
+
+  console.log('[Deploy] 构建前端静态资源...');
+  const buildPlan = createFrontendBuildPlan(frontendDir);
+  try {
+    const args = buildPlan.configPath
+      ? ['run', 'build-only', '--', '--config', buildPlan.configPath]
+      : ['run', 'build-only'];
+    await runCommand(findNpmCommand(), args, frontendDir, '前端构建', 50 * 1024 * 1024);
+  } finally {
+    if (buildPlan.configPath && fs.existsSync(buildPlan.configPath)) {
+      fs.unlinkSync(buildPlan.configPath);
+    }
+  }
+
+  const requiredFiles = buildPlan.entryNames.map((entryName) => path.join(staticDir, entryName, 'index.html'));
+  const missing = requiredFiles.filter((filePath) => !fs.existsSync(filePath));
+  if (missing.length > 0) {
+    throw new Error(`前端构建完成但缺少静态入口文件: ${missing.join(', ')}`);
+  }
+}
+
+/**
+ * 构建 WAR。平台先清理/隔离 target，再执行 package，避免 Maven clean 因 Windows 文件占用直接失败。
+ */
+async function mvnPackage(): Promise<void> {
+  const backendDir = getBackendDir();
+
+  if (!fs.existsSync(backendDir)) {
+    throw new Error(`主系统 backend 目录不存在: ${backendDir}。请在设置页把默认项目源码路径配置为实际 Agent 项目根目录。`);
+  }
+
+  const mavenCommand = findMavenCommand(backendDir);
+  const command = mavenCommand;
+  await releaseWindowsBuildResources(backendDir);
+  prepareBuildWorkspace(backendDir);
+
+  try {
+    await runMaven(command, mavenCommandArgs(mavenCommand, ['clean', 'package', '-DskipTests']), backendDir, 'clean 构建');
+  } catch (error) {
+    if (!isMavenCleanDeleteFailure(error as Error)) throw error;
+    throw new Error(`Maven clean 删除 target 文件失败，可能仍有 Java/Tomcat/IDE 占用 ${path.join(backendDir, 'target')}。已尝试释放相关 Java 进程，请关闭占用后重试。原始错误: ${(error as Error).message}`);
+  }
 }
 
 /**
@@ -142,7 +396,8 @@ export async function buildSchoolWar(code: string): Promise<string> {
   const school = getSchool(code);
   if (!school) throw new Error(`School not found: ${code}`);
 
-  // 1. 每次部署都执行 Maven 构建，确保代码最新
+  // 1. 每次部署都先构建前端，再执行 Maven clean 构建，确保 WAR 内前后端都是最新。
+  await buildFrontendAssets();
   console.log('[Deploy] 执行 Maven clean 构建...');
   cleanupStaleClasses();
   await mvnPackage();

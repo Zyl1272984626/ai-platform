@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 "use strict";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -23,11 +24,14 @@ exports.setDefaultProject = setDefaultProject;
 exports.updateProjectPages = updateProjectPages;
 exports.saveProjectPageSets = saveProjectPageSets;
 exports.checkConfig = checkConfig;
+=======
+>>>>>>> Stashed changes
 /**
  * 全局配置管理
  * 支持文件持久化 + 环境变量 + 默认值三级优先
  * 支持多项目配置
  */
+<<<<<<< Updated upstream
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const url_1 = require("url");
@@ -36,6 +40,16 @@ const __dirname = path_1.default.dirname((0, url_1.fileURLToPath)(import.meta.ur
 const DATA_DIR = path_1.default.resolve(__dirname, '../../data');
 const CONFIG_FILE = path_1.default.join(DATA_DIR, 'platform-config.json');
 const PROJECTS_DIR = path_1.default.join(DATA_DIR, 'projects');
+=======
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = path.resolve(__dirname, '../../data');
+const CONFIG_FILE = path.join(DATA_DIR, 'platform-config.json');
+const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
+>>>>>>> Stashed changes
 // ========== 默认项目 ==========
 function createDefaultProject(overrides) {
     return {
@@ -70,6 +84,7 @@ const DEFAULT_CONFIG = {
 };
 /** 运行时配置缓存 */
 let config = { ...DEFAULT_CONFIG, projects: [...DEFAULT_CONFIG.projects] };
+<<<<<<< Updated upstream
 exports._runtimeConfig = config;
 // ========== 项目独立文件读写 ==========
 /** 获取项目数据目录 */
@@ -82,6 +97,19 @@ function loadProjectPages(projectId) {
     try {
         if (fs_1.default.existsSync(filePath)) {
             return JSON.parse(fs_1.default.readFileSync(filePath, 'utf-8'));
+=======
+// ========== 项目独立文件读写 ==========
+/** 获取项目数据目录 */
+function getProjectDir(projectId) {
+    return path.join(PROJECTS_DIR, projectId);
+}
+/** 从独立文件读取项目页面数据 */
+export function loadProjectPages(projectId) {
+    const filePath = path.join(getProjectDir(projectId), 'project.json');
+    try {
+        if (fs.existsSync(filePath)) {
+            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+>>>>>>> Stashed changes
         }
     }
     catch (e) {
@@ -90,6 +118,7 @@ function loadProjectPages(projectId) {
     return { pageSets: [] };
 }
 /** 将项目页面数据写入独立文件 */
+<<<<<<< Updated upstream
 function saveProjectPages(projectId, data) {
     const dir = getProjectDir(projectId);
     if (!fs_1.default.existsSync(dir))
@@ -98,21 +127,43 @@ function saveProjectPages(projectId, data) {
 }
 /** 读取项目公共参数 */
 function getGlobalParams(projectId) {
+=======
+export function saveProjectPages(projectId, data) {
+    const dir = getProjectDir(projectId);
+    if (!fs.existsSync(dir))
+        fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify(data, null, 2), 'utf-8');
+}
+/** 读取项目公共参数 */
+export function getGlobalParams(projectId) {
+>>>>>>> Stashed changes
     const data = loadProjectPages(projectId);
     return data.globalParams || {};
 }
 /** 保存项目公共参数 */
+<<<<<<< Updated upstream
 function saveGlobalParams(projectId, params) {
+=======
+export function saveGlobalParams(projectId, params) {
+>>>>>>> Stashed changes
     const data = loadProjectPages(projectId);
     data.globalParams = params;
     saveProjectPages(projectId, data);
 }
 /** 保存原始发现数据到独立文件 */
+<<<<<<< Updated upstream
 function saveDiscoveryResult(projectId, discoveryResult) {
     const dir = getProjectDir(projectId);
     if (!fs_1.default.existsSync(dir))
         fs_1.default.mkdirSync(dir, { recursive: true });
     fs_1.default.writeFileSync(path_1.default.join(dir, 'discovery-result.json'), JSON.stringify(discoveryResult, null, 2), 'utf-8');
+=======
+export function saveDiscoveryResult(projectId, discoveryResult) {
+    const dir = getProjectDir(projectId);
+    if (!fs.existsSync(dir))
+        fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'discovery-result.json'), JSON.stringify(discoveryResult, null, 2), 'utf-8');
+>>>>>>> Stashed changes
 }
 // ========== 旧配置迁移 ==========
 function migrateConfig(saved) {
@@ -168,12 +219,12 @@ function applyClaudeConfig() {
 }
 // ========== 配置加载/保存 ==========
 /** 从文件加载配置 */
-function loadConfig() {
+export function loadConfig() {
     try {
-        if (fs_1.default.existsSync(CONFIG_FILE)) {
-            const raw = fs_1.default.readFileSync(CONFIG_FILE, 'utf-8');
+        if (fs.existsSync(CONFIG_FILE)) {
+            const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
             const saved = JSON.parse(raw);
-            exports._runtimeConfig = config = migrateConfig(saved);
+            config = migrateConfig(saved);
             console.log('[Config] 从文件加载配置:', CONFIG_FILE);
             console.log(`[Config] 已配置 ${config.projects.length} 个项目`);
             // 自动迁移：将内联的 pageSets/discoveryResult 拆分到独立文件
@@ -209,22 +260,26 @@ function loadConfig() {
     return config;
 }
 /** 获取当前配置 */
-function getConfig() {
+export function getConfig() {
     return config;
 }
 /** 更新基础配置（部分更新）并持久化 */
-function updateConfig(partial) {
-    exports._runtimeConfig = config = { ...config, ...partial };
+export function updateConfig(partial) {
+    config = { ...config, ...partial };
     saveConfig();
     return config;
 }
 /** 保存配置到文件 */
 function saveConfig() {
     try {
-        if (!fs_1.default.existsSync(DATA_DIR)) {
-            fs_1.default.mkdirSync(DATA_DIR, { recursive: true });
+        if (!fs.existsSync(DATA_DIR)) {
+            fs.mkdirSync(DATA_DIR, { recursive: true });
         }
+<<<<<<< Updated upstream
         fs_1.default.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+=======
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+>>>>>>> Stashed changes
         // 同步到 process.env，让子进程也能读到
         if (config.e2eDataDir) {
             process.env.E2E_DATA_DIR = config.e2eDataDir;
@@ -232,7 +287,10 @@ function saveConfig() {
         if (config.testDataDir) {
             process.env.TEST_DATA_DIR = config.testDataDir;
         }
+<<<<<<< Updated upstream
         applyClaudeConfig();
+=======
+>>>>>>> Stashed changes
         console.log('[Config] 配置已保存');
     }
     catch (e) {
@@ -241,7 +299,11 @@ function saveConfig() {
 }
 // ========== 项目管理 ==========
 /** 获取所有项目（动态合并页面数据） */
+<<<<<<< Updated upstream
 function getProjects() {
+=======
+export function getProjects() {
+>>>>>>> Stashed changes
     return config.projects.map(p => {
         const pageData = loadProjectPages(p.id);
         return {
@@ -252,7 +314,11 @@ function getProjects() {
     });
 }
 /** 根据 ID 获取项目（动态合并页面数据） */
+<<<<<<< Updated upstream
 function getProjectById(id) {
+=======
+export function getProjectById(id) {
+>>>>>>> Stashed changes
     const p = config.projects.find(p => p.id === id);
     if (!p)
         return undefined;
@@ -265,14 +331,14 @@ function getProjectById(id) {
     };
 }
 /** 获取默认项目 */
-function getDefaultProject() {
+export function getDefaultProject() {
     return config.projects.find(p => p.id === config.defaultProjectId) || config.projects[0];
 }
 /** 添加项目 */
-function addProject(project) {
+export function addProject(project) {
     const newProject = {
         ...project,
-        id: (0, uuid_1.v4)().substring(0, 8),
+        id: uuidv4().substring(0, 8),
         pageSets: [],
     };
     config.projects.push(newProject);
@@ -280,7 +346,7 @@ function addProject(project) {
     return newProject;
 }
 /** 更新项目 */
-function updateProject(id, updates) {
+export function updateProject(id, updates) {
     const idx = config.projects.findIndex(p => p.id === id);
     if (idx === -1)
         return null;
@@ -291,7 +357,7 @@ function updateProject(id, updates) {
     return config.projects[idx];
 }
 /** 删除项目 */
-function deleteProject(id) {
+export function deleteProject(id) {
     const idx = config.projects.findIndex(p => p.id === id);
     if (idx === -1)
         return false;
@@ -304,8 +370,13 @@ function deleteProject(id) {
     // 清理项目独立数据目录
     const projectDir = getProjectDir(id);
     try {
+<<<<<<< Updated upstream
         if (fs_1.default.existsSync(projectDir)) {
             fs_1.default.rmSync(projectDir, { recursive: true, force: true });
+=======
+        if (fs.existsSync(projectDir)) {
+            fs.rmSync(projectDir, { recursive: true, force: true });
+>>>>>>> Stashed changes
         }
     }
     catch (e) {
@@ -314,7 +385,7 @@ function deleteProject(id) {
     return true;
 }
 /** 设置默认项目 */
-function setDefaultProject(id) {
+export function setDefaultProject(id) {
     const project = config.projects.find(p => p.id === id);
     if (!project)
         return false;
@@ -323,7 +394,11 @@ function setDefaultProject(id) {
     return true;
 }
 /** 更新项目的页面集（发现后更新，写入独立文件） */
+<<<<<<< Updated upstream
 function updateProjectPages(id, pageSets, discoveryResult) {
+=======
+export function updateProjectPages(id, pageSets, discoveryResult) {
+>>>>>>> Stashed changes
     const idx = config.projects.findIndex(p => p.id === id);
     if (idx === -1)
         return null;
@@ -342,7 +417,11 @@ function updateProjectPages(id, pageSets, discoveryResult) {
     return config.projects[idx];
 }
 /** 仅更新页面集数据（不更新发现结果，用于手动编辑） */
+<<<<<<< Updated upstream
 function saveProjectPageSets(id, pageSets) {
+=======
+export function saveProjectPageSets(id, pageSets) {
+>>>>>>> Stashed changes
     const project = config.projects.find(p => p.id === id);
     if (!project)
         return null;
@@ -358,7 +437,7 @@ function saveProjectPageSets(id, pageSets) {
 }
 // ========== 配置检查 ==========
 /** 检查配置项是否有效 */
-async function checkConfig() {
+export async function checkConfig() {
     const results = {};
     // 检查路径是否存在
     for (const [key, dirPath] of [
@@ -368,8 +447,8 @@ async function checkConfig() {
     ]) {
         try {
             results[key] = {
-                ok: fs_1.default.existsSync(dirPath),
-                msg: fs_1.default.existsSync(dirPath) ? `路径存在: ${dirPath}` : `路径不存在: ${dirPath}`,
+                ok: fs.existsSync(dirPath),
+                msg: fs.existsSync(dirPath) ? `路径存在: ${dirPath}` : `路径不存在: ${dirPath}`,
             };
         }
         catch {
@@ -405,7 +484,7 @@ async function checkConfig() {
     // Playwright 浏览器
     try {
         const { execSync } = await import('child_process');
-        const pwPath = path_1.default.resolve(config.aiPlatformRoot, 'e2e-test', 'node_modules', '.bin', 'playwright');
+        const pwPath = path.resolve(config.aiPlatformRoot, 'e2e-test', 'node_modules', '.bin', 'playwright');
         const cmd = process.platform === 'win32' ? `"${pwPath}.cmd"` : pwPath;
         execSync(`${cmd} --version 2>&1`, { timeout: 10000, encoding: 'utf-8' });
         results['playwright'] = { ok: true, msg: 'Playwright 已安装' };
@@ -416,8 +495,10 @@ async function checkConfig() {
     return results;
 }
 // ========== 兼容旧代码 ==========
-exports.PROJECT_ROOT = config.projectRoot;
-exports.AI_PLATFORM_ROOT = config.aiPlatformRoot;
+export const PROJECT_ROOT = config.projectRoot;
+export const AI_PLATFORM_ROOT = config.aiPlatformRoot;
 // 启动时自动加载
 loadConfig();
+// 重新导出动态值（保持向后兼容）
+export { config as _runtimeConfig };
 //# sourceMappingURL=config.js.map

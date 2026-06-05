@@ -50,6 +50,16 @@ function getWindowsAgentRoot(school: School): string {
   return `${getWindowsDrive(school)}\\fskj\\workspace\\agent`;
 }
 
+function getAgentRootPath(school: School): string {
+  return getServerOs(school) === 'windows' ? getWindowsAgentRoot(school) : '/fskj/workspace/agent';
+}
+
+function joinAgentPath(school: School, child: string): string {
+  const root = getAgentRootPath(school);
+  const separator = getServerOs(school) === 'windows' ? '\\' : '/';
+  return `${root}${separator}${child}`;
+}
+
 function shellHeader(title: string, school: School): string[] {
   return [
     '#!/bin/bash',
@@ -71,6 +81,30 @@ function quoteSql(value: string | number | undefined): string {
 
 function quoteShell(value: string | number | undefined): string {
   return `'${String(value ?? '').replace(/'/g, `'\\''`)}'`;
+}
+
+function normalizeHttpUrl(hostOrUrl: string | undefined, port?: number): string {
+  const raw = String(hostOrUrl || '').trim();
+  if (!raw) return port ? `http://127.0.0.1:${port}/` : 'http://127.0.0.1/';
+
+  if (/^https?:\/\//i.test(raw)) {
+    const withSlash = raw.endsWith('/') ? raw : `${raw}/`;
+    if (!port) return withSlash;
+
+    try {
+      const url = new URL(withSlash);
+      if (!url.port) url.port = String(port);
+      return url.toString();
+    } catch {
+      return withSlash;
+    }
+  }
+
+  return `http://${raw}${port ? `:${port}` : ''}/`;
+}
+
+function storageParamsSql(basePath: string): string {
+  return quoteSql(JSON.stringify({ basePath }));
 }
 
 function mysqlRuntimeBlock(params: DeployScriptParams): string[] {
@@ -442,9 +476,42 @@ function generateWindowsAppDeployScript(school: School, params: DeployScriptPara
 function generateSystemConfigScript(school: School, params: DeployScriptParams): string {
   const lines = shellHeader('03 启动后系统配置', school);
   const isMysql = school.type === 'mysql';
-  const bt = '`';
-  const oneapiUrl = `http://${params.oneapiHost}:${params.oneapiPort}/`;
+  const oneapiUrl = normalizeHttpUrl(params.oneapiHost, params.oneapiPort);
   const chatModel = params.chatModel || 'deepseek-v4-flash';
+  const fileStorages = [
+    {
+      id: 'ICON_STORAGE_JYT',
+      code: 'ICON_STORAGE_JYT',
+      name: '文件仓库',
+      order: 1,
+      basePath: joinAgentPath(school, 'agent'),
+      remark: '文件仓库',
+    },
+    {
+      id: 'CHAT_MSG_UPLOAD_FILE',
+      code: 'CHAT_MSG_UPLOAD_FILE',
+      name: '智能体对话文件上传',
+      order: 2,
+      basePath: joinAgentPath(school, 'agent-conversation'),
+      remark: '智能体对话文件上传',
+    },
+    {
+      id: 'COMP_UPLOAD_FILE',
+      code: 'COMP_UPLOAD_FILE',
+      name: '组件文件上传',
+      order: 3,
+      basePath: joinAgentPath(school, 'component'),
+      remark: '组件文件上传',
+    },
+    {
+      id: 'SKILL_STORAGE',
+      code: 'skill_storage',
+      name: '技能仓库',
+      order: 4,
+      basePath: joinAgentPath(school, 'skill-storage'),
+      remark: '技能文件存储仓库',
+    },
+  ];
 
   if (!params.initSql) {
     lines.push('echo "未选择启动后系统配置步骤，跳过。"', '');
@@ -476,6 +543,7 @@ function generateSystemConfigScript(school: School, params: DeployScriptParams):
     '',
     'wait_for_table fs_sys_config',
     'wait_for_table ai_model_source',
+    'wait_for_table ai_file_storage',
     '',
     '# ---- 初始化系统配置 ----',
     'echo "初始化系统配置..."',
@@ -500,9 +568,36 @@ function generateSystemConfigScript(school: School, params: DeployScriptParams):
 
   lines.push(
     '',
-    'DELETE FROM ai_model_source WHERE model_source_code = \'OneApi\';',
+    'DELETE FROM ai_model_source WHERE id <> \'source_oneapi\' AND model_source_code = \'OneApi\';',
     'INSERT INTO ai_model_source (id, create_time, create_user_id, model_source_code, name_x, order_x, params_config, remark_x, update_time, update_user_id)',
-    `VALUES ('source_oneapi', NOW(), 'fskjadmin', 'OneApi', 'OneApi', 1, '{\\"url\\":\\"${quoteSql(oneapiUrl)}\\",\\"appKey\\":\\"${quoteSql(params.oneapiKey)}\\"}', '公司内部部署的 OneApi', NOW(), 'fskjadmin');`,
+    `VALUES ('source_oneapi', NOW(), 'fskjadmin', 'OneApi', 'OneApi', 1, '{\\"url\\":\\"${quoteSql(oneapiUrl)}\\",\\"appKey\\":\\"${quoteSql(params.oneapiKey)}\\"}', '公司内部部署的 OneApi', NOW(), 'fskjadmin')`,
+    'ON DUPLICATE KEY UPDATE',
+    '  model_source_code = VALUES(model_source_code),',
+    '  name_x = VALUES(name_x),',
+    '  order_x = VALUES(order_x),',
+    '  params_config = VALUES(params_config),',
+    '  remark_x = VALUES(remark_x),',
+    '  update_time = NOW(),',
+    '  update_user_id = VALUES(update_user_id);',
+  );
+
+  lines.push('', '-- 初始化文件仓库配置，basePath 与 02-app-deploy 创建的目录保持一致');
+  for (const storage of fileStorages) {
+    lines.push(
+      'INSERT INTO ai_file_storage (id, code_x, name_x, order_x, params_config, remark_x, create_user_id, create_time, update_user_id, update_time)',
+      `VALUES ('${quoteSql(storage.id)}', '${quoteSql(storage.code)}', '${quoteSql(storage.name)}', ${storage.order}, '${storageParamsSql(storage.basePath)}', '${quoteSql(storage.remark)}', 'system', NOW(), 'system', NOW())`,
+      'ON DUPLICATE KEY UPDATE',
+      '  code_x = VALUES(code_x),',
+      '  name_x = VALUES(name_x),',
+      '  order_x = VALUES(order_x),',
+      '  params_config = VALUES(params_config),',
+      '  remark_x = VALUES(remark_x),',
+      '  update_user_id = VALUES(update_user_id),',
+      '  update_time = NOW();',
+    );
+  }
+
+  lines.push(
     'EOSQL',
     '',
     'echo "启动后系统配置脚本执行完成。"',

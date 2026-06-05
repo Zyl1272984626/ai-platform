@@ -1,54 +1,20 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.listSkills = listSkills;
-exports.getSkill = getSkill;
-exports.getSkillPath = getSkillPath;
 /**
  * Skill 注册与发现
  */
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const config_js_1 = require("./config.js");
-const SKILLS_DIR = path.resolve(config_js_1.AI_PLATFORM_ROOT, 'skills');
+import * as fs from 'fs';
+import * as path from 'path';
+import { AI_PLATFORM_ROOT } from './config.js';
+const SKILLS_DIR = path.resolve(AI_PLATFORM_ROOT, 'skills');
 /**
  * 扫描所有 Skill 并返回元数据
  */
-function listSkills() {
+export function listSkills() {
     const skills = [];
+<<<<<<< Updated upstream
     for (const dirName of ['scenes', 'capabilities', 'tests', 'base']) {
+=======
+    for (const dirName of ['scenes', 'capabilities', 'tests']) {
+>>>>>>> Stashed changes
         const typeDir = path.join(SKILLS_DIR, dirName);
         if (!fs.existsSync(typeDir))
             continue;
@@ -56,7 +22,10 @@ function listSkills() {
             scenes: 'scene',
             capabilities: 'capability',
             tests: 'test',
+<<<<<<< Updated upstream
             base: 'base',
+=======
+>>>>>>> Stashed changes
         };
         const skillType = typeMap[dirName];
         for (const name of fs.readdirSync(typeDir)) {
@@ -73,7 +42,7 @@ function listSkills() {
 /**
  * 获取单个 Skill 详情（含 SKILL.md 内容）
  */
-function getSkill(name) {
+export function getSkill(name) {
     return listSkills().find((s) => s.name === name);
 }
 /**
@@ -123,7 +92,7 @@ function parseSkillFrontmatter(content, name, type, filePath) {
 /**
  * 获取 Skill 的文件路径（供 Agent SDK 加载）
  */
-function getSkillPath(name) {
+export function getSkillPath(name) {
     const skill = getSkill(name);
     return skill ? path.dirname(skill.path) : undefined;
 }

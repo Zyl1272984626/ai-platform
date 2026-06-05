@@ -34,8 +34,14 @@
             <span class="info-value password-row">
               <span v-if="visiblePasswords[s.code]">{{ s.passwords?.defaultPassword || '-' }}</span>
               <span v-else>••••••</span>
-              <button class="pwd-toggle" @click.stop="togglePassword(s.code)">
-                {{ visiblePasswords[s.code] ? '隐藏' : '显示' }}
+              <button
+                type="button"
+                class="pwd-toggle"
+                :title="visiblePasswords[s.code] ? '隐藏' : '显示'"
+                :aria-label="visiblePasswords[s.code] ? '隐藏' : '显示'"
+                @click.stop="togglePassword(s.code)"
+              >
+                <component :is="visiblePasswords[s.code] ? EyeOffOutline : EyeOutline" />
               </button>
             </span>
           </div>
@@ -68,6 +74,7 @@ import { useRouter } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SchoolForm from '../components/school/SchoolForm.vue'
+import { EyeOffOutline, EyeOutline } from '@vicons/ionicons5'
 import { listSchools, addSchool, updateSchool, deleteSchool, deploySchool } from '../api/schools'
 import type { School } from '../api/types'
 
@@ -223,17 +230,27 @@ async function doDeploy(s: School) {
   gap: 6px;
 }
 .pwd-toggle {
-  padding: 1px 6px;
-  border: 1px solid #ddd;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  border: none;
   border-radius: 4px;
-  background: #fff;
+  background: transparent;
   cursor: pointer;
-  font-size: 11px;
-  color: #999;
+  color: #8c8c8c;
 }
 .pwd-toggle:hover {
-  border-color: #667eea;
+  background: #f5f5f5;
   color: #667eea;
+}
+.pwd-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 .card-actions {
   display: flex;

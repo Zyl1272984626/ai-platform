@@ -1,11 +1,3 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createSession = createSession;
-exports.getSession = getSession;
-exports.listSessions = listSessions;
-exports.deleteSession = deleteSession;
-exports.sendMessage = sendMessage;
-exports.executeStep = executeStep;
 // 动态加载 claude-code，避免启动时阻塞
 let _query = null;
 async function getClaudeQuery() {
@@ -26,7 +18,7 @@ const AUTO_APPROVED_TOOLS = [
 ];
 // ========== 会话管理 ==========
 const sessions = new Map();
-function createSession(id, config) {
+export function createSession(id, config) {
     const mergedTools = [...new Set([...AUTO_APPROVED_TOOLS, ...(config.allowedTools || [])])];
     const session = {
         id,
@@ -39,13 +31,13 @@ function createSession(id, config) {
     sessions.set(id, session);
     return session;
 }
-function getSession(id) {
+export function getSession(id) {
     return sessions.get(id);
 }
-function listSessions() {
+export function listSessions() {
     return Array.from(sessions.values()).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
-function deleteSession(id) {
+export function deleteSession(id) {
     return sessions.delete(id);
 }
 // ========== 核心消息发送 ==========
@@ -57,7 +49,7 @@ function deleteSession(id) {
  * - allowedTools: 预授权工具列表
  * - maxTurns: 50 — 允许多轮工具调用
  */
-async function sendMessage(sessionId, message, emitter) {
+export async function sendMessage(sessionId, message, emitter) {
     const session = sessions.get(sessionId);
     if (!session) {
         emitter.emit('event', { type: 'error', content: 'Session not found' });
@@ -184,7 +176,7 @@ async function sendMessage(sessionId, message, emitter) {
 /**
  * 执行工作流单步（无会话，独立调用）
  */
-async function executeStep(prompt, config, emitter) {
+export async function executeStep(prompt, config, emitter) {
     const mergedTools = [...new Set([...AUTO_APPROVED_TOOLS, ...(config.allowedTools || [])])];
     const timeout = config.timeout || 0; // 0 表示无限制
     const abortController = new AbortController();

@@ -1,49 +1,11 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.initScheduler = initScheduler;
-exports.listScheduledJobs = listScheduledJobs;
-exports.toggleJob = toggleJob;
 /**
  * 定时任务调度器
  *
  * 支持 Cron 表达式触发工作流
  * 如：每日 09:00 自动执行 daily-check 工作流
  */
-const events_1 = require("events");
-const cron = __importStar(require("node-cron"));
+import { EventEmitter } from 'events';
+import * as cron from 'node-cron';
 // 预置定时任务
 const DEFAULT_JOBS = [
     {
@@ -58,7 +20,7 @@ const activeCronJobs = new Map();
 /**
  * 初始化所有定时任务
  */
-function initScheduler(workflowStarter) {
+export function initScheduler(workflowStarter) {
     for (const job of DEFAULT_JOBS) {
         if (!job.enabled)
             continue;
@@ -66,7 +28,7 @@ function initScheduler(workflowStarter) {
         const task = cron.schedule(job.cron, () => {
             console.log(`[Scheduler] Triggering: ${job.name}`);
             job.lastRun = new Date().toISOString();
-            const emitter = new events_1.EventEmitter();
+            const emitter = new EventEmitter();
             emitter.on('workflow:done', () => {
                 console.log(`[Scheduler] ${job.name} completed`);
             });
@@ -87,13 +49,13 @@ function initScheduler(workflowStarter) {
 /**
  * 列出所有定时任务
  */
-function listScheduledJobs() {
+export function listScheduledJobs() {
     return DEFAULT_JOBS;
 }
 /**
  * 启用/禁用定时任务
  */
-function toggleJob(name, enabled) {
+export function toggleJob(name, enabled) {
     const job = DEFAULT_JOBS.find((j) => j.name === name);
     if (!job)
         throw new Error(`Job not found: ${name}`);

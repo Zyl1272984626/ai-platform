@@ -38,7 +38,19 @@
           </div>
           <div class="summary-item">
             <span class="label">数据库 Root 密码</span>
-            <span class="value mono">{{ school.deployConfig?.dbRootPassword ? '••••••' : '未配置' }}</span>
+            <span class="value mono secret-value">
+              <span>{{ rootPasswordText }}</span>
+              <button
+                v-if="school.deployConfig?.dbRootPassword"
+                type="button"
+                class="summary-secret-toggle"
+                :title="showRootPassword ? '隐藏' : '显示'"
+                :aria-label="showRootPassword ? '隐藏' : '显示'"
+                @click="showRootPassword = !showRootPassword"
+              >
+                <component :is="showRootPassword ? EyeOffOutline : EyeOutline" />
+              </button>
+            </span>
           </div>
           <div class="summary-item">
             <span class="label">MySQL Docker 容器</span>
@@ -89,7 +101,7 @@
             <input type="checkbox" v-model="options.initSql" />
             <div class="check-content">
               <span class="check-title">启动后系统配置</span>
-              <span class="check-desc">应用启动并自动建表后，更新 fs_sys_config 并初始化 ai_model_source</span>
+              <span class="check-desc">应用启动并自动建表后，更新 fs_sys_config、ai_model_source 和 ai_file_storage</span>
             </div>
           </label>
         </div>
@@ -118,6 +130,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { EyeOffOutline, EyeOutline } from '@vicons/ionicons5'
 import { getSchool, deploySchoolFull } from '../api/schools'
 import type { School } from '../api/types'
 
@@ -127,6 +140,7 @@ const code = route.params.code as string
 
 const loading = ref(true)
 const deploying = ref(false)
+const showRootPassword = ref(false)
 const school = ref<School | null>(null)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 let messageTimer: ReturnType<typeof setTimeout> | null = null
@@ -155,6 +169,12 @@ const appServerLabel = computed(() => {
     return `Windows ${school.value?.deployConfig?.windowsDrive || school.value?.common?.windowsDrive || 'D:'}`
   }
   return 'Linux'
+})
+
+const rootPasswordText = computed(() => {
+  const password = school.value?.deployConfig?.dbRootPassword
+  if (!password) return '未配置'
+  return showRootPassword.value ? password : '••••••'
 })
 
 const warMissingFields = computed(() => {
@@ -325,6 +345,35 @@ async function doDeploy() {
 .summary-item .value.mono {
   font-family: monospace;
   font-size: 13px;
+}
+.secret-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.summary-secret-toggle {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8c8c8c;
+  cursor: pointer;
+}
+.summary-secret-toggle:hover {
+  background: #f5f5f5;
+  color: #667eea;
+}
+.summary-secret-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 /* Check list */

@@ -30,11 +30,14 @@ export interface TestProject {
     pageSets?: PageSet[];
     discoveredAt?: string;
     globalParams?: Record<string, string[]>;
+<<<<<<< Updated upstream
 }
 export interface ClaudeConfig {
     authToken: string;
     baseUrl: string;
     model: string;
+=======
+>>>>>>> Stashed changes
 }
 export interface PlatformConfig {
     projectRoot: string;
@@ -67,8 +70,11 @@ export declare function getGlobalParams(projectId: string): Record<string, strin
 export declare function saveGlobalParams(projectId: string, params: Record<string, string[]>): void;
 /** 保存原始发现数据到独立文件 */
 export declare function saveDiscoveryResult(projectId: string, discoveryResult: any): void;
+<<<<<<< Updated upstream
 /** 将 claudeConfig 同步到 process.env，让 SDK 和子进程能读取 */
 export declare function applyClaudeConfig(): void;
+=======
+>>>>>>> Stashed changes
 /** 从文件加载配置 */
 export declare function loadConfig(): PlatformConfig;
 /** 获取当前配置 */

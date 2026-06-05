@@ -1,54 +1,11 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.loadWorkflowDefinitions = loadWorkflowDefinitions;
-exports.getWorkflowDefinition = getWorkflowDefinition;
-exports.startWorkflow = startWorkflow;
-exports.resumeWorkflow = resumeWorkflow;
-exports.getWorkflowRun = getWorkflowRun;
-exports.listWorkflowRuns = listWorkflowRuns;
-exports.confirmStep = confirmStep;
-exports.abortWorkflow = abortWorkflow;
-const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
-const yaml = __importStar(require("js-yaml"));
-const uuid_1 = require("uuid");
-const config_js_1 = require("./config.js");
-const claude_client_js_1 = require("./claude-client.js");
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
+import { v4 as uuid } from 'uuid';
+import { PROJECT_ROOT, AI_PLATFORM_ROOT } from './config.js';
+import { executeStep } from './claude-client.js';
 // ========== 持久化 ==========
-const DATA_ROOT = path.resolve(config_js_1.AI_PLATFORM_ROOT, 'data');
+const DATA_ROOT = path.resolve(AI_PLATFORM_ROOT, 'data');
 const WORKFLOWS_DIR = path.join(DATA_ROOT, 'workflows');
 const RUNS_DIR = path.join(DATA_ROOT, 'runs');
 const activeRuns = new Map();
@@ -68,7 +25,7 @@ function loadRunState(runId) {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 // ========== 定义加载 ==========
-function loadWorkflowDefinitions() {
+export function loadWorkflowDefinitions() {
     if (!fs.existsSync(WORKFLOWS_DIR))
         return [];
     const files = fs.readdirSync(WORKFLOWS_DIR).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
@@ -77,16 +34,16 @@ function loadWorkflowDefinitions() {
         return yaml.load(content);
     });
 }
-function getWorkflowDefinition(name) {
+export function getWorkflowDefinition(name) {
     return loadWorkflowDefinitions().find((w) => w.name === name);
 }
 // ========== 运行管理 ==========
-function startWorkflow(workflowName, params, emitter) {
+export function startWorkflow(workflowName, params, emitter) {
     const definition = loadWorkflowDefinitions().find((w) => w.name === workflowName);
     if (!definition)
         throw new Error(`Workflow not found: ${workflowName}`);
     const run = {
-        id: (0, uuid_1.v4)(),
+        id: uuid(),
         workflowName,
         triggerParams: params,
         status: 'running',
@@ -117,7 +74,7 @@ function startWorkflow(workflowName, params, emitter) {
 /**
  * 从断点恢复
  */
-function resumeWorkflow(runId, emitter) {
+export function resumeWorkflow(runId, emitter) {
     const run = loadRunState(runId);
     if (!run)
         throw new Error(`Run not found: ${runId}`);
@@ -140,10 +97,10 @@ function resumeWorkflow(runId, emitter) {
     });
     return run;
 }
-function getWorkflowRun(runId) {
+export function getWorkflowRun(runId) {
     return activeRuns.get(runId) || loadRunState(runId);
 }
-function listWorkflowRuns() {
+export function listWorkflowRuns() {
     // 合并内存中和磁盘上的运行记录
     const diskRuns = [];
     if (fs.existsSync(RUNS_DIR)) {
@@ -159,7 +116,7 @@ function listWorkflowRuns() {
     const merged = [...activeRuns.values(), ...diskRuns.filter((r) => !memoryIds.has(r.id))];
     return merged.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 }
-function confirmStep(runId) {
+export function confirmStep(runId) {
     const run = activeRuns.get(runId) || loadRunState(runId);
     if (!run || run.status !== 'paused')
         return;
@@ -170,7 +127,7 @@ function confirmStep(runId) {
     run.status = 'running';
     saveRunState(run);
 }
-function abortWorkflow(runId) {
+export function abortWorkflow(runId) {
     const run = activeRuns.get(runId);
     if (run) {
         run.status = 'aborted';
@@ -256,8 +213,8 @@ async function executeSingleStep(step, stepRun, stepIndex, run, emitter) {
             // 构建 prompt
             const prompt = buildStepPrompt(step, resolvedInput);
             // 执行
-            const result = await (0, claude_client_js_1.executeStep)(prompt, {
-                cwd: config_js_1.PROJECT_ROOT,
+            const result = await executeStep(prompt, {
+                cwd: PROJECT_ROOT,
                 allowedTools: step.skill === 'zentao-client' ? ['Bash'] : undefined,
                 timeout: step.timeout,
             }, emitter);

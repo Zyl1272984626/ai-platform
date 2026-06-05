@@ -64,7 +64,7 @@
           </div>
           <div class="form-group">
             <label>DB Password</label>
-            <input v-model="form.dbPassword" type="password" placeholder="数据库密码" />
+            <PasswordInput v-model="form.dbPassword" placeholder="数据库密码" />
           </div>
           <div class="form-group">
             <label>MySQL Docker 容器名</label>
@@ -95,7 +95,7 @@
           </div>
           <div class="form-group">
             <label>密码</label>
-            <input v-model="form.passwords.defaultPassword" type="password" placeholder="登录密码" />
+            <PasswordInput v-model="form.passwords.defaultPassword" placeholder="登录密码" />
           </div>
         </div>
       </section>
@@ -129,7 +129,7 @@
           </div>
           <div class="form-group">
             <label>数据库 Root 密码</label>
-            <input v-model="form.deployConfig.dbRootPassword" type="password" placeholder="目标服务器数据库 root 密码" />
+            <PasswordInput v-model="form.deployConfig.dbRootPassword" placeholder="目标服务器数据库 root 密码" />
           </div>
         </div>
       </section>
@@ -147,7 +147,7 @@
           </div>
           <div class="form-group">
             <label>超级密码</label>
-            <input v-model="form.passwords.superPassword" type="password" placeholder="超级用户密码" />
+            <PasswordInput v-model="form.passwords.superPassword" placeholder="超级用户密码" />
           </div>
           <div class="form-group">
             <label>密码 Salt</label>
@@ -173,7 +173,7 @@
           </div>
           <div class="form-group">
             <label>Druid 密码</label>
-            <input v-model="form.common.druidPassword" type="password" placeholder="Druid 监控密码" />
+            <PasswordInput v-model="form.common.druidPassword" placeholder="Druid 监控密码" />
           </div>
         </div>
       </section>
@@ -195,7 +195,7 @@
           </div>
           <div class="form-group">
             <label>OneApi Key</label>
-            <input v-model="form.deployConfig.oneapiKey" placeholder="sk-xxx" />
+            <PasswordInput v-model="form.deployConfig.oneapiKey" placeholder="sk-xxx" />
           </div>
         </div>
       </section>
@@ -217,7 +217,7 @@
           </div>
           <div class="form-group">
             <label>API Key</label>
-            <input v-model="form.deployConfig.knowledgeApiKey" placeholder="知识中心 API Key" />
+            <PasswordInput v-model="form.deployConfig.knowledgeApiKey" placeholder="知识中心 API Key" />
           </div>
         </div>
       </section>
@@ -250,6 +250,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
+import PasswordInput from '../components/common/PasswordInput.vue'
 import { getSchool, updateSchool } from '../api/schools'
 import type { School } from '../api/types'
 

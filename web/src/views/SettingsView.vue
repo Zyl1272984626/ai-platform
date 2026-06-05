@@ -295,7 +295,7 @@
         </div>
         <div class="form-group">
           <label>密码 <span class="required">*</span></label>
-          <input v-model="projectForm.password" type="password" placeholder="登录密码" />
+          <PasswordInput v-model="projectForm.password" placeholder="登录密码" />
         </div>
         <div class="form-group">
           <label>源码路径（可选）</label>
@@ -880,6 +880,7 @@ import { ref, reactive, computed, onMounted, nextTick, type Ref } from 'vue'
 import { marked } from 'marked'
 import { getSettings, updateSettings, checkSettings, testClaude, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
+import PasswordInput from '../components/common/PasswordInput.vue'
 import {
   getProjects as fetchProjects,
   addProject as apiAddProject,
