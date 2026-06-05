@@ -89,9 +89,40 @@ Glob("src/**/*.go")                                # Go 后端
 - 将前端和后端分别按模块分组，标注风险等级
 - 后端模块重点关注：Controller 层（接口入口）、Service 层（业务逻辑）、DAO/Mapper 层（数据访问）、Config 层（配置与鉴权）
 
+### 步骤 3.5：分析前端文件导出信息（仅存在前端时执行）
+
+对前端模块中的关键文件，用 `Grep` 搜索导出模式，识别每个文件的**导出类型和依赖关系**。这些信息将供下游测试生成 Skill 消费，避免测试生成时错误判断文件类型。
+
+**必须分析的导出模式：**
+
+```
+# 默认导出
+Grep("export default")           → function / class / object / constant
+Grep("export default function")  → 命名函数
+Grep("export default {")         → 对象字面量
+Grep("export default defineComponent") → Vue 组件
+
+# 命名导出
+Grep("export const")             → 常量
+Grep("export function")          → 命名函数
+Grep("export class")             → 类
+
+# 特殊模式
+Grep("defineStore")              → Pinia Store
+Grep("use[A-Z]")                 → Vue Composable
+```
+
+**对于识别到的关键文件，Read 头部 20-30 行确认：**
+- `exportType`：`function` | `object` | `component` | `composable` | `store` | `constant` | `class`
+- `exportName`：导出的函数名/组件名
+- `dependencies`：文件 import 了哪些需要 mock 的外部依赖（如 useTheme、echarts、vue-router 等）
+- `testCategory`：推荐归入的测试类别（utils / components / stores / composables / config）
+
+**注意**：不需要分析所有文件，只分析每个模块的 `keyFiles`（步骤 3 中已标注）。
+
 ### 步骤 4：生成并写入结果
 
-- 用 Write 工具写入 `review-discovery.json`
+- 用 Write 工具写入 `review-discovery.json`（含 fileAnalysis 字段）
 - 用 Write 工具写入 `review-rules.json`
 
 **充分扫描，不要遗漏，直到分析完成再写入结果。**
@@ -155,7 +186,25 @@ Glob("src/**/*.go")                                # Go 后端
       "riskLevel": "high/medium/low",
       "riskIndicators": ["该模块涉及哪些敏感操作"]
     }
-  ]
+  ],
+  "fileAnalysis": {
+    "说明": "前端关键文件的导出类型分析，供下游测试生成 Skill 消费",
+    "files": [
+      {
+        "path": "frontend/src/components/agent/components/chart/bar/theme.js",
+        "exportType": "function",
+        "exportName": "getChartBarTheme",
+        "exportStyle": "default",
+        "testCategory": "config",
+        "dependencies": [
+          { "module": "../../core/useTheme.js", "name": "useTheme", "mockStrategy": "vi.fn() 返回 { theme: ref('light') }" },
+          { "module": "../../core/theme/index.js", "name": "getBaseOption", "mockStrategy": "vi.fn() 返回基础配置对象" },
+          { "module": "lodash", "name": "_", "mockStrategy": "保留真实实现或 vi.mock('lodash/merge')" }
+        ],
+        "testHints": "函数接受 horizontal 参数，内部读取 theme.value，返回合并后的 ECharts 配置对象。测试时需 mock useTheme 和 getBaseOption，测试 horizontal=true/false 和 dark/light 主题的组合"
+      }
+    ]
+  }
 }
 ```
 

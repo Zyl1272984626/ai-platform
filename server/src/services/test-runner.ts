@@ -452,6 +452,10 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
   const scope = (config.scope as string) || 'all';
   const projectSlug = project?.name ? project.name.replace(/[<>:"/\\|?*\s]+/g, '_') : '_default';
   const e2eDataDir = getConfig().e2eDataDir || getConfig().testDataDir;
+  const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+  const knowledgeGraphPath = projectId
+    ? path.join(DATA_DIR, 'projects', projectId, 'page-context.json').replace(/\\/g, '/')
+    : '';
 
   // 初始化 resumeInfo
   if (!getResumeInfo(suite).cases || Object.keys(getResumeInfo(suite).cases).length === 0) {
@@ -533,10 +537,10 @@ ${paramsInfo}
 ${pageListPrompt}
 输入参数：
 \`\`\`json
-{"mode": "${mode}", "scope": "${scope}", "projectId": "${projectId}", "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"}
+{"mode": "${mode}", "scope": "${scope}", "projectId": "${projectId}", "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"${knowledgeGraphPath ? `, "knowledgeGraphPath": "${knowledgeGraphPath}"` : ''}}
 \`\`\`
 
-请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 记录结果。`;
+${knowledgeGraphPath ? `知识图谱文件路径：\`${knowledgeGraphPath}\`（请使用 Read 工具读取该文件加载知识图谱数据）\n` : ''}请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 记录结果。`;
 
     // 执行单个 PageSet 的测试
     await runE2ESinglePageSet(
@@ -822,15 +826,19 @@ ${pages.map(p => `- ${p.name}: ${baseUrl}${p.url}`).join('\n')}
 `;
   }
 
+  const kgPath = projectId
+    ? path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data'), 'projects', projectId, 'page-context.json').replace(/\\/g, '/')
+    : '';
+
   const prompt = `请使用 e2e-page-test 技能，以 ${mode} 模式测试${project ? ` ${project.name}` : ''} ${scope} 范围的页面。
 
 ${pageListPrompt}
 输入参数：
 \`\`\`json
-{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"}
+{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir.replace(/\\/g, '/')}", "projectName": "${projectSlug}"${kgPath ? `, "knowledgeGraphPath": "${kgPath}"` : ''}}
 \`\`\`
 
-请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
+${kgPath ? `知识图谱文件路径：\`${kgPath}\`（请使用 Read 工具读取该文件加载知识图谱数据）\n` : ''}请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。`;
 
   mainCase.name = `E2E ${mode} 模式 (${scope})`;
   mainCase.status = 'running';
@@ -1086,10 +1094,37 @@ function loadFrontendTestSkill(variables: Record<string, string>): string {
 }
 
 /** 将发现结果中单个模块的信息格式化为 Skill 能理解的文本 */
-function buildFrontendModuleInfo(mod: any): string {
+function buildFrontendModuleInfo(mod: any, fileAnalysisMap?: Map<string, any>): string {
   const files = (mod.files || []).map((f: any) => {
     let info = `- ${f.path}`;
     if (f.exports?.length) info += ` (导出: ${f.exports.join(', ')})`;
+
+    // 优先使用 frontend-discovery 自身的 exportType/mockDeps 字段
+    const exportType = f.exportType;
+    const exportName = f.exportName;
+    const mockDeps = f.mockDeps;
+    if (exportType) info += `\n  导出类型: ${exportType}`;
+    if (exportName) info += ` | 导出名: ${exportName}`;
+    if (mockDeps?.length) {
+      info += '\n  需要 mock: ' + mockDeps.join(', ');
+    }
+
+    // 兜底：附加 review-discovery 的文件分析信息（如有）
+    const analysis = fileAnalysisMap?.get(f.path);
+    if (analysis && !exportType) {
+      info += `\n  导出类型: ${analysis.exportType || 'unknown'}`;
+      if (analysis.exportName) info += ` | 导出名: ${analysis.exportName}`;
+      if (analysis.testCategory) info += ` | 测试分类: ${analysis.testCategory}`;
+      if (analysis.dependencies?.length) {
+        info += '\n  需要 mock:\n' + analysis.dependencies.map((d: any) =>
+          `    - ${d.name} from ${d.module}${d.mockStrategy ? ` — ${d.mockStrategy}` : ''}`
+        ).join('\n');
+      }
+      if (analysis.testHints) info += `\n  测试提示: ${analysis.testHints}`;
+    } else if (analysis && analysis.testHints) {
+      info += `\n  测试提示: ${analysis.testHints}`;
+    }
+
     if (f.functions?.length) {
       info += '\n  函数:\n' + f.functions.map((fn: any) =>
         `    - ${fn.name}(${fn.params?.join(', ') || ''}) — ${fn.description}`
@@ -1223,10 +1258,31 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
     return;
   }
 
+  // 读取 review-discovery 的文件分析数据（如有）
+  const reviewDiscoveryPath = path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json');
+  let fileAnalysisMap = new Map<string, any>();
+  try {
+    const reviewData = JSON.parse(fs.readFileSync(reviewDiscoveryPath, 'utf-8'));
+    const fa = reviewData?.fileAnalysis?.files;
+    if (Array.isArray(fa)) {
+      for (const item of fa) {
+        if (item.path) fileAnalysisMap.set(item.path, item);
+      }
+    }
+  } catch { /* review-discovery 可选，不存在不影响 */ }
+
   const selectedModuleIds = (config.modules as string[]) || [];
   const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
   const testsOutputDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'frontend', projectSlug);
   if (!fs.existsSync(testsOutputDir)) fs.mkdirSync(testsOutputDir, { recursive: true });
+
+  // 读取 page-context 数据（修复 Path A 缺少 pageContextSection 的 bug）
+  let pageContextSection = '暂无知识图谱数据。请仅基于源码分析生成测试。';
+  try {
+    const pageContextPath = path.join(DATA_DIR, 'projects', projectId!, 'page-context.json');
+    const pageContext = JSON.parse(fs.readFileSync(pageContextPath, 'utf-8'));
+    pageContextSection = buildPageContextSection(null, pageContext);
+  } catch { /* ignore */ }
 
   const abortController = new AbortController();
   abortControllers.set(suite.id, abortController);
@@ -1276,10 +1332,11 @@ async function runFrontendTest(suite: TestSuite, config: Record<string, unknown>
       const skillContent = loadFrontendTestSkill({
         projectName: project.name,
         sourcePath: project.sourcePath!,
-        moduleInfoSection: buildFrontendModuleInfo(mod),
+        moduleInfoSection: buildFrontendModuleInfo(mod, fileAnalysisMap),
         testsOutputDir: testsOutputDir.replace(/\\/g, '/'),
         frontendSrcDir,
         frontendSrcPath,
+        pageContextSection,
       });
 
       await runSingleModuleFrontendTest(suite, tc, mod, project.sourcePath!, abortController, skillContent, resumeSessionId);
@@ -2483,8 +2540,29 @@ export function buildReviewHtml(projectName: string, markdown: string, duration:
     return { critical, warning, info };
   }
 
+  // 在报告头部的元数据字段（审查日期、审查范围、风险等级）之间插入空行，确保各占一行
+  function formatHeaderFields(md: string): string {
+    // 第一步：先拆审查范围——将 "**审查范围**:" 与文件路径列表分开，文件路径单独成行
+    let result = md.replace(
+      /(\*\*审查范围\*\*[:：])\s*((?:`[^`]+`\s*,?\s*)+)/g,
+      '$1\n\n$2'
+    );
+    // 第二步：在连续的字段行之间插入空行，使 marked 渲染为独立段落
+    result = result.replace(
+      /^(\*\*(?:审查日期|审查范围|审查工具|风险等级)\*\*[:：].*)$(\n)(\*\*(?:审查日期|审查范围|审查工具|风险等级)\*\*[:：])/gm,
+      '$1\n\n$3'
+    );
+    // 第三步：文件路径行（以反引号开头）后面紧跟风险等级时，插入空行
+    result = result.replace(
+      /^(`[^`]+`.*)$(\n)(\*\*(?:审查日期|审查范围|审查工具|风险等级)\*\*[:：])/gm,
+      '$1\n\n$3'
+    );
+    return result;
+  }
+
   if (splits.length === 0) {
-    const html = marked.parse(markdown) as string;
+    const formatted = formatHeaderFields(markdown);
+    const html = marked.parse(formatted) as string;
     const score = extractScore(markdown);
     const risk = extractRisk(markdown);
     const sev = countSeverity(markdown);
@@ -2495,7 +2573,8 @@ export function buildReviewHtml(projectName: string, markdown: string, duration:
       const start = markdown.indexOf('\n', splits[i].index);
       const end = i + 1 < splits.length ? splits[i + 1].index : markdown.length;
       const content = markdown.substring(start !== -1 ? start + 1 : splits[i].index, end).trim();
-      const html = marked.parse(content) as string;
+      const formatted = formatHeaderFields(content);
+      const html = marked.parse(formatted) as string;
       const score = extractScore(content);
       const risk = extractRisk(content);
       const sev = countSeverity(content);
@@ -3424,6 +3503,10 @@ ${fullScopeText}
     const scope = (config.scope as string) || 'all';
     const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
     const e2eDataDir = (getConfig().testDataDir || getConfig().e2eDataDir).replace(/\\/g, '/');
+    const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+    const knowledgeGraphPath = projectId
+      ? path.join(DATA_DIR, 'projects', projectId, 'page-context.json').replace(/\\/g, '/')
+      : '';
 
     // 构建页面列表
     const pages = resolvePages(project, scope);
@@ -3451,15 +3534,16 @@ ${paramsInfo ? `\n${paramsInfo}\n` : ''}
 - 范围: ${scope}
 - e2eDataDir: ${e2eDataDir}
 - projectName: ${projectSlug}
+${knowledgeGraphPath ? `- 知识图谱路径: ${knowledgeGraphPath}` : ''}
 
 ## 待测试页面 (${pages.length}页)
 ${pageList}
 
-请严格按照 Skill 文件中的流程执行：登录 → 逐页测试（observe → think → act → validate）→ 生成报告。
+请严格按照 Skill 文件中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 生成报告。
 
 输入参数（Skill 中引用的变量）：
 \`\`\`json
-{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir}", "projectName": "${projectSlug}"}
+{"mode": "${mode}", "scope": "${scope}"${projectId ? `, "projectId": "${projectId}"` : ''}, "e2eDataDir": "${e2eDataDir}", "projectName": "${projectSlug}"${knowledgeGraphPath ? `, "knowledgeGraphPath": "${knowledgeGraphPath}"` : ''}}
 \`\`\`
 
 注意：测试产物请写入 e2eDataDir 对应的目录结构中，路径中包含项目名 ${projectSlug}。`;
@@ -3475,6 +3559,18 @@ ${pageList}
     try { discovery = JSON.parse(fs.readFileSync(discoveryPath, 'utf-8')); } catch { /* ignore */ }
     if (!discovery?.modules) throw new Error('请先在设置页面点击「发现组件」');
 
+    // 读取 review-discovery 的文件分析数据
+    let fileAnalysisMap = new Map<string, any>();
+    try {
+      const reviewData = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'projects', projectId!, 'review-discovery.json'), 'utf-8'));
+      const fa = reviewData?.fileAnalysis?.files;
+      if (Array.isArray(fa)) {
+        for (const item of fa) {
+          if (item.path) fileAnalysisMap.set(item.path, item);
+        }
+      }
+    } catch { /* review-discovery 可选 */ }
+
     const selectedModuleIds = (config.modules as string[]) || [];
     const selectedModules = selectedModuleIds.length > 0
       ? discovery.modules.filter((m: any) => selectedModuleIds.includes(m.id))
@@ -3484,7 +3580,7 @@ ${pageList}
     const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
     const testsOutputDir = path.join(getConfig().testDataDir || getConfig().e2eDataDir, 'frontend', projectSlug).replace(/\\/g, '/');
     const moduleParts = selectedModules.map((mod: any) => {
-      const moduleInfo = buildFrontendModuleInfo(mod);
+      const moduleInfo = buildFrontendModuleInfo(mod, fileAnalysisMap);
       return `${moduleInfo}\n\n测试文件输出目录: ${testsOutputDir}/${mod.id || 'unknown'}/`;
     }).join('\n\n---\n\n');
 

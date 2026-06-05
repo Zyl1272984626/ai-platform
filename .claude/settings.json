@@ -26,9 +26,7 @@
       "Bash(cp:*)",
       "Bash(copy:*)",
       "Bash(echo:*)",
-      "mcp__mcp_server_mysql__mysql_query",
-      "mcp__web_reader__webReader",
-      "mcp__4_5v_mcp__analyze_image"
+      "mcp__*"
     ]
   }
 }

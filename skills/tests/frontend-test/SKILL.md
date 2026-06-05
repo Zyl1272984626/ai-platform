@@ -12,7 +12,7 @@ constraints:
 
 # 前端单元测试生成
 
-你是一位严格的前端测试工程师。请根据发现结果，为指定模块的**每一个可测试文件**生成完整的 vitest 单元测试。
+你是一位严格的前端测试工程师。请根据发现结果，为指定模块的**每一个可测试文件**生成正确的 vitest 单元测试。
 
 ## 工具使用约束（必须严格遵守）
 
@@ -75,74 +75,152 @@ constraints:
    vi.mock('vue-echarts')
    ```
 
-### 按类别生成策略
+4. **Import 不带文件后缀**：使用 `@/utils/string` 而不是 `@/utils/string.js`
 
-#### utils（工具函数）— 每个函数至少 3 个测试用例
-- 直接 import 源码函数（使用 `@/` alias）
-- 给定输入，断言输出
-- 覆盖正常值、边界值、异常值
-- 每个函数至少 3 个测试用例（正常/边界/异常）
-- 示例：
-  ```typescript
-  describe('randomString', () => {
-    it('应该生成指定长度的随机字符串', () => { ... })
-    it('应该生成随机长度范围内的字符串', () => { ... })
-    it('应该处理无效输入（负数、零）', () => { ... })
-  })
-  ```
+---
 
-#### components（Vue 组件）— 每个组件至少 4 个测试用例
+## 执行步骤
+
+### 步骤 1：逐文件 Read 源码
+
+读取模块信息中每个文件的真实源码内容。
+
+### 步骤 2：分析导出类型（关键步骤，不可跳过）
+
+**对每个源文件，Read 完成后必须先判定导出类型再写测试。**
+
+用以下规则判定：
+
+| 源码特征 | exportType | 影响 |
+|----------|-----------|------|
+| `export default defineComponent(...)` 或 `<script setup>` | component | 用 mount() 挂载测试 |
+| `const useXxx = defineStore(...)` | store | 用 createPinia() 测试 |
+| `export default function xxx(...)` 且内部调用了 Vue API (ref/reactive/computed/watch) | composable | 用宿主组件包裹测试 |
+| `export const useXxx = (...)` 且内部调用了 Vue API | composable | 用宿主组件包裹测试 |
+| `export default function xxx(...)` 且**不含** Vue API | function | 直接调用函数，断言返回值 |
+| `export default { ... }` 或 `export const xxx = { ... }` | object | 直接断言对象结构 |
+| `export function xxx(...)` 纯函数，无框架依赖 | function | 直接调用，断言输入输出 |
+
+**判定后，记录以下信息用于生成测试：**
+- `exportType`：导出类型
+- `exportName`：导出的函数名/变量名
+- `needsCall`：是否需要先调用（function/composable 类型为 true）
+- `mockDeps`：需要 mock 的依赖列表
+
+**常见错误避免：**
+- `export default function getTheme()` → 这是一个**函数**，不是对象。测试时必须先调用 `getTheme()` 再断言返回值
+- `export default { color: [...] }` → 这是一个**对象**，可以直接断言
+- 不要用 `typeof theme === 'object'` 来测试函数导出
+
+### 步骤 3：按策略生成测试
+
+根据步骤 2 判定的 exportType，从以下策略中选择：
+
+#### function（纯函数 / 配置生成函数）— 每个函数至少 3 个测试用例
+
+**适用于**：theme.js、options.js、formatters 等导出函数的文件
+
+```typescript
+// 正确示范：函数导出
+import getChartTheme from '@/components/xxx/theme'
+
+vi.mock('@/xxx/core/useTheme', () => ({
+  useTheme: () => ({ theme: { value: 'light' } })
+}))
+
+it('应该返回配置对象', () => {
+  const config = getChartTheme()    // ← 先调用函数
+  expect(typeof config).toBe('object')  // ← 断言返回值
+  expect(config).toHaveProperty('legend')
+})
+```
+
+**测试维度：**
+- 调用后返回值类型和结构正确
+- 不同参数产生不同配置
+- 依赖被正确调用
+
+#### object（配置对象 / 常量）— 至少 2 个测试用例
+
+```typescript
+import themeConfig from '@/xxx/config'
+
+it('应该导出正确的配置对象', () => {
+  expect(themeConfig).toBeDefined()
+  expect(typeof themeConfig).toBe('object')
+  expect(themeConfig).toHaveProperty('color')
+})
+```
+
+#### component（Vue 组件）— 每个组件至少 4 个测试用例
+
 - 使用 `@vue/test-utils` 的 `mount()` 挂载组件
 - 测试渲染输出：检查关键元素是否存在、文本内容是否正确
-- 测试用户交互：使用 `trigger()` 触发事件，断言组件状态或 DOM 变化
+- 测试用户交互：使用 `trigger()` 触发事件
 - 测试 Props：传入不同 props 断言渲染结果
-- 测试 Emits：触发操作后检查 `wrapper.emitted()` 是否包含预期事件
-- 对外部组件库（Element Plus、Naive UI、Ant Design Vue 等）的引用，用 `stubs` 替代（如 `NButton: true`、`ElButton: true`）
+- 测试 Emits：触发操作后检查 `wrapper.emitted()`
+- 外部组件库用 `stubs` 替代（如 `NButton: true`）
 - Pinia store 用 `createTestingPinia()` 或 `createPinia()` 注入
-- **对于图表组件（ECharts）**：mock `echarts` 和 `vue-echarts`，测试配置生成逻辑
-- **对于表单组件**：测试表单验证规则、数据绑定、提交事件
+- 图表组件 mock `echarts` 和 `vue-echarts`
 
-#### stores（Pinia Store）— 每个文件至少 4 个测试用例
+#### store（Pinia Store）— 每个文件至少 4 个测试用例
+
 - import Store 定义
 - 用 createPinia() 创建测试实例
 - 测试 action 调用后的 state 变更
 - 测试 getter 的计算结果
-- 对 API 调用用 `vi.fn()` mock
-- 测试初始状态是否正确
-- 测试异步 action 的 loading/error 状态
+- API 调用用 `vi.fn()` mock
+- 测试初始状态、异步 action 的 loading/error 状态
 
-#### pages（hooks/composables）— 每个文件至少 3 个测试用例
-- 这是**业务逻辑最集中**的类别，务必认真对待
-- 对于纯逻辑函数（如 `mergeCurrentMessage`、`parseReasoningContent`）：直接测试输入输出
-- 对于 Vue composables（以 `use` 开头的）：
-  - 用 `mount` 一个测试宿主组件来测试 composable
-  - 或者直接在 `setup` 函数中调用 composable
-  ```typescript
-  import { withSetup } from './test-utils' // 如果有
-  // 或者手动包装
-  let result: ReturnType<typeof useXxx>
+#### composable（Vue Composable）— 每个文件至少 3 个测试用例
+
+```typescript
+function withComposable(composableFn) {
+  let result
   const wrapper = mount({
     setup() {
-      result = useXxx()
+      result = composableFn()
       return () => null
     }
   })
-  ```
+  return { result, wrapper }
+}
+
+it('应该返回响应式数据', () => {
+  const { result } = withComposable(() => useXxx())
+  expect(result.data).toBeDefined()
+})
+```
+
 - 对 API 依赖用 `vi.fn()` mock
 - 对路由依赖用 `vi.mock('vue-router')` 处理
 - 对 Pinia 依赖用 `createPinia()` 注入
 
-### 测试文件结构模板
+### 步骤 4：用 Write 写入测试文件
+
+将生成的测试文件写入对应子目录。
+
+### 步骤 5：检查清单
+
+确保模块中的每个文件都生成了测试（不要遗漏任何一个）。
+
+**重要**：
+- 不要因为文件"太简单"就跳过。简单的文件生成简单测试即可
+- 不要因为组件依赖外部库就跳过。用 mock/stub 处理
+- 不要因为 composable 依赖 Pinia/Router 就跳过。用 createPinia()/vi.mock() 处理
+- 如果一个文件有很多函数/方法，每个都要有测试覆盖
+
+---
+
+## 测试文件结构模板
 
 ```typescript
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
-import { createPinia, setActivePinia } from 'pinia'
 // import 源码组件/函数（使用 @/ alias 指向 {{frontendSrcDir}}）
+// 根据步骤2的分析结果，正确处理 import
 
 describe('模块名', () => {
   beforeEach(() => {
-    setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
@@ -177,20 +255,6 @@ describe('模块名', () => {
 
 如果对应子目录不存在，Write 工具会自动创建。
 
-## 执行步骤
-
-1. **逐文件 Read 源码**：读取模块信息中每个文件的真实源码内容
-2. **分析可测试逻辑**：识别函数、computed、watch、事件处理、action 等
-3. **生成 .test.ts 文件**：为每个源码文件生成对应的测试文件
-4. **用 Write 写入**对应子目录
-5. **检查清单**：确保模块中的每个文件都生成了测试（不要遗漏任何一个）
-
-**重要**：
-- 不要因为文件"太简单"就跳过。简单的文件生成简单测试即可
-- 不要因为组件依赖外部库就跳过。用 mock/stub 处理
-- 不要因为 composable 依赖 Pinia/Router 就跳过。用 createPinia()/vi.mock() 处理
-- 如果一个文件有很多函数/方法，每个都要有测试覆盖
-
 ## 测试后报告生成（自动）
 
 测试文件生成后，系统会自动执行以下步骤（无需 AI 参与）：
@@ -200,4 +264,4 @@ describe('模块名', () => {
 3. **报告路径**：HTML 报告保存在 `{testDataDir}/frontend/reports/{projectSlug}/frontend-test-{timestamp}.html`
 4. **前端展示**：通过 `GET /api/tests/runs/:id/report` 接口可直接查看报告
 
-请立即开始生成测试文件。记得：**每个源码文件都必须有对应的 .test.ts 文件**。
+请立即开始生成测试文件。记得：**每个源码文件都必须有对应的 .test.ts 文件**，且测试必须正确匹配源码的导出类型。

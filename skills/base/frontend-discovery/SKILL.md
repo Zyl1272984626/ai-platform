@@ -84,7 +84,7 @@ constraints:
 - `pages/*/modules/voice/`、`pages/*/modules/message/utils/` 等特殊模块不要跳过
 - 如果某个文件有 `export function` 或 `export class`，即使文件名不包含 `use` 前缀，也应该评估是否收录
 
-### 步骤 4：分析可测试性
+### 步骤 4：分析可测试性与导出类型
 
 - `Read` 关键文件，识别有明确输入输出的函数
 - 对 Vue 组件：只跳过纯静态展示（无 script 或 script 中只有 import）、纯模板组件
@@ -93,6 +93,22 @@ constraints:
 - 对 hooks/composables：全部收录（这是业务逻辑最集中的地方）
 - 对 Store：全部收录
 - 按复杂度分类：low（纯函数）/ medium（有状态）/ high（有副作用）
+
+**导出类型分析（为每个收录的文件判定）：**
+
+对每个收录的文件，Read 头部 20-30 行后判定 `exportType`：
+
+| 源码特征 | exportType | testCategory |
+|----------|-----------|-------------|
+| `export default defineComponent(...)` 或 `<script setup>` | component | components |
+| `const useXxx = defineStore(...)` | store | stores |
+| `export default function xxx(...)` 且内部调用了 Vue API (ref/reactive/computed/watch) | composable | pages |
+| `export const useXxx = (...)` 且内部调用了 Vue API | composable | pages |
+| `export default function xxx(...)` 且不含 Vue API | function | utils |
+| `export default { ... }` 或 `export const xxx = { ... }` | object | utils |
+| `export function xxx(...)` 纯函数，无框架依赖 | function | utils |
+
+同时识别文件 import 了哪些外部依赖，记录到 `mockDeps` 中（如 `useTheme`、`echarts`、`axios` 等需要 mock 的依赖）。
 
 ### 步骤 5：写入结果
 - 用 Write 工具写入 `frontend-discovery.json`
@@ -161,8 +177,11 @@ constraints:
         {
           "path": "相对于项目根的路径（如 frontend/src/utils/xxx.ts）",
           "exports": ["functionName"],
+          "exportType": "function | object | component | store | composable",
+          "exportName": "具体的导出函数名/变量名（如 getChartBarTheme）",
           "description": "函数描述",
           "complexity": "low",
+          "mockDeps": ["需要 mock 的外部依赖，如 useTheme、echarts"],
           "functions": [
             { "name": "functionName", "params": ["param1"], "description": "功能描述" }
           ]
