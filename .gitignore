@@ -28,3 +28,4 @@ Thumbs.db
 npm-debug.log*
 server/package-lock.json
 /data
+server/data/platform-config.json
