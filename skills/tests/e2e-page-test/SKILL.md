@@ -37,7 +37,9 @@ constraints:
 ## 浏览器资源管理（硬性约束）
 
 - **同时打开的浏览器标签页不得超过 5 个**
-- 每个页面测试完成后，**必须关闭当前标签页**（`browser_close`）再打开下一个页面
+- 页面间导航使用**同一标签页内直接跳转**（`browser_navigate` 到下一个 URL），避免关闭标签页后 session 过期
+- 只有在标签页泄漏（超过 5 个）时才需要关闭多余标签页
+- 如果导航后检测到被重定向到登录页，需重新登录后继续
 - 如果测试过程中发现标签页泄漏（超过 5 个），立即关闭多余标签页再继续
 - 截图可以复用当前标签页，不需要额外打开新标签
 
@@ -55,12 +57,15 @@ constraints:
   runs/{projectName}/{runId}/
     run.json                    # 运行元数据（开始时间、模式、状态）
     pages/
-      {pageId}.json             # 每页独立的结果文件
-    screenshots/
-      {pageId}-{操作名}.png     # 截图文件
+      {pageId}.json             # 每页独立的结果文件（JSON）
+      {pageId}/                 # 每页独立文件夹，存放截图和快照
+        {pageId}-{操作名}.png   # 截图文件（如 setting-system-app-0-新增成功.png）
+        page-{timestamp}.yml    # 页面快照文件（由 browser_snapshot 自动生成）
     cross-page-issues.json      # 跨页面关联问题（测试完成后汇总）
   reports/{projectName}/{runId}.html  # 最终 HTML 报告
 ```
+
+**关键原则：每个页面的所有产物（JSON 结果、截图、快照）都统一放在 `pages/{pageId}/` 文件夹下**，方便后续 HTML 报告按页面聚合引用。
 
 ### 保存时机
 
@@ -237,6 +242,26 @@ constraints:
 
 **最重要的原则：你不是在执行检查清单，你是一个试图发现 bug 的 QA 工程师。**
 
+**截图硬性规则（每步必截）：**
+
+每次有意义的操作后都必须截图，命名格式为 `{pageId}-{操作描述}.png`。一张截图就是一个"证据"，能让没看过页面的人理解当时发生了什么。至少应覆盖：
+
+| 时机 | 示例文件名 |
+|------|-----------|
+| 页面初始加载 | `setting-system-app-0-初始状态.png` |
+| 搜索/筛选后 | `setting-system-app-0-搜索过滤.png` |
+| 弹窗打开（含数据回填） | `setting-system-app-0-新增弹窗.png` |
+| 表单填写完成 | `setting-system-app-0-新增填写完成.png` |
+| 提交/保存后结果 | `setting-system-app-0-新增成功验证.png` |
+| 编辑前后对比 | `setting-system-app-0-编辑验证.png` |
+| 删除确认弹窗 | `setting-system-app-0-删除确认.png` |
+| 删除后列表 | `setting-system-app-0-删除后恢复.png` |
+| 边界/异常输入 | `setting-system-app-0-空值校验.png` |
+| 错误提示或异常状态 | `setting-system-app-0-错误提示.png` |
+| 跨页面跳转后 | `setting-system-app-0-跳转结果.png` |
+
+**经验法则：一个 deep 模式的 CRUD 管理页至少应有 6-10 张截图，只读页至少 3-4 张。**
+
 **测试想象力引导：**
 
 1. **模拟真实用户路径**
@@ -285,12 +310,27 @@ constraints:
 - bug：明确的功能缺陷或异常行为
 - suggestion：不是 bug 但值得改进的点（如交互体验、性能优化、UI 细节）
 
-#### 页面完成 → 保存结果 → 关闭标签
+#### 页面完成 → 保存结果 → 迁移产物
 
 每个页面测试完成后：
 1. **立即保存结果到磁盘**（`Write` 到 `{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}.json`）
-2. **更新 run.json** 中的已完成页面数
-3. **关闭当前浏览器标签页**（`browser_close`），防止标签页堆积
+2. **迁移所有产物到页面文件夹**：截图和快照默认保存在项目目录的 `.playwright-mcp/` 下，每页测完后必须迁移到 `{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}/` 文件夹：
+
+```bash
+# 创建页面文件夹
+mkdir -p "{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}"
+
+# 迁移截图（使用 mv 移动而非复制，迁移后源文件自动删除）
+mv {pageId}-*.png "{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}/" 2>/dev/null
+mv .playwright-mcp/screenshots/{pageId}-*.png "{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}/" 2>/dev/null
+
+# 迁移快照（browser_snapshot 生成的 page-*.yml 文件）
+# 注意：快照文件名为时间戳，需按本页测试的时间范围筛选
+mv .playwright-mcp/page-*.yml "{e2eDataDir}/runs/{projectName}/{runId}/pages/{pageId}/" 2>/dev/null
+```
+
+3. **更新 run.json** 中的已完成页面数
+4. **导航到下一页**（在同一标签页内直接导航，不要关闭再打开，避免 session 过期）
 
 ### 第 5 步：跨页面关联汇总
 
