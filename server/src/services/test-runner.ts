@@ -523,7 +523,7 @@ async function runE2ETest(suite: TestSuite, config: Record<string, unknown>): Pr
 
 | 序号 | 页面名称 | URL | 备注 |
 |------|----------|-----|------|
-${pages.map((p, i) => `| ${i + 1} | ${p.name} | ${p.url.includes(':') ? '需从上级页面进入' : baseUrl + p.url} | ${p.url.includes(':') ? '不能直接URL访问' : ''} |`).join('\n')}
+${pages.map((p, i) => { const hasAppId = p.url.includes(':appId'); const hasOtherParam = p.url.match(/:(?!appId)[a-zA-Z_]+/); const displayUrl = hasOtherParam ? '需从上级列表页点击进入' : hasAppId ? baseUrl + p.url.replace(/:appId/g, 'base_app') : baseUrl + p.url; const remark = hasOtherParam ? '不能直接URL访问' : hasAppId ? ':appId→base_app' : ''; return `| ${i + 1} | ${p.name} | ${displayUrl} | ${remark} |`; }).join('\n')}
 ` : '';
 
     const prompt = resumeSessionId
@@ -541,10 +541,11 @@ ${pageListPrompt}
 ## 特别注意
 
 1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图
-2. **URL含动态参数的页面**：必须从上级列表页点击进入
-3. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
-4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
-5. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
+2. **URL含 \`:appId\` 的页面**：将 \`:appId\` 替换为 \`base_app\` 即可直接访问（如 /app/:appId/agent → /app/base_app/agent）
+3. **URL含 \`:id\` 的详情/编辑页面**（标注"不能直接URL访问"）：必须从上级列表页点击具体记录进入，不能直接URL访问
+4. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
+5. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
+6. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
 
 ${knowledgeGraphPath ? `知识图谱文件路径：\`${knowledgeGraphPath}\`（请使用 Read 工具读取）\n` : ''}
 请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 保存结果。`;
@@ -832,7 +833,13 @@ ${paramsInfo}
 
 | 序号 | 页面名称 | URL | 备注 |
 |------|----------|-----|------|
-${pages.map((p, i) => `| ${i + 1} | ${p.name} | ${p.url.includes(':') ? '需从上级页面进入' : baseUrl + p.url} | ${p.url.includes(':') ? '不能直接URL访问' : ''} |`).join('\n')}
+${pages.map((p, i) => {
+        const hasAppId = p.url.includes(':appId');
+        const hasOtherParam = p.url.match(/:(?!appId)[a-zA-Z_]+/);
+        const displayUrl = hasOtherParam ? '需从上级列表页点击进入' : hasAppId ? baseUrl + p.url.replace(/:appId/g, 'base_app') : baseUrl + p.url;
+        const remark = hasOtherParam ? '不能直接URL访问' : hasAppId ? ':appId→base_app' : '';
+        return `| ${i + 1} | ${p.name} | ${displayUrl} | ${remark} |`;
+      }).join('\n')}
 `;
   }
 
@@ -846,10 +853,11 @@ ${pageListPrompt}
 ## 特别注意
 
 1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图
-2. **URL含动态参数的页面**（标注"不能直接URL访问"）：必须从上级列表页点击进入
-3. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
-4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
-5. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
+2. **URL含 \`:appId\` 的页面**：将 \`:appId\` 替换为 \`base_app\` 即可直接访问
+3. **URL含 \`:id\` 的详情/编辑页面**（标注"不能直接URL访问"）：必须从上级列表页点击具体记录进入
+4. **CRUD管理页**：必须走完 新增→验证→编辑→验证→删除→验证
+5. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入
+6. **每步必截**：截图命名格式 \`{pageId}-{操作描述}.png\`
 
 ${kgPath ? `知识图谱文件路径：\`${kgPath}\`（请使用 Read 工具读取）\n` : ''}
 请严格按照 SKILL.md 中的流程执行：登录 → 加载知识图谱 → 逐页测试（observe → think → act → validate）→ 保存结果。`;
@@ -3522,7 +3530,7 @@ ${fullScopeText}
       ? path.join(DATA_DIR, 'projects', projectId, 'page-context.json').replace(/\\/g, '/')
       : '';
 
-    // 构建页面列表
+    // 构建页面列表（按 pageSet 分组）
     const pages = resolvePages(project, scope);
     const pageList = pages.map(p => `- ${p.name}: ${project.baseUrl}${p.url}`).join('\n');
 
@@ -3530,9 +3538,6 @@ ${fullScopeText}
     const paramsInfo = project.globalParams && Object.keys(project.globalParams).length > 0
       ? `动态参数映射：\n${Object.entries(project.globalParams).map(([k, v]) => `  - ${k}: ${(v as string[]).join(', ')}`).join('\n')}`
       : '';
-
-    // 构建页面列表（按 pageSet 分组）
-    const pages = resolvePages(project, scope);
     const pagesBySet = new Map<string, typeof pages>();
     for (const p of pages) {
       const set = p.pageSet || 'default';
@@ -3544,18 +3549,15 @@ ${fullScopeText}
     let totalIndex = 0;
     for (const [setName, setPages] of pagesBySet) {
       const tableRows = setPages.map(p => {
-        const url = p.url.includes(':') ? `需从上级页面进入（路径含动态参数）` : `${project.baseUrl}${p.url}`;
-        const remark = p.url.includes(':') ? '不能直接URL访问' : '';
+        const hasAppId = p.url.includes(':appId');
+        const hasOtherParam = p.url.match(/:(?!appId)[a-zA-Z_]+/);
+        const url = hasOtherParam ? '需从上级列表页点击进入' : hasAppId ? `${project.baseUrl}${p.url.replace(/:appId/g, 'base_app')}` : `${project.baseUrl}${p.url}`;
+        const remark = hasOtherParam ? '不能直接URL访问' : hasAppId ? ':appId→base_app' : '';
         totalIndex++;
         return `| ${totalIndex} | ${p.name} | ${url} | ${remark} |`;
       }).join('\n');
       pageListSections += `\n### ${setName}（${setPages.length} 页）\n\n| 序号 | 页面名称 | URL | 备注 |\n|------|----------|-----|------|\n${tableRows}\n`;
     }
-
-    // 构建参数映射
-    const paramsInfo = project.globalParams && Object.keys(project.globalParams).length > 0
-      ? `动态参数映射：\n${Object.entries(project.globalParams).map(([k, v]) => `  - ${k}: ${(v as string[]).join(', ')}`).join('\n')}`
-      : '';
 
     const prompt = `我需要你执行 E2E 页面深度测试。请严格按照 Skill 文件的规范执行。
 
@@ -3579,10 +3581,11 @@ ${pageListSections}
 ## 特别注意
 
 1. **每个页面必须满足硬性最低标准**：CRUD页至少6个checks和6张截图，只读页至少4个checks和3张截图。"页面加载"不算有效interaction，必须真实操作按钮/输入框。
-2. **URL 含动态参数的页面**（标注"不能直接URL访问"）：必须从上级列表页点击进入，不能直接URL访问。
-3. **CRUD 管理页**：必须走完 新增→验证→编辑→验证→删除→验证 完整生命周期。
-4. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入，API报错时记录详细错误信息。
-5. **每步必截**：每次操作后都要截图，截图命名格式为 \`{pageId}-{操作描述}.png\`。
+2. **URL含 \`:appId\` 的页面**：将 \`:appId\` 替换为 \`base_app\` 即可直接访问（如 /app/:appId/agent → /app/base_app/agent）。
+3. **URL含 \`:id\` 的详情/编辑页面**（标注"不能直接URL访问"）：必须从上级列表页点击具体记录进入。例如：知识库详情需从知识库列表点击某条记录进入，列元数据需从数据表管理点击某个表的列管理进入。
+4. **CRUD 管理页**：必须走完 新增→验证→编辑→验证→删除→验证 完整生命周期。
+5. **遇到异常不要放弃**：页面重定向时尝试从正确入口进入，API报错时记录详细错误信息。
+6. **每步必截**：每次操作后都要截图，截图命名格式为 \`{pageId}-{操作描述}.png\`。
 
 ## 执行要求
 
