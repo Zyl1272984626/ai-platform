@@ -21,6 +21,7 @@ export interface PageConfig {
   url: string;
   path: string;
   description?: string;
+  pageSet?: string;
   hasDynamicParams?: boolean;                // 路径是否含动态参数（:xxx）
   params?: Record<string, string[]>;         // 动态参数映射，如 { ":appId": ["base_app"] }
 }
@@ -58,6 +59,13 @@ export interface ClaudeConfig {
   model: string;          // ANTHROPIC_MODEL
 }
 
+export interface MavenConfig {
+  repositoryUrl: string;      // Maven 远程镜像仓库地址
+  localRepository: string;    // Maven 本地仓库目录
+  settingsPath: string;       // 自定义 settings.xml 路径，优先级高于 repositoryUrl
+  extraArgs: string;          // 额外 Maven 参数，空格分隔
+}
+
 export interface PlatformConfig {
   // 基础配置
   projectRoot: string;          // 兼容旧配置
@@ -74,6 +82,9 @@ export interface PlatformConfig {
 
   // Claude 配置（智谱 CodePlan）
   claudeConfig?: ClaudeConfig;
+
+  // Maven 打包配置
+  mavenConfig?: MavenConfig;
 }
 
 // ========== 默认项目 ==========
@@ -108,6 +119,12 @@ const DEFAULT_CONFIG: PlatformConfig = {
     authToken: process.env.ANTHROPIC_AUTH_TOKEN || '',
     baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://open.bigmodel.cn/api/anthropic',
     model: process.env.ANTHROPIC_MODEL || 'glm-5.1',
+  },
+  mavenConfig: {
+    repositoryUrl: process.env.MAVEN_REPOSITORY_URL || '',
+    localRepository: process.env.MAVEN_LOCAL_REPOSITORY || '',
+    settingsPath: process.env.MAVEN_SETTINGS_PATH || '',
+    extraArgs: process.env.MAVEN_EXTRA_ARGS || '',
   },
 };
 
@@ -304,6 +321,18 @@ function saveConfig(): void {
     }
     if (config.testDataDir) {
       process.env.TEST_DATA_DIR = config.testDataDir;
+    }
+    if (config.mavenConfig?.repositoryUrl) {
+      process.env.MAVEN_REPOSITORY_URL = config.mavenConfig.repositoryUrl;
+    }
+    if (config.mavenConfig?.localRepository) {
+      process.env.MAVEN_LOCAL_REPOSITORY = config.mavenConfig.localRepository;
+    }
+    if (config.mavenConfig?.settingsPath) {
+      process.env.MAVEN_SETTINGS_PATH = config.mavenConfig.settingsPath;
+    }
+    if (config.mavenConfig?.extraArgs) {
+      process.env.MAVEN_EXTRA_ARGS = config.mavenConfig.extraArgs;
     }
     applyClaudeConfig();
     console.log('[Config] 配置已保存');

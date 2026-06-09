@@ -185,6 +185,31 @@
         </div>
       </section>
 
+      <!-- Maven 打包配置 -->
+      <section class="setting-section">
+        <h2 class="section-title">Maven 打包配置</h2>
+        <div class="form-group">
+          <label>Maven 远程仓库地址</label>
+          <p class="field-desc">生成 WAR / 部署包时作为 mirror 仓库使用，例如公司 Nexus、阿里云 Maven 仓库</p>
+          <input v-model="form.mavenConfig.repositoryUrl" placeholder="例如: https://maven.aliyun.com/repository/public" />
+        </div>
+        <div class="form-group">
+          <label>Maven 本地仓库目录</label>
+          <p class="field-desc">可选；配置后打包时追加 -Dmaven.repo.local</p>
+          <input v-model="form.mavenConfig.localRepository" placeholder="例如: D:/maven/repository" />
+        </div>
+        <div class="form-group">
+          <label>自定义 settings.xml</label>
+          <p class="field-desc">可选；配置后优先使用该文件，远程仓库地址不再自动生成 mirror 配置</p>
+          <input v-model="form.mavenConfig.settingsPath" placeholder="例如: D:/maven/conf/settings.xml" />
+        </div>
+        <div class="form-group">
+          <label>额外 Maven 参数</label>
+          <p class="field-desc">可选；空格分隔，会追加到 mvn clean package -DskipTests 后面</p>
+          <input v-model="form.mavenConfig.extraArgs" placeholder="例如: -Pprod -U" />
+        </div>
+      </section>
+
       <!-- Claude 配置 -->
       <section class="setting-section">
         <h2 class="section-title">🤖 Claude 配置（智谱 CodePlan）</h2>
@@ -937,6 +962,12 @@ const form = reactive<PlatformConfig>({
     baseUrl: 'https://open.bigmodel.cn/api/anthropic',
     model: 'glm-5.1',
   },
+  mavenConfig: {
+    repositoryUrl: '',
+    localRepository: '',
+    settingsPath: '',
+    extraArgs: '',
+  },
 })
 
 // 完整配置（含 projects）
@@ -1215,6 +1246,9 @@ onMounted(async () => {
     // 确保 claudeConfig 嵌套对象正确赋值
     if ((settingsRes.data as any).claudeConfig) {
       form.claudeConfig = { ...form.claudeConfig, ...(settingsRes.data as any).claudeConfig }
+    }
+    if ((settingsRes.data as any).mavenConfig) {
+      form.mavenConfig = { ...form.mavenConfig, ...(settingsRes.data as any).mavenConfig }
     }
     config.defaultProjectId = (settingsRes.data as any).defaultProjectId || ''
 

@@ -6,12 +6,20 @@ export interface ClaudeConfig {
   model: string
 }
 
+export interface MavenConfig {
+  repositoryUrl: string
+  localRepository: string
+  settingsPath: string
+  extraArgs: string
+}
+
 export interface PlatformConfig {
   aiPlatformRoot: string
   e2eDataDir: string
   testDataDir: string
   apiTestBaseUrl: string
-  claudeConfig?: ClaudeConfig
+  claudeConfig: ClaudeConfig
+  mavenConfig: MavenConfig
 }
 
 export interface CheckResult {

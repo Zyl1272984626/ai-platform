@@ -6,13 +6,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { getConfig } from './config.js';
+import { getConfig, getDefaultProject } from './config.js';
 import { getSchool } from './school-manager.js';
 import type { School } from './school-manager.js';
 
+/** 获取主系统项目根目录 */
+function getProjectRoot(): string {
+  return getDefaultProject()?.sourcePath || getConfig().projectRoot;
+}
+
 /** 获取主系统 resources 根目录 */
 function getResourcesDir(): string {
-  return path.resolve(getConfig().projectRoot, 'backend', 'src', 'main', 'resources');
+  return path.resolve(getProjectRoot(), 'backend', 'src', 'main', 'resources');
 }
 
 /** 获取 config 子目录 */

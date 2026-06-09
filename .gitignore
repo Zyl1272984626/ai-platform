@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+server/dist/
+web/dist/
 
 # Environment variables
 .env
@@ -12,8 +14,15 @@ test-screenshot-*.png
 test-final-*.png
 test-fix-*.png
 
-# Test run data (local only)
-data/test-runs/
+# Local runtime data and generated artifacts
+/data/config.yaml
+/data/platform-config.json
+/data/schools.yaml
+/data/deploy/
+/data/test-runs/
+/server/data/
+/e2e-test/data/
+.tmp/
 
 # IDE
 .vscode/
@@ -27,5 +36,3 @@ Thumbs.db
 *.log
 npm-debug.log*
 server/package-lock.json
-/data
-server/data/platform-config.json

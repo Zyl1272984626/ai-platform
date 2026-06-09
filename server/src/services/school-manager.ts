@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
-import { AI_PLATFORM_ROOT } from './config.js';
+import { getConfig } from './config.js';
 
 interface SchoolDeploy {
   host: string;
@@ -88,18 +88,25 @@ interface SchoolsData {
   schools: School[];
 }
 
-const DATA_DIR = path.resolve(AI_PLATFORM_ROOT, 'data');
-const SCHOOLS_FILE = path.join(DATA_DIR, 'schools.yaml');
+function getDataDir(): string {
+  return path.resolve(getConfig().aiPlatformRoot, 'data');
+}
+
+function getSchoolsFile(): string {
+  return path.join(getDataDir(), 'schools.yaml');
+}
 
 function readSchools(): SchoolsData {
-  if (!fs.existsSync(SCHOOLS_FILE)) return { schools: [] };
-  const content = fs.readFileSync(SCHOOLS_FILE, 'utf-8');
+  const schoolsFile = getSchoolsFile();
+  if (!fs.existsSync(schoolsFile)) return { schools: [] };
+  const content = fs.readFileSync(schoolsFile, 'utf-8');
   return yaml.load(content) as SchoolsData;
 }
 
 function writeSchools(data: SchoolsData): void {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(SCHOOLS_FILE, yaml.dump(data, { indent: 2 }), 'utf-8');
+  const dataDir = getDataDir();
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(getSchoolsFile(), yaml.dump(data, { indent: 2 }), 'utf-8');
 }
 
 export function listSchools(): School[] {

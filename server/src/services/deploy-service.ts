@@ -137,8 +137,68 @@ function runMaven(
   return runCommand(command, commandArgs, backendDir, `Maven ${label}`);
 }
 
-function mavenCommandArgs(mavenCommand: string, args: string[]): string[] {
-  return args;
+function splitMavenExtraArgs(extraArgs: string): string[] {
+  return extraArgs.match(/"[^"]+"|'[^']+'|\S+/g)?.map(arg => arg.replace(/^['"]|['"]$/g, '')) || [];
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function createMavenSettingsFile(backendDir: string, repositoryUrl: string): string {
+  const settingsPath = path.join(backendDir, '.ai-platform-maven-settings.xml');
+  const safeUrl = escapeXml(repositoryUrl.trim());
+  fs.writeFileSync(settingsPath, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"',
+    '          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">',
+    '  <mirrors>',
+    '    <mirror>',
+    '      <id>ai-platform-configured-repository</id>',
+    '      <name>AI Platform Configured Repository</name>',
+    `      <url>${safeUrl}</url>`,
+    '      <mirrorOf>*</mirrorOf>',
+    '    </mirror>',
+    '  </mirrors>',
+    '</settings>',
+    '',
+  ].join('\n'), 'utf-8');
+  return settingsPath;
+}
+
+function createMavenCommandArgs(backendDir: string, args: string[]): { args: string[]; cleanupPath?: string } {
+  const mavenConfig = getConfig().mavenConfig;
+  if (!mavenConfig) return { args };
+
+  const commandArgs = [...args];
+  const localRepository = mavenConfig.localRepository?.trim();
+  const settingsPath = mavenConfig.settingsPath?.trim();
+  const repositoryUrl = mavenConfig.repositoryUrl?.trim();
+  const extraArgs = mavenConfig.extraArgs?.trim();
+  let cleanupPath: string | undefined;
+
+  if (localRepository) {
+    commandArgs.push(`-Dmaven.repo.local=${localRepository}`);
+  }
+
+  if (settingsPath) {
+    commandArgs.push('-s', settingsPath);
+  } else if (repositoryUrl) {
+    cleanupPath = createMavenSettingsFile(backendDir, repositoryUrl);
+    commandArgs.push('-s', cleanupPath);
+  }
+
+  if (extraArgs) {
+    commandArgs.push(...splitMavenExtraArgs(extraArgs));
+  }
+
+  return { args: commandArgs, cleanupPath };
 }
 
 function isMavenCleanDeleteFailure(error: Error): boolean {
@@ -310,7 +370,14 @@ async function mvnPackage(): Promise<void> {
   prepareBuildWorkspace(backendDir);
 
   try {
-    await runMaven(command, mavenCommandArgs(mavenCommand, ['clean', 'package', '-DskipTests']), backendDir, 'clean 构建');
+    const commandArgs = createMavenCommandArgs(backendDir, ['clean', 'package', '-DskipTests']);
+    try {
+      await runMaven(command, commandArgs.args, backendDir, 'clean 构建');
+    } finally {
+      if (commandArgs.cleanupPath && fs.existsSync(commandArgs.cleanupPath)) {
+        fs.unlinkSync(commandArgs.cleanupPath);
+      }
+    }
   } catch (error) {
     if (!isMavenCleanDeleteFailure(error as Error)) throw error;
     throw new Error(`Maven clean 删除 target 文件失败，可能仍有 Java/Tomcat/IDE 占用 ${path.join(backendDir, 'target')}。已尝试释放相关 Java 进程，请关闭占用后重试。原始错误: ${(error as Error).message}`);
@@ -426,7 +493,14 @@ export async function buildSchoolWar(code: string): Promise<string> {
   for (const [configName, content] of Object.entries(configs)) {
     const warPath = warPathMap[configName];
     if (!warPath) continue;
-    zip.updateFile(warPath, Buffer.from(content, 'utf-8'));
+    const buffer = Buffer.from(content, 'utf-8');
+    if (zip.getEntry(warPath)) {
+      zip.updateFile(warPath, buffer);
+    } else {
+      zip.addFile(warPath, buffer);
+      console.warn(`[Deploy] WAR 中缺少配置文件，已新增: ${warPath}`);
+    }
+    console.log(`[Deploy] 已替换配置: ${configName} -> ${warPath}`);
   }
 
   // 4. 输出
