@@ -3,6 +3,10 @@ import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
 export default defineConfig({
+  cacheDir: '.vite-cache',
+  optimizeDeps: {
+    disabled: true,
+  },
   plugins: [vue()],
   resolve: {
     alias: {
@@ -15,6 +19,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3100',
         changeOrigin: true,
+        timeout: 600000,
       },
     },
   },

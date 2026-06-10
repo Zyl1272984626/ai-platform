@@ -36,3 +36,5 @@ Thumbs.db
 *.log
 npm-debug.log*
 server/package-lock.json
+
+/doc

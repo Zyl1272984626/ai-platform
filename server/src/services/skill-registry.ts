@@ -8,7 +8,7 @@ import { AI_PLATFORM_ROOT } from './config.js';
 export interface SkillMeta {
   name: string;
   description: string;
-  type: 'scene' | 'capability' | 'test' | 'base';
+  type: 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex';
   path: string;
   allowedTools?: string[];
   dependencies?: string[];
@@ -26,15 +26,17 @@ const SKILLS_DIR = path.resolve(AI_PLATFORM_ROOT, 'skills');
 export function listSkills(): SkillMeta[] {
   const skills: SkillMeta[] = [];
 
-  for (const dirName of ['scenes', 'capabilities', 'tests', 'base']) {
+  for (const dirName of ['scenes', 'capabilities', 'tests', 'base', 'pipeline', 'codex']) {
     const typeDir = path.join(SKILLS_DIR, dirName);
     if (!fs.existsSync(typeDir)) continue;
 
-    const typeMap: Record<string, 'scene' | 'capability' | 'test' | 'base'> = {
+    const typeMap: Record<string, 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex'> = {
       scenes: 'scene',
       capabilities: 'capability',
       tests: 'test',
       base: 'base',
+      pipeline: 'pipeline',
+      codex: 'codex',
     };
     const skillType = typeMap[dirName];
 
@@ -64,7 +66,7 @@ export function getSkill(name: string): SkillMeta | undefined {
 function parseSkillFrontmatter(
   content: string,
   name: string,
-  type: 'scene' | 'capability' | 'test' | 'base',
+  type: 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex',
   filePath: string
 ): SkillMeta {
   const meta: SkillMeta = {
@@ -80,7 +82,7 @@ function parseSkillFrontmatter(
   if (fmMatch) {
     const fm = fmMatch[1];
     const descMatch = fm.match(/description:\s*(.+)/);
-    if (descMatch) meta.description = descMatch[1].trim();
+    if (descMatch) meta.description = descMatch[1].trim().replace(/^["']|["']$/g, '');
 
     const toolsMatch = fm.match(/allowed-tools:\s*\[(.+)\]/);
     if (toolsMatch) {

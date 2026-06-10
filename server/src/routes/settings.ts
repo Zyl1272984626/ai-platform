@@ -80,3 +80,43 @@ settingsRouter.post('/test-claude', async (req: Request, res: Response) => {
     res.json({ ok: false, msg: '连接失败: ' + (e.message || String(e)) });
   }
 });
+
+/** 测试 CodeX/OpenAI 连接（先保存再测试） */
+settingsRouter.post('/test-codex', async (req: Request, res: Response) => {
+  try {
+    if (req.body.codexConfig) {
+      updateConfig({ codexConfig: req.body.codexConfig });
+    }
+
+    const config = getConfig();
+    const codexCfg = config.codexConfig;
+    if (!codexCfg?.apiKey) {
+      res.json({ ok: false, msg: '未配置 API Key' });
+      return;
+    }
+
+    const baseUrl = (codexCfg.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const model = codexCfg.model || 'gpt-5-codex';
+
+    const resp = await fetch(`${baseUrl}/models`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${codexCfg.apiKey}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (resp.ok) {
+      res.json({ ok: true, msg: `连接成功 (model=${model})` });
+      return;
+    }
+
+    const text = await resp.text();
+    res.json({
+      ok: false,
+      msg: `${resp.status} ${text || resp.statusText}`.slice(0, 200),
+    });
+  } catch (e: any) {
+    res.json({ ok: false, msg: '连接失败: ' + (e.message || String(e)) });
+  }
+});

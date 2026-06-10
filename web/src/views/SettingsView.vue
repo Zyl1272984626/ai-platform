@@ -168,6 +168,17 @@
             </span>
           </div>
         </div>
+
+        <div class="form-group">
+          <label>流水线产物目录</label>
+          <p class="field-desc">多平台接力流程的阶段产物目录；外部 Codex、ClaudeCode、DeepSeek 按提示词把结果写到这里</p>
+          <div class="input-row">
+            <input v-model="form.pipelineArtifactRoot" placeholder="例如: E:/test/pipeline-artifacts" />
+            <span v-if="checks.pipelineArtifactRoot" class="check-badge" :class="checks.pipelineArtifactRoot.ok ? 'ok' : 'err'">
+              {{ checks.pipelineArtifactRoot.msg }}
+            </span>
+          </div>
+        </div>
       </section>
 
       <!-- API 测试配置 -->
@@ -251,6 +262,45 @@
         </div>
       </section>
 
+      <!-- CodeX 配置 -->
+      <section class="setting-section">
+        <h2 class="section-title">CodeX 配置（OpenAI / Codex）</h2>
+        <p class="field-desc" style="margin-top: -8px; margin-bottom: 16px;">
+          保留 Claude Code 作为现有底座，同时预留 CodeX 作为后续流水线执行与交叉协作引擎。
+        </p>
+        <div class="form-group">
+          <label>API Key</label>
+          <div class="input-row token-row">
+            <input
+              v-model="form.codexConfig.apiKey"
+              :type="showCodexToken ? 'text' : 'password'"
+              placeholder="粘贴 OpenAI / CodeX API Key"
+            />
+            <button class="btn-toggle-pw" @click="showCodexToken = !showCodexToken">
+              {{ showCodexToken ? '隐藏' : '显示' }}
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>API 地址</label>
+          <p class="field-desc">OPENAI_BASE_URL，默认使用 OpenAI 官方兼容接口</p>
+          <input v-model="form.codexConfig.baseUrl" placeholder="https://api.openai.com/v1" />
+        </div>
+        <div class="form-group">
+          <label>模型</label>
+          <p class="field-desc">CODEX_MODEL，后续流水线选择 CodeX 时使用</p>
+          <input v-model="form.codexConfig.model" placeholder="gpt-5-codex" />
+        </div>
+        <div class="form-group" style="margin-top: 12px;">
+          <button class="btn-test-claude" :disabled="testingCodex || !form.codexConfig.apiKey" @click="doTestCodex">
+            {{ testingCodex ? '测试中...' : '测试连接' }}
+          </button>
+          <span v-if="codexTestResult" class="check-badge" :class="codexTestResult.ok ? 'ok' : 'err'" style="margin-left: 10px;">
+            {{ codexTestResult.msg }}
+          </span>
+        </div>
+      </section>
+
       <!-- 环境检测 -->
       <section class="setting-section">
         <h2 class="section-title">环境检测</h2>
@@ -267,6 +317,13 @@
             <span class="env-label">Claude 配置 (CodePlan)</span>
             <span v-if="checks.claudeConfig" class="check-badge" :class="checks.claudeConfig.ok ? 'ok' : 'err'">
               {{ checks.claudeConfig.msg }}
+            </span>
+            <span v-else class="check-badge pending">待检测</span>
+          </div>
+          <div class="env-check-item">
+            <span class="env-label">CodeX 配置</span>
+            <span v-if="checks.codexConfig" class="check-badge" :class="checks.codexConfig.ok ? 'ok' : 'err'">
+              {{ checks.codexConfig.msg }}
             </span>
             <span v-else class="check-badge pending">待检测</span>
           </div>
@@ -903,7 +960,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, type Ref } from 'vue'
 import { marked } from 'marked'
-import { getSettings, updateSettings, checkSettings, testClaude, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
+import { getSettings, updateSettings, checkSettings, testClaude, testCodex, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import PasswordInput from '../components/common/PasswordInput.vue'
 import {
@@ -948,14 +1005,18 @@ const saving = ref(false)
 const checking = ref(false)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 const showToken = ref(false)
+const showCodexToken = ref(false)
 const testingClaude = ref(false)
+const testingCodex = ref(false)
 const claudeTestResult = ref<{ ok: boolean; msg: string } | null>(null)
+const codexTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 
 // 基础配置表单
 const form = reactive<PlatformConfig>({
   aiPlatformRoot: '',
   e2eDataDir: '',
   testDataDir: '',
+  pipelineArtifactRoot: '',
   apiTestBaseUrl: '',
   claudeConfig: {
     authToken: '',
@@ -967,6 +1028,11 @@ const form = reactive<PlatformConfig>({
     localRepository: '',
     settingsPath: '',
     extraArgs: '',
+  },
+  codexConfig: {
+    apiKey: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-5-codex',
   },
 })
 
@@ -1249,6 +1315,9 @@ onMounted(async () => {
     }
     if ((settingsRes.data as any).mavenConfig) {
       form.mavenConfig = { ...form.mavenConfig, ...(settingsRes.data as any).mavenConfig }
+    }
+    if ((settingsRes.data as any).codexConfig) {
+      form.codexConfig = { ...form.codexConfig, ...(settingsRes.data as any).codexConfig }
     }
     config.defaultProjectId = (settingsRes.data as any).defaultProjectId || ''
 
@@ -1658,6 +1727,19 @@ async function doTestClaude() {
     claudeTestResult.value = { ok: false, msg: '请求失败: ' + e.message }
   } finally {
     testingClaude.value = false
+  }
+}
+
+async function doTestCodex() {
+  testingCodex.value = true
+  codexTestResult.value = null
+  try {
+    const res = await testCodex(form.codexConfig)
+    codexTestResult.value = res.data
+  } catch (e: any) {
+    codexTestResult.value = { ok: false, msg: '请求失败: ' + e.message }
+  } finally {
+    testingCodex.value = false
   }
 }
 

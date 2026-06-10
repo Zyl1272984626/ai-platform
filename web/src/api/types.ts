@@ -139,7 +139,7 @@ export interface StepRun {
 export interface Skill {
   name: string
   description: string
-  type: 'scene' | 'capability' | 'test' | 'base'
+  type: 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex'
   tags?: string[]
   dependencies?: string[]
   content?: string
@@ -160,4 +160,118 @@ export interface WorkflowSSEEvent {
   output?: Record<string, unknown>
   error?: string
   attempt?: number
+}
+
+// ========== Pipeline ==========
+export interface PipelineRun {
+  id: string
+  requirement: string
+  projectId?: string
+  status: 'running' | 'completed' | 'failed' | 'paused' | 'aborted'
+  stages: PipelineStageRun[]
+  context: Record<string, unknown>
+  startedAt: string
+  finishedAt?: string
+  currentStageIndex: number
+  logs?: Array<{ time: string; level: string; message: string }>
+}
+
+export interface PipelineStageRun {
+  stageId: string
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped' | 'waiting_confirm'
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
+  error?: string
+  startedAt?: string
+  finishedAt?: string
+}
+
+export interface PipelineStageDef {
+  id: string
+  skill: string
+  name: string
+  gate: { requireConfirmation?: boolean } | null
+}
+
+export interface PipelineRelayStage {
+  id: string
+  name: string
+  owner: 'codex' | 'claudecode-glm' | 'deepseek' | 'human'
+  ownerLabel: string
+  purpose: string
+  artifactFile: string
+  promptKind: 'orchestrator' | 'design' | 'implementation' | 'verification' | 'review' | 'handoff'
+}
+
+export interface PipelineRelayPlan {
+  artifactRoot: string
+  runDir: string
+  runId: string
+  stages: PipelineRelayStage[]
+}
+
+export interface PipelineArtifactStage extends PipelineRelayStage {
+  path: string
+  exists: boolean
+  size: number
+  updatedAt?: string
+  preview?: string
+}
+
+export interface PipelineArtifactScan {
+  runId: string
+  artifactRoot: string
+  runDir: string
+  baseEngine?: 'codex' | 'claudecode'
+  stages: PipelineArtifactStage[]
+}
+
+export interface PipelineArtifactRun {
+  runId: string
+  runDir: string
+  requirement?: string
+  projectId?: string
+  updatedAt?: string
+  completedStages: number
+  totalStages: number
+}
+
+export interface PipelineSSEEvent {
+  type: 'pipeline:start' | 'pipeline:done' | 'pipeline:failed' | 'pipeline:resumed' |
+        'stage:start' | 'stage:done' | 'stage:gate' |
+        'cross-review:start' | 'cross-review:done' | 'cross-review:failed'
+  runId?: string
+  stageId?: string
+  index?: number
+  name?: string
+  status?: string
+  output?: Record<string, unknown>
+  error?: string
+  requirement?: string
+  model?: string
+  result?: {
+    reviewer: string
+    model: string
+    content: string
+    reviewedAt: string
+  }
+}
+
+// ========== Model Config ==========
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: string
+  available: boolean
+}
+
+export interface ModelConfigResponse {
+  models: ModelInfo[]
+  config: {
+    deepseek: {
+      configured: boolean
+      baseUrl: string
+      model: string
+    }
+  }
 }

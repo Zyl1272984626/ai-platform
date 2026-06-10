@@ -13,6 +13,8 @@
           <button class="ftab" :class="{ active: filter === 'capability' }" @click="filter = 'capability'">能力</button>
           <button class="ftab" :class="{ active: filter === 'test' }" @click="filter = 'test'">测试</button>
           <button class="ftab" :class="{ active: filter === 'base' }" @click="filter = 'base'">基础</button>
+          <button class="ftab" :class="{ active: filter === 'pipeline' }" @click="filter = 'pipeline'">流水线</button>
+          <button class="ftab" :class="{ active: filter === 'codex' }" @click="filter = 'codex'">Codex</button>
         </div>
       </div>
     </header>
@@ -25,7 +27,7 @@
         @click="openDetail(skill.name)"
       >
         <div class="skill-top">
-          <span class="skill-type-badge" :class="skill.type">{{ skill.type === 'scene' ? '场景' : skill.type === 'test' ? '测试' : skill.type === 'base' ? '基础' : '能力' }}</span>
+          <span class="skill-type-badge" :class="skill.type">{{ skillTypeLabel(skill.type) }}</span>
           <span class="skill-name">{{ skill.name }}</span>
         </div>
         <div class="skill-desc">{{ skill.description }}</div>
@@ -46,7 +48,7 @@
       <div class="detail-card">
         <div class="detail-header">
           <div>
-            <span class="skill-type-badge" :class="detailSkill.type">{{ detailSkill.type === 'scene' ? '场景' : detailSkill.type === 'test' ? '测试' : detailSkill.type === 'base' ? '基础' : '能力' }}</span>
+            <span class="skill-type-badge" :class="detailSkill.type">{{ skillTypeLabel(detailSkill.type) }}</span>
             <h2>{{ detailSkill.name }}</h2>
           </div>
           <button class="close-btn" @click="detailSkill = null">✕</button>
@@ -86,7 +88,7 @@ import type { Skill } from '../api/types'
 const router = useRouter()
 const skills = ref<Skill[]>([])
 const search = ref('')
-const filter = ref<'all' | 'scene' | 'capability' | 'test' | 'base'>('all')
+const filter = ref<'all' | 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex'>('all')
 const detailSkill = ref<Skill | null>(null)
 const detailContent = ref('')
 
@@ -125,6 +127,18 @@ async function openDetail(name: string) {
 function tryInChat() {
   if (!detailSkill.value) return
   router.push('/chat')
+}
+
+function skillTypeLabel(type: Skill['type']) {
+  const labels: Record<Skill['type'], string> = {
+    scene: '场景',
+    capability: '能力',
+    test: '测试',
+    base: '基础',
+    pipeline: '流水线',
+    codex: 'Codex',
+  }
+  return labels[type] || type
 }
 </script>
 
@@ -205,6 +219,8 @@ function tryInChat() {
 .skill-type-badge.capability { background: #f0fff4; color: #52c41a; }
 .skill-type-badge.test { background: #f9f0ff; color: #722ed1; }
 .skill-type-badge.base { background: #e6f7ff; color: #1890ff; }
+.skill-type-badge.pipeline { background: #fff7e6; color: #fa8c16; }
+.skill-type-badge.codex { background: #ecfdf3; color: #087443; }
 .skill-name {
   font-size: 14px;
   font-weight: 600;

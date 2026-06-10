@@ -66,12 +66,30 @@ export interface MavenConfig {
   extraArgs: string;          // 额外 Maven 参数，空格分隔
 }
 
+export interface CodexConfig {
+  apiKey: string;          // OPENAI_API_KEY
+  baseUrl: string;         // OPENAI_BASE_URL
+  model: string;           // CODEX_MODEL
+}
+
+export interface DeepSeekConfig {
+  apiKey: string;         // DEEPSEEK_API_KEY
+  baseUrl: string;        // DEEPSEEK_BASE_URL
+  model: string;          // DEEPSEEK_MODEL
+}
+
+export interface ModelRegistry {
+  glm: ClaudeConfig;
+  deepseek?: DeepSeekConfig;
+}
+
 export interface PlatformConfig {
   // 基础配置
   projectRoot: string;          // 兼容旧配置
   aiPlatformRoot: string;
   e2eDataDir: string;           // 已废弃，兼容保留
   testDataDir: string;          // 统一测试数据目录（替代 e2eDataDir）
+  pipelineArtifactRoot?: string; // 多平台接力产物目录
   mainFrontendPort: number;     // 兼容旧配置
   mainBackendPort: number;      // 兼容旧配置
   apiTestBaseUrl: string;
@@ -85,6 +103,12 @@ export interface PlatformConfig {
 
   // Maven 打包配置
   mavenConfig?: MavenConfig;
+
+  // CodeX 配置（OpenAI / Codex）
+  codexConfig?: CodexConfig;
+
+  // DeepSeek 配置
+  deepseekConfig?: DeepSeekConfig;
 }
 
 // ========== 默认项目 ==========
@@ -110,6 +134,7 @@ const DEFAULT_CONFIG: PlatformConfig = {
   aiPlatformRoot: process.env.AI_PLATFORM_ROOT || 'C:/FengSuKeJi/ai-platform',
   e2eDataDir: 'F:/e2e-test-data',
   testDataDir: 'F:/e2e-test-data',
+  pipelineArtifactRoot: process.env.PIPELINE_ARTIFACT_ROOT || 'F:/e2e-test-data/pipeline-artifacts',
   mainFrontendPort: 5173,
   mainBackendPort: 9998,
   apiTestBaseUrl: 'http://localhost:3100',
@@ -125,6 +150,16 @@ const DEFAULT_CONFIG: PlatformConfig = {
     localRepository: process.env.MAVEN_LOCAL_REPOSITORY || '',
     settingsPath: process.env.MAVEN_SETTINGS_PATH || '',
     extraArgs: process.env.MAVEN_EXTRA_ARGS || '',
+  },
+  codexConfig: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    model: process.env.CODEX_MODEL || 'gpt-5-codex',
+  },
+  deepseekConfig: {
+    apiKey: process.env.DEEPSEEK_API_KEY || '',
+    baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-chat',
   },
 };
 
@@ -250,6 +285,16 @@ export function applyClaudeConfig(): void {
   console.log(`[Config] Claude 配置已注入 (model=${c.model}, baseUrl=${c.baseUrl})`);
 }
 
+/** 将 codexConfig 同步到 process.env，让后续 CodeX/OpenAI 调用可以读取 */
+export function applyCodexConfig(): void {
+  const c = config.codexConfig;
+  if (!c) return;
+  if (c.apiKey) process.env.OPENAI_API_KEY = c.apiKey;
+  if (c.baseUrl) process.env.OPENAI_BASE_URL = c.baseUrl;
+  if (c.model) process.env.CODEX_MODEL = c.model;
+  console.log(`[Config] CodeX 配置已注入 (model=${c.model}, baseUrl=${c.baseUrl})`);
+}
+
 // ========== 配置加载/保存 ==========
 
 /** 从文件加载配置 */
@@ -293,6 +338,7 @@ export function loadConfig(): PlatformConfig {
     console.warn('[Config] 配置文件读取失败，使用默认值:', e.message);
   }
   applyClaudeConfig();
+  applyCodexConfig();
   return config;
 }
 
@@ -322,6 +368,9 @@ function saveConfig(): void {
     if (config.testDataDir) {
       process.env.TEST_DATA_DIR = config.testDataDir;
     }
+    if (config.pipelineArtifactRoot) {
+      process.env.PIPELINE_ARTIFACT_ROOT = config.pipelineArtifactRoot;
+    }
     if (config.mavenConfig?.repositoryUrl) {
       process.env.MAVEN_REPOSITORY_URL = config.mavenConfig.repositoryUrl;
     }
@@ -335,6 +384,7 @@ function saveConfig(): void {
       process.env.MAVEN_EXTRA_ARGS = config.mavenConfig.extraArgs;
     }
     applyClaudeConfig();
+    applyCodexConfig();
     console.log('[Config] 配置已保存');
   } catch (e: any) {
     console.error('[Config] 配置保存失败:', e.message);
@@ -480,6 +530,7 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
     ['aiPlatformRoot', config.aiPlatformRoot],
     ['e2eDataDir', config.e2eDataDir],
     ['testDataDir', config.testDataDir || config.e2eDataDir],
+    ['pipelineArtifactRoot', config.pipelineArtifactRoot || path.join(config.testDataDir || config.e2eDataDir, 'pipeline-artifacts')],
   ] as [string, string][]) {
     try {
       results[key] = {
@@ -517,6 +568,14 @@ export async function checkConfig(): Promise<Record<string, { ok: boolean; msg: 
     msg: claudeCfg?.authToken
       ? `已配置 (CodePlan, model=${claudeCfg.model || 'glm-5.1'})`
       : '未配置 Claude CodePlan Token',
+  };
+
+  const codexCfg = config.codexConfig;
+  results['codexConfig'] = {
+    ok: !!(codexCfg?.apiKey),
+    msg: codexCfg?.apiKey
+      ? `已配置 CodeX (model=${codexCfg.model || 'gpt-5-codex'})`
+      : '未配置 CodeX API Key',
   };
 
   // Playwright 浏览器

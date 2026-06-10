@@ -13,11 +13,20 @@ export interface MavenConfig {
   extraArgs: string
 }
 
+export interface CodexConfig {
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
 export interface PlatformConfig {
   aiPlatformRoot: string
   e2eDataDir: string
   testDataDir: string
+  pipelineArtifactRoot?: string
   apiTestBaseUrl: string
+  claudeConfig: ClaudeConfig
+  codexConfig: CodexConfig
   claudeConfig: ClaudeConfig
   mavenConfig: MavenConfig
 }
@@ -41,6 +50,10 @@ export function checkSettings() {
 
 export function testClaude(claudeConfig: ClaudeConfig) {
   return api.post<CheckResult>('/settings/test-claude', { claudeConfig })
+}
+
+export function testCodex(codexConfig: CodexConfig) {
+  return api.post<CheckResult>('/settings/test-codex', { codexConfig })
 }
 
 /** 生成发现提示词（供复制到 Claude Code 手动执行） */

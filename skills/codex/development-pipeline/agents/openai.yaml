@@ -1,0 +1,3 @@
+display_name: Development Pipeline
+short_description: Run feature work from requirement through verified handoff.
+default_prompt: "Use development-pipeline to implement this requirement:"
