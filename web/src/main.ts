@@ -14,6 +14,7 @@ const SkillView = () => import('./views/SkillView.vue')
 const TestView = () => import('./views/TestView.vue')
 const SettingsView = () => import('./views/SettingsView.vue')
 const PipelineView = () => import('./views/PipelineView.vue')
+const MemoryView = () => import('./views/MemoryView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: '/skills', component: SkillView },
     { path: '/tests', component: TestView },
     { path: '/pipelines', component: PipelineView },
+    { path: '/memory', component: MemoryView },
     { path: '/settings', component: SettingsView },
   ],
 })

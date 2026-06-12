@@ -27,7 +27,13 @@ dependencies: ["code-analyzer"]
    - 列出需要修改的文件清单
    - 识别关联的上下游模块
    - 标记潜在风险点
-4. **生成问题清单**：列出需求中不明确、需要确认的点
+4. **模型调用边界检查**（必填）：
+   - 哪一层调用模型？哪一层只存储/配置/扫描？
+   - 是否有后端直接调用模型？
+   - 如果不允许后端调用模型，生成内容从哪里来？
+   - Skill 负责提示词/行为指导，还是运行时能力？
+   - Tool 负责真实外部动作吗？Agent 什么时候调用 Tool？
+5. **生成问题清单**：列出需求中不明确、需要确认的点
 
 ## 多平台接力补充
 
@@ -65,6 +71,11 @@ dependencies: ["code-analyzer"]
     ],
     "questions": ["需要确认的问题1", "需要确认的问题2"],
     "risks": ["风险点1"],
+    "modelCallBoundary": {
+      "callsModel": ["哪些层/组件调用模型"],
+      "noModelCall": ["哪些层/组件不调用模型"],
+      "contentSource": "如果不允许后端调用模型，内容从哪里来"
+    },
     "scope": { "complexity": "low|medium|high", "estimatedFiles": 5 }
   }
 }

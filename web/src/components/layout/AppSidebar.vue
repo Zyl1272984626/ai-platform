@@ -34,6 +34,10 @@
         <span class="nav-icon">🚀</span>
         <span v-if="!collapsed" class="nav-label">流水线</span>
       </router-link>
+      <router-link to="/memory" class="nav-item" active-class="active">
+        <span class="nav-icon">🧠</span>
+        <span v-if="!collapsed" class="nav-label">会话</span>
+      </router-link>
       <router-link to="/settings" class="nav-item" active-class="active">
         <span class="nav-icon">🔧</span>
         <span v-if="!collapsed" class="nav-label">设置</span>

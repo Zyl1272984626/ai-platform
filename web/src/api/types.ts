@@ -275,3 +275,59 @@ export interface ModelConfigResponse {
     }
   }
 }
+
+// ========== Memory Hub ==========
+export interface ConversationSummary {
+  id: string
+  source: 'claude-code' | 'codex'
+  projectSlug: string
+  projectPath: string
+  sessionId: string
+  title: string
+  model: string
+  messageCount: number
+  toolCallCount: number
+  startedAt: string
+  lastActivityAt: string
+  sizeBytes: number
+  summary?: string
+  tags?: string[]
+  importedAt: string
+  sourceFilePath?: string
+}
+
+export interface ConversationMessage {
+  uuid: string
+  parentUuid: string | null
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  contentType: 'text' | 'thinking' | 'tool_use' | 'tool_result'
+  toolName?: string
+  toolInput?: Record<string, unknown>
+  timestamp: string
+  isSidechain: boolean
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  messages: ConversationMessage[]
+}
+
+export interface MemoryInsight {
+  id: string
+  sourceConversationId: string
+  type: 'preference' | 'pattern' | 'correction' | 'knowledge' | 'skill-idea'
+  content: string
+  confidence: number
+  generatedAt: string
+  model: string
+}
+
+export interface GeneratedArtifact {
+  id: string
+  sourceConversationId: string
+  type: 'skill' | 'prompt' | 'memory-note'
+  title: string
+  content: string
+  generatedAt: string
+  applied: boolean
+}

@@ -838,6 +838,7 @@ export function generateRelayStagePrompt(stageId: string, requirement: string, p
                   ? `你是 ClaudeCode/GLM 最终设计 Agent。请读取初版设计和 DeepSeek 审阅意见，判断采纳与否，修订出唯一最终实现方案。`
                   : `你是最终设计 Agent。请读取初版设计和审阅意见，判断采纳与否，修订出唯一最终实现方案。`,
       `设计审阅阶段只提出问题、补充和修改建议；最终设计阶段才输出后续实现的唯一依据。`,
+      `最终设计不要在正文里反复解释旧版哪里不够，直接呈现最终方案。变更说明可放在附录。`,
     ],
     implementation: [
       `你是代码实现 Agent。请严格按照修订定稿后的最终设计方案实现，不要扩大范围。`,

@@ -1,0 +1,316 @@
+{
+  "pageSets": [
+    {
+      "id": "web-__shallow__",
+      "name": "web (首页功能)",
+      "entry": "web",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "web-KnowledgeDetailEdit-0",
+          "name": "知识库详情",
+          "url": "/web/index.html#/KnowledgeDetailEdit/:id",
+          "path": "/KnowledgeDetailEdit/:id"
+        },
+        {
+          "id": "web-KnowledgeDetailReadonly-1",
+          "name": "知识库详情",
+          "url": "/web/index.html#/KnowledgeDetailReadonly/:id",
+          "path": "/KnowledgeDetailReadonly/:id"
+        },
+        {
+          "id": "web-KnowledgeList-2",
+          "name": "知识库",
+          "url": "/web/index.html#/knowledge",
+          "path": "/knowledge"
+        }
+      ]
+    },
+    {
+      "id": "web-knowledge",
+      "name": "knowledge (web, 1页)",
+      "entry": "web",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "web-KnowledgeEdit-0",
+          "name": "编辑知识库",
+          "url": "/web/index.html#/knowledge/edit",
+          "path": "/knowledge/edit"
+        }
+      ]
+    },
+    {
+      "id": "login-__shallow__",
+      "name": "login (首页功能)",
+      "entry": "login",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "login-LoginProxy-0",
+          "name": "LoginProxy",
+          "url": "/login/index.html#/login-proxy",
+          "path": "/login-proxy"
+        }
+      ]
+    },
+    {
+      "id": "index-integration",
+      "name": "integration (index, 6页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-integration-reverse-data-0",
+          "name": "integration-reverse-data",
+          "url": "/index/index.html#/integration/reverse/data/:id",
+          "path": "/integration/reverse/data/:id"
+        },
+        {
+          "id": "index-integration-reverse-1",
+          "name": "integration-reverse",
+          "url": "/index/index.html#/integration/reverse/:id/:nameX",
+          "path": "/integration/reverse/:id/:nameX"
+        },
+        {
+          "id": "index-integration-storage-2",
+          "name": "integration-storage",
+          "url": "/index/index.html#/integration/storage",
+          "path": "/integration/storage"
+        },
+        {
+          "id": "index-integration-site-3",
+          "name": "integration-site",
+          "url": "/index/index.html#/integration/site",
+          "path": "/integration/site"
+        },
+        {
+          "id": "index-integration-proxypool-4",
+          "name": "integration-proxypool",
+          "url": "/index/index.html#/integration/proxypool",
+          "path": "/integration/proxypool"
+        },
+        {
+          "id": "index-integration-5",
+          "name": "integration",
+          "url": "/index/index.html#/integration",
+          "path": "/integration"
+        }
+      ]
+    },
+    {
+      "id": "index-permission",
+      "name": "permission (index, 6页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-third-system-api-manage-0",
+          "name": "third-system-api-manage",
+          "url": "/index/index.html#/permission/third-system/api-manage",
+          "path": "/permission/third-system/api-manage"
+        },
+        {
+          "id": "index-permission-user-1",
+          "name": "permission-user",
+          "url": "/index/index.html#/permission/user",
+          "path": "/permission/user"
+        },
+        {
+          "id": "index-permission-role-2",
+          "name": "permission-role",
+          "url": "/index/index.html#/permission/role",
+          "path": "/permission/role"
+        },
+        {
+          "id": "index-base-resource-3",
+          "name": "base-resource",
+          "url": "/index/index.html#/permission/resource",
+          "path": "/permission/resource"
+        },
+        {
+          "id": "index-base-third-system-4",
+          "name": "base-third-system",
+          "url": "/index/index.html#/permission/third-system",
+          "path": "/permission/third-system"
+        },
+        {
+          "id": "index-permission-5",
+          "name": "permission",
+          "url": "/index/index.html#/permission",
+          "path": "/permission"
+        }
+      ]
+    },
+    {
+      "id": "index-knowledge",
+      "name": "knowledge (index, 2页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-knowledge-split-0",
+          "name": "knowledge-split",
+          "url": "/index/index.html#/knowledge/split",
+          "path": "/knowledge/split"
+        },
+        {
+          "id": "index-knowledge-1",
+          "name": "knowledge",
+          "url": "/index/index.html#/knowledge",
+          "path": "/knowledge"
+        }
+      ]
+    },
+    {
+      "id": "index-bussiness-module",
+      "name": "bussiness-module (index, 3页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-develop-plan-0",
+          "name": "develop-plan",
+          "url": "/index/index.html#/bussiness-module/develop-plan",
+          "path": "/bussiness-module/develop-plan"
+        },
+        {
+          "id": "index-achievement-1",
+          "name": "achievement",
+          "url": "/index/index.html#/bussiness-module/achievement",
+          "path": "/bussiness-module/achievement"
+        },
+        {
+          "id": "index-bussiness-module-2",
+          "name": "bussiness-module",
+          "url": "/index/index.html#/bussiness-module",
+          "path": "/bussiness-module"
+        }
+      ]
+    },
+    {
+      "id": "index-sys",
+      "name": "sys (index, 5页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-sys-code-0",
+          "name": "sys-code",
+          "url": "/index/index.html#/sys/code",
+          "path": "/sys/code"
+        },
+        {
+          "id": "index-sys-config-1",
+          "name": "sys-config",
+          "url": "/index/index.html#/sys/config",
+          "path": "/sys/config"
+        },
+        {
+          "id": "index-sys-database-2",
+          "name": "sys-database",
+          "url": "/index/index.html#/sys/database",
+          "path": "/sys/database"
+        },
+        {
+          "id": "index-sys-tag-3",
+          "name": "sys-tag",
+          "url": "/index/index.html#/sys/tag",
+          "path": "/sys/tag"
+        },
+        {
+          "id": "index-sys-4",
+          "name": "sys",
+          "url": "/index/index.html#/sys",
+          "path": "/sys"
+        }
+      ]
+    },
+    {
+      "id": "index-knowledge-asset",
+      "name": "knowledge-asset (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-knowledge-asset-0",
+          "name": "knowledge-asset",
+          "url": "/index/index.html#/knowledge-asset/:knowledgeId",
+          "path": "/knowledge-asset/:knowledgeId"
+        }
+      ]
+    },
+    {
+      "id": "index-new-knowledge-asset",
+      "name": "new-knowledge-asset (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-new-knowledge-asset-0",
+          "name": "new-knowledge-asset",
+          "url": "/index/index.html#/new-knowledge-asset/:knowledgeId",
+          "path": "/new-knowledge-asset/:knowledgeId"
+        }
+      ]
+    },
+    {
+      "id": "index-document-manage",
+      "name": "document-manage (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-document-manage-0",
+          "name": "document-manage",
+          "url": "/index/index.html#/document-manage",
+          "path": "/document-manage"
+        }
+      ]
+    },
+    {
+      "id": "index-storage",
+      "name": "storage (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-storage-0",
+          "name": "storage",
+          "url": "/index/index.html#/storage",
+          "path": "/storage"
+        }
+      ]
+    },
+    {
+      "id": "index-assetManage",
+      "name": "assetManage (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-assetManage-0",
+          "name": "assetManage",
+          "url": "/index/index.html#/assetManage",
+          "path": "/assetManage"
+        }
+      ]
+    },
+    {
+      "id": "index-main",
+      "name": "main (index, 1页)",
+      "entry": "index",
+      "suggestSplit": false,
+      "pages": [
+        {
+          "id": "index-main-0",
+          "name": "main",
+          "url": "/index/index.html#/main",
+          "path": "/main"
+        }
+      ]
+    }
+  ],
+  "discoveredAt": "2026-06-01T09:17:43.515Z",
+  "totalPages": 33
+}
