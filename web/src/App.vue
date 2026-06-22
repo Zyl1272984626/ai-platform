@@ -4,11 +4,13 @@
     <main class="app-main">
       <router-view />
     </main>
+    <ToastHost />
   </div>
 </template>
 
 <script setup lang="ts">
 import AppSidebar from './components/layout/AppSidebar.vue'
+import ToastHost from './components/common/ToastHost.vue'
 </script>
 
 <style>

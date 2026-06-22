@@ -58,7 +58,18 @@ sessionRouter.post('/:id/messages', async (req: Request, res: Response) => {
   const { EventEmitter } = await import('events');
   const emitter = new EventEmitter();
 
+  // 客户端断开（关页面 / 切会话 / 主动停止）时中断后端生成，避免空跑烧 token
+  // 注意：SSE 场景必须监听 res 的 close（req.close 在请求体读完后不可靠）
+  const abortController = new AbortController();
+  let clientGone = false;
+  res.on('close', () => {
+    clientGone = true;
+    abortController.abort();
+  });
+
   emitter.on('event', (event) => {
+    // 客户端已断开则不再写入（res 可能已结束）
+    if (clientGone) return;
     res.write(`data: ${JSON.stringify(event)}\n\n`);
     // 强制 flush，避免 Express/Node 缓冲 SSE 数据
     if (typeof (res as any).flush === 'function') {
@@ -67,14 +78,14 @@ sessionRouter.post('/:id/messages', async (req: Request, res: Response) => {
   });
 
   emitter.on('close', () => {
-    res.end();
+    if (!clientGone) res.end();
   });
 
-  await sendMessage(req.params.id, message, emitter);
+  await sendMessage(req.params.id, message, emitter, abortController.signal);
 });
 
-// 删除会话
-sessionRouter.delete('/:id', (req: Request, res: Response) => {
+// 删除会话（遵循 AGENTS.md：写操作用 POST，不用 DELETE）
+sessionRouter.post('/:id/delete', (req: Request, res: Response) => {
   const deleted = deleteSession(req.params.id);
   if (!deleted) return res.status(404).json({ error: 'Session not found' });
   res.json({ ok: true });

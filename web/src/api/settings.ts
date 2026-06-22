@@ -27,7 +27,6 @@ export interface PlatformConfig {
   apiTestBaseUrl: string
   claudeConfig: ClaudeConfig
   codexConfig: CodexConfig
-  claudeConfig: ClaudeConfig
   mavenConfig: MavenConfig
 }
 

@@ -23,6 +23,7 @@ import {
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 const CODEX_DIR = path.join(os.homedir(), '.codex');
+const ZCODE_DIR = path.join(os.homedir(), '.zcode');
 
 // ========== Claude Code 扫描 ==========
 
@@ -63,6 +64,33 @@ function extractTextFromContent(content: unknown): string {
 function countToolCalls(content: unknown): number {
   if (!Array.isArray(content)) return 0;
   return content.filter((c: any) => c.type === 'tool_use').length;
+}
+
+function stableHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function extractMessageText(message: any): string {
+  if (!message) return '';
+  if (typeof message === 'string') return message;
+  if (typeof message.content === 'string') return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((part: any) => {
+        if (!part) return '';
+        if (typeof part === 'string') return part;
+        return part.text || part.content || '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  if (message.text) return String(message.text);
+  return '';
 }
 
 async function parseClaudeSessionJsonl(
@@ -483,6 +511,169 @@ async function scanCodexSessions(): Promise<number> {
 
 // ========== 统一扫描入口 ==========
 
+// ========== ZCode 扫描 ==========
+
+interface ZCodeTurn {
+  turnId: string;
+  userText: string;
+  assistantText: string;
+  startedAt: string;
+  completedAt: string;
+  model: string;
+  toolCallCount: number;
+}
+
+function getZCodeSessionId(filePath: string, event: any): string {
+  if (event.sessionId) return String(event.sessionId).replace(/^sess_/, '');
+  const fileName = path.basename(filePath, '.jsonl');
+  return fileName.replace(/^model-io-/, '').replace(/^sess_/, '');
+}
+
+function getZCodeProjectPath(event: any): string {
+  const system = event.request?.body?.system || event.request?.system || [];
+  const systemText = Array.isArray(system)
+    ? system.map((item: any) => item?.text || item?.content || '').join('\n')
+    : String(system);
+  const match = systemText.match(/Primary working directory:\s*([^\n\r]+)/);
+  return match?.[1]?.trim() || '';
+}
+
+function extractZCodeTurn(event: any): ZCodeTurn | null {
+  if (event.type !== 'model_io') return null;
+  if (event.querySource && event.querySource !== 'main_turn') return null;
+
+  const body = event.request?.body || {};
+  const request = event.request || {};
+  const rawMessages = Array.isArray(body.messages)
+    ? body.messages
+    : Array.isArray(request.messages)
+      ? request.messages
+      : [];
+  const userMessages = rawMessages.filter((m: any) => m.role === 'user');
+  const lastUser = userMessages[userMessages.length - 1];
+  const userText = extractMessageText(lastUser).trim();
+  const assistantText = String(event.response?.text || event.response?.message || '').trim();
+  if (!userText && !assistantText) return null;
+
+  return {
+    turnId: event.turnId || event.requestId || stableHash(`${event.startedAt || ''}:${userText}`),
+    userText,
+    assistantText,
+    startedAt: event.startedAt || event.completedAt || '',
+    completedAt: event.completedAt || event.startedAt || '',
+    model: event.model?.modelId || event.response?.modelId || body.model || '',
+    toolCallCount: Array.isArray(request.toolNames) ? request.toolNames.length : 0,
+  };
+}
+
+async function parseZCodeRollout(filePath: string): Promise<{ summary: ConversationSummary; messages: ConversationMessage[] } | null> {
+  const stat = fs.statSync(filePath);
+  const turns = new Map<string, ZCodeTurn>();
+  let sessionId = '';
+  let projectPath = '';
+  let model = '';
+
+  const rl = readline.createInterface({ input: fs.createReadStream(filePath, 'utf-8') });
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    let event: any;
+    try { event = JSON.parse(line); } catch { continue; }
+
+    sessionId = sessionId || getZCodeSessionId(filePath, event);
+    projectPath = projectPath || getZCodeProjectPath(event);
+    const turn = extractZCodeTurn(event);
+    if (turn) {
+      model = turn.model || model;
+      turns.set(turn.turnId, turn);
+    }
+  }
+
+  const orderedTurns = Array.from(turns.values())
+    .sort((a, b) => (a.startedAt || '').localeCompare(b.startedAt || ''));
+  if (!orderedTurns.length) return null;
+
+  const messages: ConversationMessage[] = [];
+  let firstUserMsg = '';
+  let toolCallCount = 0;
+  for (const turn of orderedTurns) {
+    if (turn.userText) {
+      if (!firstUserMsg) firstUserMsg = turn.userText;
+      messages.push({
+        uuid: `${turn.turnId}:user`,
+        parentUuid: null,
+        role: 'user',
+        content: turn.userText,
+        contentType: 'text',
+        timestamp: turn.startedAt || stat.mtime.toISOString(),
+        isSidechain: false,
+      });
+    }
+    if (turn.assistantText) {
+      messages.push({
+        uuid: `${turn.turnId}:assistant`,
+        parentUuid: `${turn.turnId}:user`,
+        role: 'assistant',
+        content: turn.assistantText,
+        contentType: 'text',
+        timestamp: turn.completedAt || turn.startedAt || stat.mtime.toISOString(),
+        isSidechain: false,
+      });
+    }
+    toolCallCount += turn.toolCallCount;
+    model = turn.model || model;
+  }
+
+  const startedAt = orderedTurns[0]?.startedAt || stat.birthtime.toISOString();
+  const lastActivityAt = orderedTurns[orderedTurns.length - 1]?.completedAt || stat.mtime.toISOString();
+  const safeSessionId = sessionId || stableHash(filePath);
+  const projectSlug = projectPath ? projectPath.replace(/[\\/:]/g, '--').replace(/^-+/, '') : 'unknown';
+
+  return {
+    summary: {
+      id: `zcode:${safeSessionId}`,
+      source: 'zcode',
+      projectSlug,
+      projectPath,
+      sessionId: safeSessionId,
+      title: firstUserMsg.slice(0, 80) || '(无标题)',
+      model,
+      messageCount: messages.filter(m => m.contentType === 'text').length,
+      toolCallCount,
+      startedAt,
+      lastActivityAt,
+      sizeBytes: stat.size,
+      importedAt: new Date().toISOString(),
+      sourceFilePath: filePath,
+    },
+    messages,
+  };
+}
+
+async function scanZCodeSessions(): Promise<number> {
+  const rolloutDir = path.join(ZCODE_DIR, 'cli', 'rollout');
+  if (!fs.existsSync(rolloutDir)) return 0;
+
+  let count = 0;
+  const files = fs.readdirSync(rolloutDir)
+    .filter(f => f.startsWith('model-io-') && f.endsWith('.jsonl'));
+
+  for (const file of files) {
+    const filePath = path.join(rolloutDir, file);
+    try {
+      const result = await parseZCodeRollout(filePath);
+      if (result) {
+        upsertConversationSummary(result.summary);
+        saveConversationDetail({ ...result.summary, messages: result.messages });
+        count++;
+      }
+    } catch (err: any) {
+      console.warn(`[Memory] skip zcode ${file}: ${err.message}`);
+    }
+  }
+
+  return count;
+}
+
 export interface ScanResult {
   scanned: number;
   newCount: number;
@@ -496,8 +687,9 @@ export async function scanAllConversations(): Promise<ScanResult> {
 
   const claudeCount = await scanClaudeCodeSessions();
   const codexCount = await scanCodexSessions();
+  const zcodeCount = await scanZCodeSessions();
 
-  const totalScanned = claudeCount + codexCount;
+  const totalScanned = claudeCount + codexCount + zcodeCount;
   const newIndex = loadConversationIndex();
   const newCount = newIndex.filter(c => !existingIds.has(c.id)).length;
   const updated = totalScanned - newCount;

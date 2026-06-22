@@ -23,7 +23,7 @@ const ARTIFACTS_DIR = path.join(MEMORY_DIR, 'artifacts');
 
 export interface ConversationSummary {
   id: string;
-  source: 'claude-code' | 'codex';
+  source: 'claude-code' | 'codex' | 'zcode';
   projectSlug: string;
   projectPath: string;
   sessionId: string;

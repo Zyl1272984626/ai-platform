@@ -327,6 +327,53 @@ function loadRelayManifest(runId: string): { requirement?: string; projectId?: s
   }
 }
 
+function validateArtifactQuality(stage: PipelineRelayStage, content?: string): {
+  quality: 'missing' | 'weak' | 'ok';
+  issues: string[];
+} {
+  if (!content?.trim()) return { quality: 'missing', issues: ['未检测到产物文件'] };
+
+  const issues: string[] = [];
+  const normalized = content.toLowerCase();
+  const hasHeading = /^#{1,4}\s+/m.test(content);
+  const hasFilePath = /([A-Za-z]:[\\/][^\s`'"]+|[\w.-]+[\\/][\w./-]+\.(ts|tsx|vue|java|js|json|md|xml|yml|yaml))/i.test(content);
+  const hasRisk = /(风险|阻塞|block|risk|问题|不确定)/i.test(content);
+  const hasNext = /(下一步|建议|后续|next)/i.test(content);
+
+  if (!hasHeading) issues.push('缺少 Markdown 章节标题');
+  if (!hasRisk) issues.push('缺少风险/阻塞说明');
+  if (!hasNext) issues.push('缺少下一步建议');
+
+  if (stage.promptKind === 'discovery') {
+    if (!hasFilePath) issues.push('代码发现阶段缺少真实文件路径证据');
+    if (!/(入口|接口|组件|服务|存储|字段|加载|entry|api|service|storage)/i.test(content)) {
+      issues.push('代码发现阶段缺少入口/存储/加载机制说明');
+    }
+  }
+
+  if (stage.id.includes('final-design') || stage.id.includes('final')) {
+    if (!/(验收|测试|验证|acceptance|test)/i.test(content)) issues.push('最终设计/交付缺少验收或验证标准');
+    if (!/(文件|接口|前端|后端|任务|改动|file|api)/i.test(content)) issues.push('最终设计/交付缺少文件级或接口级计划');
+  }
+
+  if (stage.promptKind === 'implementation') {
+    if (!/(changed|修改|新增|文件|diff|变更)/i.test(content)) issues.push('实现阶段缺少变更文件或 diff 摘要');
+  }
+
+  if (stage.promptKind === 'verification') {
+    if (!/(命令|测试|构建|build|test|npm|mvn|pnpm|yarn|验证)/i.test(content)) issues.push('验证阶段缺少命令或验证证据');
+  }
+
+  if (stage.promptKind === 'review') {
+    if (!/(security|安全|性能|可维护|覆盖|风险|review|审查)/i.test(content)) issues.push('审查阶段缺少审查维度');
+  }
+
+  return {
+    quality: issues.length === 0 ? 'ok' : issues.length <= 2 ? 'weak' : 'weak',
+    issues,
+  };
+}
+
 function saveRunState(run: PipelineRun): void {
   if (deletedRunIds.has(run.id)) return;
   ensureDir(RUNS_DIR);
@@ -703,6 +750,8 @@ export function scanPipelineArtifacts(runId: string): {
     size: number;
     updatedAt?: string;
     preview?: string;
+    quality: 'missing' | 'weak' | 'ok';
+    qualityIssues: string[];
   }>;
 } {
   const id = sanitizeRunId(runId);
@@ -714,9 +763,9 @@ export function scanPipelineArtifacts(runId: string): {
     const filePath = path.join(runDir, stage.artifactFile);
     const exists = fs.existsSync(filePath);
     const stat = exists ? fs.statSync(filePath) : undefined;
-    const preview = exists
-      ? fs.readFileSync(filePath, 'utf-8').slice(0, 1200)
-      : undefined;
+    const content = exists ? fs.readFileSync(filePath, 'utf-8') : undefined;
+    const preview = content?.slice(0, 1200);
+    const quality = validateArtifactQuality(stage, content);
     return {
       ...stage,
       path: filePath.replace(/\\/g, '/'),
@@ -724,6 +773,8 @@ export function scanPipelineArtifacts(runId: string): {
       size: stat?.size || 0,
       updatedAt: stat?.mtime.toISOString(),
       preview,
+      quality: quality.quality,
+      qualityIssues: quality.issues,
     };
   });
   return {
@@ -740,8 +791,10 @@ export function listPipelineArtifactRuns(): Array<{
   runDir: string;
   requirement?: string;
   projectId?: string;
+  baseEngine?: BaseEngine;
   updatedAt?: string;
   completedStages: number;
+  qualifiedStages: number;
   totalStages: number;
 }> {
   const root = getPipelineArtifactRoot();
@@ -766,8 +819,10 @@ export function listPipelineArtifactRuns(): Array<{
         runDir: runDir.replace(/\\/g, '/'),
         requirement: manifest.requirement,
         projectId: manifest.projectId,
+        baseEngine: scan.baseEngine,
         updatedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : (manifest.updatedAt || dirStat.mtime.toISOString()),
         completedStages: scan.stages.filter(stage => stage.exists).length,
+        qualifiedStages: scan.stages.filter(stage => stage.quality === 'ok').length,
         totalStages: scan.stages.length,
       };
     })

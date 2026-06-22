@@ -2,14 +2,19 @@
   <div class="message" :class="role">
     <div class="msg-avatar">{{ role === 'user' ? '你' : 'AI' }}</div>
     <div class="msg-body">
-      <div v-if="role === 'assistant'" class="msg-html" v-html="rendered"></div>
+      <div
+        v-if="role === 'assistant'"
+        ref="htmlEl"
+        class="msg-html"
+        v-html="rendered"
+      ></div>
       <div v-else class="msg-text">{{ content }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 
 marked.setOptions({
@@ -22,6 +27,8 @@ const props = defineProps<{
   content: string
 }>()
 
+const htmlEl = ref<HTMLElement>()
+
 const rendered = computed(() => {
   if (!props.content) return ''
   try {
@@ -30,6 +37,52 @@ const rendered = computed(() => {
     return props.content.replace(/\n/g, '<br>')
   }
 })
+
+/** 渲染后增强代码块：提取语言标签 + 注入复制按钮 header */
+function enhanceCodeBlocks() {
+  const root = htmlEl.value
+  if (!root) return
+  const pres = root.querySelectorAll('pre')
+  pres.forEach(pre => {
+    if (pre.parentElement?.classList.contains('code-wrap')) return // 已处理
+    const code = pre.querySelector('code')
+    // 提取语言（marked 输出 class="language-xxx"）
+    let lang = ''
+    if (code) {
+      const m = code.className.match(/language-([\w-]+)/)
+      if (m) lang = m[1]
+    }
+    // 包装：header 条 + pre
+    const wrap = document.createElement('div')
+    wrap.className = 'code-wrap'
+    const header = document.createElement('div')
+    header.className = 'code-header'
+    const label = document.createElement('span')
+    label.className = 'code-lang'
+    label.textContent = lang || 'code'
+    const btn = document.createElement('button')
+    btn.className = 'copy-btn'
+    btn.textContent = '复制'
+    btn.addEventListener('click', () => {
+      const text = code?.textContent || pre.textContent || ''
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '已复制'
+        setTimeout(() => { btn.textContent = '复制' }, 1500)
+      }).catch(() => {
+        btn.textContent = '失败'
+        setTimeout(() => { btn.textContent = '复制' }, 1500)
+      })
+    })
+    header.appendChild(label)
+    header.appendChild(btn)
+    pre.parentNode?.insertBefore(wrap, pre)
+    wrap.appendChild(header)
+    wrap.appendChild(pre)
+  })
+}
+
+onMounted(enhanceCodeBlocks)
+watch(rendered, () => nextTick(enhanceCodeBlocks))
 </script>
 
 <style scoped>
@@ -78,6 +131,43 @@ const rendered = computed(() => {
   color: #333;
   border-bottom-left-radius: 4px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.msg-html :deep(.code-wrap) {
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #313244;
+}
+.msg-html :deep(.code-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  background: #181825;
+  font-size: 11px;
+}
+.msg-html :deep(.code-lang) {
+  color: #7f849c;
+  font-family: monospace;
+  text-transform: lowercase;
+}
+.msg-html :deep(.copy-btn) {
+  background: none;
+  border: 1px solid #45475a;
+  color: #bac2de;
+  font-size: 11px;
+  padding: 1px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.msg-html :deep(.copy-btn:hover) {
+  background: #313244;
+  color: #cdd6f4;
+}
+.msg-html :deep(.code-wrap pre) {
+  margin: 0;
+  border-radius: 0;
 }
 .msg-html :deep(pre) {
   background: #1e1e2e;

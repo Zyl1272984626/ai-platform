@@ -1,6 +1,7 @@
 // ========== Session ==========
 export interface Session {
   id: string
+  title?: string
   config: {
     cwd: string
     systemPrompt?: string
@@ -16,6 +17,12 @@ export interface Session {
 export interface Message {
   role: 'user' | 'assistant'
   content: string
+  /** 仅 assistant 消息可能携带的工具调用记录（历史还原用） */
+  toolEvents?: Array<{
+    name: string
+    input?: any
+    result?: string
+  }>
 }
 
 // ========== SSE Events (Chat) ==========
@@ -200,7 +207,7 @@ export interface PipelineRelayStage {
   ownerLabel: string
   purpose: string
   artifactFile: string
-  promptKind: 'orchestrator' | 'design' | 'implementation' | 'verification' | 'review' | 'handoff'
+  promptKind: 'orchestrator' | 'discovery' | 'design' | 'implementation' | 'verification' | 'review' | 'handoff'
 }
 
 export interface PipelineRelayPlan {
@@ -216,6 +223,8 @@ export interface PipelineArtifactStage extends PipelineRelayStage {
   size: number
   updatedAt?: string
   preview?: string
+  quality: 'missing' | 'weak' | 'ok'
+  qualityIssues: string[]
 }
 
 export interface PipelineArtifactScan {
@@ -231,8 +240,10 @@ export interface PipelineArtifactRun {
   runDir: string
   requirement?: string
   projectId?: string
+  baseEngine?: 'codex' | 'claudecode'
   updatedAt?: string
   completedStages: number
+  qualifiedStages?: number
   totalStages: number
 }
 
@@ -279,7 +290,7 @@ export interface ModelConfigResponse {
 // ========== Memory Hub ==========
 export interface ConversationSummary {
   id: string
-  source: 'claude-code' | 'codex'
+  source: 'claude-code' | 'codex' | 'zcode'
   projectSlug: string
   projectPath: string
   sessionId: string

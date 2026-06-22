@@ -11,6 +11,17 @@
  * 性能：使用动态 import 避免启动时加载 75MB 的 claude-code 包
  */
 import { EventEmitter } from 'events';
+import {
+  ensureSessionDirs,
+  loadAllSessions,
+  loadSession,
+  saveSession,
+  deleteSessionFiles,
+  deriveTitle,
+  type Session,
+  type SessionConfig,
+  type SessionMessage,
+} from './session-store.js';
 
 // 动态加载 claude-code，避免启动时阻塞
 let _query: typeof import('@anthropic-ai/claude-code').query | null = null;
@@ -22,30 +33,18 @@ async function getClaudeQuery() {
   return _query!;
 }
 
+// 启动即初始化会话存储目录
+ensureSessionDirs();
+
+// 重新导出类型，保持对外 API 不变（session.ts 仍可从本文件 import 类型）
+export type { Session, SessionConfig, SessionMessage };
+
 // ========== 类型 ==========
 
 export interface StreamEvent {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done' | 'system' | 'progress';
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'done' | 'system' | 'progress' | 'aborted';
   content: string;
   metadata?: Record<string, unknown>;
-}
-
-export interface SessionConfig {
-  cwd: string;
-  systemPrompt?: string;
-  allowedTools?: string[];
-  maxTurns?: number;
-  stepTimeout?: number;
-  totalTimeout?: number;
-}
-
-export interface Session {
-  id: string;
-  config: SessionConfig;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
-  createdAt: string;
-  updatedAt: string;
-  status: 'active' | 'idle' | 'error';
 }
 
 // ========== 自动审批工具白名单 ==========
@@ -59,36 +58,34 @@ const AUTO_APPROVED_TOOLS = [
   'mcp__4_5v_mcp__analyze_image',
 ];
 
-// ========== 会话管理 ==========
-
-const sessions = new Map<string, Session>();
+// ========== 会话管理（基于文件持久化） ==========
 
 export function createSession(id: string, config: SessionConfig): Session {
   const mergedTools = [...new Set([...AUTO_APPROVED_TOOLS, ...(config.allowedTools || [])])];
+  const now = new Date().toISOString();
   const session: Session = {
     id,
+    title: '新会话',
     config: { ...config, allowedTools: mergedTools },
     messages: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     status: 'idle',
   };
-  sessions.set(id, session);
+  saveSession(session);
   return session;
 }
 
 export function getSession(id: string): Session | undefined {
-  return sessions.get(id);
+  return loadSession(id) || undefined;
 }
 
 export function listSessions(): Session[] {
-  return Array.from(sessions.values()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  return loadAllSessions();
 }
 
 export function deleteSession(id: string): boolean {
-  return sessions.delete(id);
+  return deleteSessionFiles(id);
 }
 
 // ========== 核心消息发送 ==========
@@ -104,23 +101,56 @@ export function deleteSession(id: string): boolean {
 export async function sendMessage(
   sessionId: string,
   message: string,
-  emitter: EventEmitter
+  emitter: EventEmitter,
+  externalSignal?: AbortSignal
 ): Promise<void> {
-  const session = sessions.get(sessionId);
-  if (!session) {
+  const sessionMaybe = getSession(sessionId);
+  if (!sessionMaybe) {
     emitter.emit('event', { type: 'error', content: 'Session not found' } satisfies StreamEvent);
     emitter.emit('close');
     return;
   }
+  // 重新绑定为确定非空的 const，使后续闭包（pushAssistantIfNeeded）内 TS 收窄生效
+  const session: Session = sessionMaybe;
 
   session.messages.push({ role: 'user', content: message });
+  // 首条用户消息时自动生成标题（替换默认“新会话”）
+  if (session.title === '新会话') {
+    session.title = deriveTitle(session);
+  }
   session.status = 'active';
   session.updatedAt = new Date().toISOString();
+  saveSession(session);
 
   const maxTurns = session.config.maxTurns || 9999;
+  // 声明在 try 外，便于 catch 时保留已生成的部分文本
+  let assistantText = '';
+  // 当前轮次工具调用累计（用 tool_use_id 关联 use 与 result），最终落到 assistant 消息的 toolEvents
+  const toolEvents: Array<{ id?: string; name: string; input?: unknown; result?: string }> = [];
+  // 声明在 try 外，便于 catch 时判断是否主动中断
+  const abortController = new AbortController();
+
+  /** 有文本或工具记录时，push 一条 assistant 消息（含 toolEvents，剥离临时 id） */
+  function pushAssistantIfNeeded() {
+    const cleanToolEvents = toolEvents.map(e => ({ name: e.name, input: e.input, result: e.result }));
+    if (assistantText || cleanToolEvents.length > 0) {
+      session.messages.push({
+        role: 'assistant',
+        content: assistantText,
+        ...(cleanToolEvents.length > 0 ? { toolEvents: cleanToolEvents } : {}),
+      });
+    }
+  }
 
   try {
-    const abortController = new AbortController();
+    // 联动外部信号（客户端断开 / 主动停止）：任一触发即中断本地
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        abortController.abort();
+      } else {
+        externalSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+      }
+    }
     // 无超时限制，让 Claude Code 自然完成
     const timer = setTimeout(() => {}, 0);
 
@@ -139,11 +169,9 @@ export async function sendMessage(
       },
     });
 
-    let assistantText = '';
-
     for await (const msg of response) {
       if (abortController.signal.aborted) {
-        throw new Error('Total timeout exceeded');
+        throw new Error('__ABORTED__');
       }
 
       switch (msg.type) {
@@ -164,7 +192,14 @@ export async function sendMessage(
               if (block.type === 'text') {
                 assistantText += block.text;
                 emitter.emit('event', { type: 'text', content: block.text } satisfies StreamEvent);
+              } else if (block.type === 'thinking') {
+                // 思考过程块：{ type: 'thinking', thinking: '...' }
+                const thinkingText = block.thinking || '';
+                if (thinkingText) {
+                  emitter.emit('event', { type: 'thinking', content: thinkingText } satisfies StreamEvent);
+                }
               } else if (block.type === 'tool_use') {
+                toolEvents.push({ id: block.id, name: block.name, input: block.input });
                 emitter.emit('event', {
                   type: 'tool_use',
                   content: block.name,
@@ -185,6 +220,11 @@ export async function sendMessage(
                 const resultContent = typeof block.content === 'string'
                   ? block.content
                   : JSON.stringify(block.content);
+                // 关联到对应的 tool_use 记录（按 id），截断到 5000 字符（与前端 ToolCallBlock 阈值一致）
+                const evt = toolEvents.find(e => e.id === block.tool_use_id);
+                if (evt) {
+                  evt.result = resultContent.length > 5000 ? resultContent.slice(0, 5000) : resultContent;
+                }
                 emitter.emit('event', {
                   type: 'tool_result',
                   content: resultContent,
@@ -224,19 +264,28 @@ export async function sendMessage(
 
     clearTimeout(timer);
 
-    if (assistantText) {
-      session.messages.push({ role: 'assistant', content: assistantText });
-    }
+    pushAssistantIfNeeded();
 
     session.status = 'idle';
     session.updatedAt = new Date().toISOString();
     emitter.emit('event', { type: 'done', content: '' } satisfies StreamEvent);
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    session.status = 'error';
+    const errMsg = err instanceof Error ? err.message : String(err);
+    // 以 signal 状态为准判断是否主动中断（SDK 中断错误形态多样，字符串不可靠）
+    const aborted = abortController.signal.aborted;
+    // 主动中断视为正常结束（status=idle），真实错误才标记 error
+    session.status = aborted ? 'idle' : 'error';
     session.updatedAt = new Date().toISOString();
-    emitter.emit('event', { type: 'error', content: errorMsg } satisfies StreamEvent);
+    // 中断 / 出错都保留已生成的部分 assistant 文本与工具记录
+    pushAssistantIfNeeded();
+    if (aborted) {
+      emitter.emit('event', { type: 'aborted', content: '已停止' } satisfies StreamEvent);
+    } else {
+      emitter.emit('event', { type: 'error', content: errMsg } satisfies StreamEvent);
+    }
   } finally {
+    // 统一落盘：覆盖成功 / 中断 / 错误三种情况，保证已生成内容不丢
+    saveSession(session);
     emitter.emit('close');
   }
 }

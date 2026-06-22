@@ -15,7 +15,7 @@ export function getSession(id: string) {
 }
 
 export function deleteSession(id: string) {
-  return api.delete(`/sessions/${id}`).then(r => r.data)
+  return api.post(`/sessions/${id}/delete`).then(r => r.data)
 }
 
 export function sendMessage(

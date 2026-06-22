@@ -170,8 +170,12 @@
                 <p>{{ stage.ownerLabel }}</p>
               </div>
               <span class="artifact-state" :class="{ ok: stage.exists }">{{ stage.exists ? '已检测' : '待产物' }}</span>
+              <span class="quality-badge" :class="qualityClass(stage.quality)">{{ qualityText(stage.quality) }}</span>
             </div>
             <p class="relay-purpose">{{ stage.purpose }}</p>
+            <ul v-if="stage.qualityIssues?.length && stage.quality !== 'ok'" class="quality-issues">
+              <li v-for="issue in stage.qualityIssues.slice(0, 3)" :key="issue">{{ issue }}</li>
+            </ul>
             <div class="artifact-file">
               <span>产物</span>
               <code>{{ stage.path || artifactPath(stage.artifactFile) }}</code>
@@ -204,7 +208,7 @@
         >
           <strong>{{ run.runId }}</strong>
           <span v-if="run.requirement">{{ shortText(run.requirement, 44) }}</span>
-          <span>{{ run.completedStages }}/{{ run.totalStages }} 阶段</span>
+          <span>{{ runEngineText(run.baseEngine) }} · {{ run.completedStages }}/{{ run.totalStages }} 已生成 · {{ run.qualifiedStages || 0 }}/{{ run.totalStages }} 合格</span>
           <time>{{ run.updatedAt ? formatTime(run.updatedAt) : '未检测到产物' }}</time>
         </button>
       </div>
@@ -213,7 +217,7 @@
         <div class="panel-head">
           <h2>阶段产物</h2>
           <div class="artifact-actions">
-            <button class="btn-ghost compact" :disabled="!artifactScan?.runId" @click="selectUnfinishedStages">选择未完成</button>
+            <button class="btn-ghost compact" :disabled="!artifactScan?.runId" @click="selectUnfinishedStages">选择待补齐</button>
             <button class="btn-primary compact" :disabled="!selectedArtifactStageIds.length" @click="copyContinuationPrompt">
               {{ continuationCopied ? '已复制总控' : '复制选中阶段总控' }}
             </button>
@@ -240,7 +244,11 @@
                   <p>{{ stage.ownerLabel }}</p>
                 </div>
                 <span class="artifact-state" :class="{ ok: stage.exists }">{{ stage.exists ? '已检测' : '待产物' }}</span>
+                <span class="quality-badge" :class="qualityClass(stage.quality)">{{ qualityText(stage.quality) }}</span>
               </div>
+              <ul v-if="stage.qualityIssues?.length && stage.quality !== 'ok'" class="quality-issues">
+                <li v-for="issue in stage.qualityIssues" :key="issue">{{ issue }}</li>
+              </ul>
               <div class="artifact-file">
                 <span>文件</span>
                 <code>{{ stage.path }}</code>
@@ -475,6 +483,8 @@ const relayStagesWithArtifacts = computed(() => {
     path: artifactPath(stage.artifactFile),
     exists: false,
     size: 0,
+    quality: 'missing' as const,
+    qualityIssues: ['未检测到阶段产物'],
   })
 })
 const launchHint = computed(() => {
@@ -521,8 +531,9 @@ async function refreshArtifactRuns() {
 
 async function openArtifactRun(runId: string) {
   relayRunId.value = runId
-  relayPlan.value = await getRelayPlan(runId)
   artifactScan.value = await scanArtifacts(runId)
+  if (artifactScan.value.baseEngine) baseEngine.value = artifactScan.value.baseEngine
+  relayPlan.value = await getRelayPlan(runId, artifactScan.value.baseEngine || baseEngine.value)
   selectUnfinishedStages()
   await refreshArtifactRuns()
 }
@@ -572,7 +583,9 @@ function artifactStageIndex(stageId: string) {
 }
 
 function selectUnfinishedStages() {
-  selectedArtifactStageIds.value = artifactScan.value?.stages.filter(stage => !stage.exists).map(stage => stage.id) || []
+  selectedArtifactStageIds.value = artifactScan.value?.stages
+    .filter(stage => !stage.exists || stage.quality !== 'ok')
+    .map(stage => stage.id) || []
 }
 
 function toggleArtifactStage(stageId: string) {
@@ -583,6 +596,23 @@ function toggleArtifactStage(stageId: string) {
 
 function currentArtifactRun() {
   return artifactRuns.value.find(run => run.runId === artifactScan.value?.runId)
+}
+
+function qualityText(quality?: 'missing' | 'weak' | 'ok') {
+  const map = {
+    missing: '缺失',
+    weak: '需补强',
+    ok: '合格',
+  }
+  return map[quality || 'missing']
+}
+
+function qualityClass(quality?: 'missing' | 'weak' | 'ok') {
+  return quality || 'missing'
+}
+
+function runEngineText(engine?: 'codex' | 'claudecode') {
+  return engine === 'claudecode' ? 'ClaudeCode' : 'CodeX'
 }
 
 function adaptStages(stages: PipelineStageRun[]): StepRun[] {
@@ -680,6 +710,7 @@ async function copyArtifactStagePrompt(stageId: string) {
       run?.projectId,
       artifactScan.value.runId,
       'relay',
+      artifactScan.value.baseEngine || run?.baseEngine || baseEngine.value,
     )
     await navigator.clipboard.writeText(result.prompt)
     copiedStageId.value = stageId
@@ -1385,7 +1416,7 @@ textarea:focus {
 }
 .relay-top {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 10px;
 }
@@ -1414,6 +1445,35 @@ textarea:focus {
 .artifact-state.ok {
   background: #dcfae6;
   color: #087443;
+}
+.quality-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.quality-badge.ok {
+  border-color: #9edcc2;
+  background: #ecfdf3;
+  color: #067647;
+}
+.quality-badge.weak {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #b54708;
+}
+.quality-badge.missing {
+  border-color: #e4e7ec;
+  background: #f9fafb;
+  color: #667085;
+}
+.quality-issues {
+  margin: -2px 0 0;
+  padding-left: 18px;
+  color: #b54708;
+  font-size: 12px;
+  line-height: 1.55;
 }
 .artifact-path,
 .artifact-file {
