@@ -1,11 +1,6 @@
 <template>
-  <div class="workflow-page">
-    <header class="page-header">
-      <div>
-        <h1>工作流</h1>
-        <p class="page-desc">触发自动化工作流，监控执行进度</p>
-      </div>
-    </header>
+  <div class="workflow-page page-container">
+    <PageHeader title="工作流" description="触发自动化工作流，监控执行进度" />
 
     <!-- Tab 切换 -->
     <div class="tabs">
@@ -61,6 +56,17 @@
       @run="executeWorkflow"
       @cancel="showParams = false"
     />
+
+    <!-- 中止确认弹窗 -->
+    <BaseModal
+      v-model:show="showAbortConfirm"
+      title="确认中止"
+      preset="dialog"
+      :width="420"
+      @confirm="doAbort"
+    >
+      <div style="padding: 4px 0">确认中止此工作流？中止后无法恢复。</div>
+    </BaseModal>
   </div>
 </template>
 
@@ -69,6 +75,9 @@ import { ref, onMounted } from 'vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import StepPipeline from '../components/workflow/StepPipeline.vue'
 import WorkflowParamsForm from '../components/workflow/WorkflowParamsForm.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import { useToast } from '../composables/useToast'
 import { listTemplates, listRuns, runWorkflow, confirmStep as apiConfirm, abortRun as apiAbort } from '../api/workflows'
 import type { WorkflowTemplate, WorkflowRun } from '../api/types'
 
@@ -76,6 +85,9 @@ const tab = ref<'templates' | 'history'>('templates')
 const templates = ref<WorkflowTemplate[]>([])
 const runs = ref<WorkflowRun[]>([])
 const expandedRun = ref<string | null>(null)
+const { toast } = useToast()
+const showAbortConfirm = ref(false)
+const pendingAbortId = ref<string | null>(null)
 
 const showParams = ref(false)
 const activeWfName = ref('')
@@ -121,7 +133,7 @@ async function executeWorkflow(params: Record<string, string>) {
     runs.value = await listRuns()
     tab.value = 'history'
   } catch (e: any) {
-    alert('执行失败: ' + e.message)
+    toast.error('执行失败: ' + e.message)
   }
 }
 
@@ -130,17 +142,26 @@ async function confirmStep(runId: string) {
     await apiConfirm(runId)
     runs.value = await listRuns()
   } catch (e: any) {
-    alert('操作失败: ' + e.message)
+    toast.error('操作失败: ' + e.message)
   }
 }
 
-async function abortWorkflow(runId: string) {
-  if (!confirm('确认中止此工作流？')) return
+function abortWorkflow(runId: string) {
+  pendingAbortId.value = runId
+  showAbortConfirm.value = true
+}
+
+async function doAbort() {
+  const runId = pendingAbortId.value
+  if (!runId) return
   try {
     await apiAbort(runId)
     runs.value = await listRuns()
   } catch (e: any) {
-    alert('操作失败: ' + e.message)
+    toast.error('操作失败: ' + e.message)
+  } finally {
+    pendingAbortId.value = null
+    showAbortConfirm.value = false
   }
 }
 
@@ -152,26 +173,17 @@ async function resumeWorkflow(runId: string) {
     await promise
     runs.value = await listRuns()
   } catch (e: any) {
-    alert('恢复失败: ' + e.message)
+    toast.error('恢复失败: ' + e.message)
   }
 }
 </script>
 
 <style scoped>
-.workflow-page {
-  padding: 28px 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.page-header { margin-bottom: 20px; }
-.page-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; }
-.page-desc { font-size: 13px; color: #999; margin-top: 4px; }
-
 .tabs {
   display: flex;
   gap: 4px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #eee;
+  margin-bottom: var(--space-5);
+  border-bottom: 2px solid var(--border-light);
   padding-bottom: 0;
 }
 .tab {
@@ -179,91 +191,91 @@ async function resumeWorkflow(runId: string) {
   background: none;
   border: none;
   font-size: 14px;
-  color: #999;
+  color: var(--text-3);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease);
 }
 .tab.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
+  color: var(--brand);
+  border-bottom-color: var(--brand);
   font-weight: 600;
 }
 .run-count {
-  background: #667eea;
+  background: var(--brand);
   color: #fff;
   font-size: 11px;
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: var(--radius-pill);
   margin-left: 6px;
 }
 
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 14px;
+  gap: var(--space-4);
 }
 .wf-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 .wf-name {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
-  margin-bottom: 8px;
+  color: var(--text-1);
+  margin-bottom: var(--space-2);
 }
 .wf-desc {
   font-size: 13px;
-  color: #888;
+  color: var(--text-3);
   line-height: 1.5;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 .wf-meta {
   display: flex;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 .meta-item {
   font-size: 12px;
-  color: #999;
-  background: #f5f5f7;
+  color: var(--text-3);
+  background: var(--bg-surface-2);
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
 }
 .meta-item.trigger {
-  font-family: monospace;
-  color: #667eea;
-  background: #eef0ff;
+  font-family: var(--font-mono);
+  color: var(--brand);
+  background: var(--brand-soft);
 }
 .btn-exec {
   width: 100%;
   padding: 8px 0;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--brand);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.btn-exec:hover { opacity: 0.9; }
+.btn-exec:hover { background: var(--brand-hover); }
 
 .no-runs {
-  color: #bbb;
+  color: var(--text-4);
   text-align: center;
   padding: 40px;
   font-size: 14px;
 }
 .run-card {
-  background: #fff;
-  border-radius: 10px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   margin-bottom: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 .run-header {
@@ -272,35 +284,35 @@ async function resumeWorkflow(runId: string) {
   align-items: center;
   padding: 14px 18px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.run-header:hover { background: #fafafa; }
+.run-header:hover { background: var(--bg-surface-2); }
 .run-info {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.run-name { font-size: 14px; font-weight: 500; color: #333; }
-.run-time { font-size: 12px; color: #bbb; }
+.run-name { font-size: 14px; font-weight: 500; color: var(--text-1); }
+.run-time { font-size: 12px; color: var(--text-4); }
 .run-detail {
   padding: 0 18px 16px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-light);
 }
 .run-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 .act {
   padding: 6px 16px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
   cursor: pointer;
   font-size: 12px;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease);
 }
-.act.confirm:hover { border-color: #52c41a; color: #52c41a; }
-.act.resume:hover { border-color: #1890ff; color: #1890ff; }
-.act.abort:hover { border-color: #ff4d4f; color: #ff4d4f; }
+.act.confirm:hover { border-color: var(--success); color: var(--success); }
+.act.resume:hover { border-color: var(--info); color: var(--info); }
+.act.abort:hover { border-color: var(--error); color: var(--error); }
 </style>

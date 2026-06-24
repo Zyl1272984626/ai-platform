@@ -1,11 +1,6 @@
 <template>
-  <div class="test-page">
-    <header class="page-header">
-      <div>
-        <h1>测试中心</h1>
-        <p class="page-desc">Agent测试、E2E页面测试、前端单元测试、API接口测试</p>
-      </div>
-    </header>
+  <div class="test-page page-container">
+    <PageHeader title="测试中心" description="Agent测试、E2E页面测试、前端单元测试、API接口测试" />
 
     <!-- 测试类型 Tab -->
     <div class="type-tabs">
@@ -132,7 +127,7 @@
             <div v-for="mod in reviewModules" :key="mod.id" class="module-check">
               <label>
                 <input type="checkbox" :value="mod.id" v-model="selectedReviewModules" />
-                <span :class="'risk-' + mod.riskLevel">{{ mod.riskLevel === 'high' ? '🔴' : mod.riskLevel === 'medium' ? '🟡' : '🔵' }}</span>
+                <span class="risk-dot" :class="'risk-' + mod.riskLevel" :title="riskLabel(mod.riskLevel)"></span>
                 {{ mod.name }} ({{ mod.files }} 文件)
               </label>
             </div>
@@ -173,12 +168,12 @@
       </div>
       <div class="type-header-actions">
         <button class="btn-run" :disabled="(activeType === 'agent' && !agentId.trim()) || (activeType === 'e2e' && !selectedProjectId) || (activeType === 'api' && !selectedProjectId) || (activeType === 'frontend' && (!selectedProjectId || selectedFrontendModules.length === 0)) || (activeType === 'codereview' && (!selectedProjectId || selectedReviewModules.length === 0))" @click="startTest">
-          ▶ 开始测试
+          <Icon :icon="IconAction.play" :size="16" /> 开始测试
         </button>
         <button v-if="activeType === 'e2e' || activeType === 'codereview' || activeType === 'frontend'" class="btn-prompt" :disabled="!selectedProjectId || (activeType === 'codereview' && selectedReviewModules.length === 0) || (activeType === 'frontend' && selectedFrontendModules.length === 0)" @click="doGeneratePrompt">
           生成提示词
         </button>
-        <button v-if="activeType === 'codereview'" class="btn-scan" :disabled="!selectedProjectId" @click="doScanReportFiles">
+        <button v-if="activeType === 'e2e' || activeType === 'codereview' || activeType === 'frontend'" class="btn-scan" :disabled="!selectedProjectId" @click="doScanReportFiles">
           检测报告
         </button>
       </div>
@@ -222,11 +217,11 @@
           <div v-if="stream.chatMessages.length > 0" class="chat-messages">
             <template v-for="(msg, idx) in stream.chatMessages" :key="idx">
               <div class="chat-msg chat-user">
-                <span class="chat-avatar">💬</span>
+                <span class="chat-avatar"><Icon :icon="IconNav.chat" :size="14" /></span>
                 <span class="chat-text">{{ msg.text }}</span>
               </div>
               <div v-if="msg.reply" class="chat-msg chat-assistant">
-                <span class="chat-avatar">🤖</span>
+                <span class="chat-avatar brand"><Icon :icon="IconBiz.sparkles" :size="14" /></span>
                 <div class="chat-text" v-html="renderMarkdown(msg.reply)"></div>
               </div>
             </template>
@@ -264,13 +259,16 @@
             <span class="run-time">{{ formatTime(run.startedAt) }}</span>
             <button v-if="run.status === 'running'" class="btn-stop-sm" @click.stop="stopRun(run.id)">停止</button>
             <button v-else-if="!activeStreams.has(run.id)" class="btn-view-stream" @click.stop="resumeStream(run.id)">查看日志</button>
-            <span v-else class="run-toggle">{{ expanded === run.id ? '▲' : '▼' }}</span>
+            <span v-else class="run-toggle"><Icon :icon="expanded === run.id ? IconArrow.up : IconArrow.down" :size="12" /></span>
           </div>
         </div>
         <div v-if="expanded === run.id" class="run-detail">
           <div v-for="tc in run.cases" :key="tc.id" class="detail-case">
             <div class="detail-case-header">
-              <span>{{ statusIcon(tc.status) }} {{ tc.name }}</span>
+              <span class="case-title">
+                <span class="case-status-dot" :class="'dot-' + tc.status"></span>
+                {{ tc.name }}
+              </span>
               <span v-if="tc.duration" class="case-dur">{{ (tc.duration / 1000).toFixed(1) }}s</span>
             </div>
             <!-- 有 blocks 时用结构化渲染 -->
@@ -295,8 +293,12 @@
             <div v-if="tc.error" class="detail-error">{{ tc.error }}</div>
           </div>
           <div class="detail-actions">
-            <button v-if="canResume(run)" class="btn-resume" @click.stop="handleResumeRun(run.id)">🔄 {{ run.type === 'e2e' ? '恢复测试' : '恢复审查' }}</button>
-            <button v-if="canChat(run) && !canResume(run)" class="btn-chat" @click.stop="openChatStream(run.id)">💬 继续对话</button>
+            <button v-if="canResume(run)" class="btn-resume" @click.stop="handleResumeRun(run.id)">
+              <Icon :icon="IconAction.refresh" :size="14" /> {{ run.type === 'e2e' ? '恢复测试' : '恢复审查' }}
+            </button>
+            <button v-if="canChat(run) && !canResume(run)" class="btn-chat" @click.stop="openChatStream(run.id)">
+              <Icon :icon="IconNav.chat" :size="14" /> 继续对话
+            </button>
             <div v-if="(run.type === 'e2e' || run.type === 'codereview') && run.config?.reportPath" class="report-info">
               <span class="report-path">{{ run.config.reportPath }}</span>
               <button class="btn-report" @click.stop="openReport(run.id)">查看报告</button>
@@ -311,26 +313,22 @@
     </section>
 
     <!-- 提示词弹窗 -->
-    <div v-if="showPromptModal" class="modal-overlay" @click.self="showPromptModal = false">
-      <div class="modal-content prompt-modal">
-        <h3>生成的提示词</h3>
+    <BaseModal v-model:show="showPromptModal" title="生成的提示词" :width="680">
         <p class="field-desc">复制以下内容粘贴到 Claude Code 窗口即可手动执行</p>
         <textarea class="prompt-textarea" readonly :value="generatedPrompt" @click="($event.target as HTMLTextAreaElement).select()"></textarea>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showPromptModal = false">关闭</button>
-          <button class="btn btn-copy" @click="copyPrompt">{{ promptCopied ? '已复制!' : '复制提示词' }}</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showPromptModal = false">关闭</BaseButton>
+          <BaseButton variant="primary" @click="copyPrompt">{{ promptCopied ? '已复制!' : '复制提示词' }}</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 报告文件浏览器弹窗 -->
-    <div v-if="showReportFilesModal" class="modal-overlay" @click.self="showReportFilesModal = false">
-      <div class="modal-content report-files-modal">
-        <h3>报告文件 <span class="modal-subtitle">{{ reportFilesDir }}</span></h3>
+    <BaseModal v-model:show="showReportFilesModal" :width="720">
+        <template #title>{{ reportFilesModalTitle }} <span class="modal-subtitle">{{ reportFilesDir }}</span></template>
         <div v-if="reportFilesLoading" class="report-loading">扫描中...</div>
         <div v-else-if="reportFiles.length === 0" class="no-data">未找到报告文件</div>
         <template v-else>
-          <div class="report-files-header">
+          <div v-if="activeType === 'codereview'" class="report-files-header">
             <label class="select-all-label">
               <input type="checkbox" :checked="selectedMdFiles.length === mdFileList.length && mdFileList.length > 0" @change="toggleAllMdFiles" />
               <strong>全选 MD ({{ selectedMdFiles.length }}/{{ mdFileList.length }})</strong>
@@ -339,14 +337,20 @@
               {{ buildLoading ? '生成中...' : `生成 HTML (${selectedMdFiles.length} 个MD)` }}
             </button>
           </div>
+          <div v-else class="report-files-hint">
+            <span class="modal-subtitle">点击「打开」在新窗口查看 HTML 报告（已为成品，无需重新生成）</span>
+          </div>
           <div class="report-files-list">
             <div v-for="f in reportFiles" :key="f.path" class="report-file-item" :class="'file-' + f.type">
               <template v-if="f.type === 'md'">
                 <input type="checkbox" :value="f.path" v-model="selectedMdFiles" />
-                <span class="file-icon">📄</span>
+                <span class="file-icon"><Icon :icon="IconBiz.doc" :size="16" /></span>
+              </template>
+              <template v-else-if="f.type === 'json'">
+                <span class="file-icon"><Icon :icon="IconBiz.clipboard" :size="16" /></span>
               </template>
               <template v-else>
-                <span class="file-icon">🌐</span>
+                <span class="file-icon"><Icon :icon="IconBiz.globe" :size="16" /></span>
               </template>
               <span class="file-name" :title="f.name">{{ f.name }}</span>
               <span class="file-size">{{ (f.size / 1024).toFixed(1) }} KB</span>
@@ -354,11 +358,10 @@
             </div>
           </div>
         </template>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showReportFilesModal = false">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showReportFilesModal = false">关闭</BaseButton>
+        </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -367,6 +370,11 @@ import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { marked } from 'marked'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconAction, IconNav, IconBiz, IconArrow } from '../composables/icons'
 import {
   listTestTypes, listTestRuns, runTest, deleteTestRun as apiDelete,
   abortTestRun as apiAbort, getReportUrl, listRunningTests, subscribeTestStream,
@@ -463,12 +471,10 @@ const selectedFrontendModules = ref<string[]>([])
 const currentType = computed(() => testTypes.value.find(t => t.type === activeType.value))
 const filteredRuns = computed(() => runs.value.filter(r => r.type === activeType.value))
 
-function statusIcon(s: string) {
-  if (s === 'passed') return '✅'
-  if (s === 'failed') return '❌'
-  if (s === 'running') return '⏳'
-  if (s === 'error') return '💥'
-  return '⬜'
+function riskLabel(level: string) {
+  if (level === 'high') return '高风险'
+  if (level === 'medium') return '中风险'
+  return '低风险'
 }
 
 function formatTime(iso: string) {
@@ -602,7 +608,7 @@ function handleSSEEvent(evt: any, suiteId: string) {
     stream.done = true
     // 对于非 Agent/E2E 测试，显示完成信息
     if (stream.type !== 'agent' && stream.type !== 'e2e') {
-      stream.blocks.push({ type: 'text', content: `\n✅ 测试运行完成 (${evt.status || 'finished'})` })
+      stream.blocks.push({ type: 'text', content: `\n**测试运行完成** (${evt.status || 'finished'})` })
     }
     if (stream.es) { stream.es.close(); stream.es = null }
     stopElapsedTimer(suiteId)
@@ -615,23 +621,23 @@ function handleSSEEvent(evt: any, suiteId: string) {
     })
     // 对于非 Agent/E2E 测试，显示启动信息
     if (stream.type !== 'agent' && stream.type !== 'e2e') {
-      stream.blocks.push({ type: 'text', content: '⏳ 测试开始运行...\n' })
+      stream.blocks.push({ type: 'text', content: '测试开始运行...\n' })
     }
   } else if (evt.event === 'test:update') {
     // 对于非 Agent/E2E 测试，用文本 block 显示进度
     if (stream.type !== 'agent' && stream.type !== 'e2e') {
       const statusMap: Record<string, string> = {
-        running: '⏳',
-        passed: '✅',
-        failed: '❌',
-        error: '💥',
-        pending: '⬜',
+        running: '运行中',
+        passed: '通过',
+        failed: '失败',
+        error: '错误',
+        pending: '等待',
       }
-      const icon = statusMap[evt.status] || '•'
+      const label = statusMap[evt.status] || '更新'
       const dur = evt.duration ? ` (${(evt.duration / 1000).toFixed(1)}s)` : ''
       stream.blocks.push({
         type: 'text',
-        content: `${icon} ${evt.caseName || evt.caseId || '测试用例'} - ${evt.status || '更新'}${dur}\n`,
+        content: `**${label}** ${evt.caseName || evt.caseId || '测试用例'}${dur}\n`,
       })
       scrollToBottom(suiteId)
     }
@@ -644,7 +650,7 @@ function handleSSEEvent(evt: any, suiteId: string) {
     stream.isResume = true
     stream.blocks.push({
       type: 'text',
-      content: `ℹ️ 恢复模式：跳过 ${skipped} 个已完成模块，恢复 ${resumed} 个中断模块\n`,
+      content: `**恢复模式**：跳过 ${skipped} 个已完成模块，恢复 ${resumed} 个中断模块\n`,
     })
     scrollToBottom(suiteId)
   } else if (evt.event === 'agent:chat') {
@@ -663,7 +669,7 @@ function handleSSEEvent(evt: any, suiteId: string) {
       // 工具调用在聊天回复中简要显示
       const lastMsg = stream.chatMessages[stream.chatMessages.length - 1]
       if (lastMsg) {
-        const toolLine = `\n🔧 ${evt.name}(${Object.keys(evt.input || {}).slice(0, 2).join(', ')}...)\n`
+        const toolLine = `\n调用 ${evt.name}(${Object.keys(evt.input || {}).slice(0, 2).join(', ')}...)\n`
         lastMsg.reply += toolLine
       }
       scrollToBottom(suiteId)
@@ -737,18 +743,34 @@ function toggleAllMdFiles() {
 
 async function doScanReportFiles() {
   if (!selectedProjectId.value) return
+  // 仅 codereview/frontend/e2e 显示按钮，这里断言为安全的报告扫描类型
+  const scanType = activeType.value as 'codereview' | 'frontend' | 'e2e'
   showReportFilesModal.value = true
   reportFilesLoading.value = true
   reportFiles.value = []
   selectedMdFiles.value = []
   try {
-    const res = await apiListReportFiles(selectedProjectId.value)
+    const res = await apiListReportFiles(selectedProjectId.value, scanType)
     reportFiles.value = res.files
     reportFilesDir.value = res.reportsDir
+  } catch (e: any) {
+    reportFiles.value = []
+    reportFilesDir.value = ''
+    window.alert('检测报告失败: ' + (e?.response?.data?.error || e.message))
   } finally {
     reportFilesLoading.value = false
   }
 }
+
+/** 报告弹窗标题：按当前测试类型显示对应名称 */
+const reportFilesModalTitle = computed(() => {
+  const map: Record<string, string> = {
+    codereview: '代码审查报告',
+    frontend: '前端单元测试报告',
+    e2e: 'E2E 页面测试报告',
+  }
+  return map[activeType.value] || '报告文件'
+})
 
 async function doBuildFromMdFiles() {
   if (selectedMdFiles.value.length === 0 || !selectedProjectId.value) return
@@ -1169,14 +1191,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.test-page {
-  padding: 28px 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.page-header { margin-bottom: 20px; }
-.page-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; }
-.page-desc { font-size: 13px; color: #999; margin-top: 4px; }
 
 /* 类型 Tab */
 .type-tabs {
@@ -1200,7 +1214,7 @@ onUnmounted(() => {
 .type-tab:hover { border-color: #c0c0e0; }
 .type-tab.active {
   border-color: #667eea;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   color: #667eea;
   font-weight: 600;
 }
@@ -1218,22 +1232,26 @@ onUnmounted(() => {
   margin-bottom: 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
-.type-header h2 { font-size: 16px; font-weight: 600; color: #1a1a2e; margin-bottom: 4px; }
+.type-header h2 { font-size: 16px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
 .type-header p { font-size: 13px; color: #888; }
 .btn-run {
   padding: 10px 28px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--brand);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
-  transition: opacity 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: background var(--duration) var(--ease);
   flex-shrink: 0;
   margin-top: 4px;
 }
+.btn-run:hover:not(:disabled) { background: var(--brand-hover); }
 .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
 .type-header-actions {
   display: flex;
@@ -1254,29 +1272,10 @@ onUnmounted(() => {
   transition: all 0.15s;
   margin-top: 4px;
 }
-.btn-prompt:hover { background: #f0f0ff; }
+.btn-prompt:hover { background: var(--brand-soft); }
 .btn-prompt:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* 提示词弹窗 */
-.modal-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000;
-}
-.modal-content {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-}
-.modal-content h3 { margin: 0 0 8px; font-size: 18px; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
-.modal-actions .btn-cancel {
-  padding: 8px 20px; background: #f5f5f5; border: 1px solid #ddd;
-  border-radius: 6px; cursor: pointer; font-size: 14px; color: #666;
-}
-.prompt-modal { max-width: 720px; width: 90vw; }
 .prompt-textarea {
   width: 100%;
   min-height: 280px;
@@ -1288,12 +1287,12 @@ onUnmounted(() => {
   font-size: 13px;
   line-height: 1.5;
   resize: vertical;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   color: #333;
 }
 .btn-copy {
   padding: 8px 20px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #667eea, var(--brand-active));
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -1319,10 +1318,10 @@ onUnmounted(() => {
   font-weight: 500;
   color: #666;
 }
-.required { color: #ff4d4f; }
+.required { color: var(--error); }
 .param-input {
   padding: 8px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
   width: 240px;
@@ -1343,20 +1342,20 @@ select.param-input { cursor: pointer; appearance: auto; }
   overflow: hidden;
 }
 .run-panel-done {
-  border-color: #52c41a;
+  border-color: var(--success);
 }
 .run-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   font-size: 13px;
   font-weight: 600;
   color: #333;
 }
 .run-panel-done .run-panel-header {
-  background: #f6ffed;
+  background: var(--success-bg);
 }
 .run-panel-title {
   display: flex;
@@ -1375,18 +1374,18 @@ select.param-input { cursor: pointer; appearance: auto; }
   font-weight: 600;
 }
 .run-panel-done .run-timer {
-  color: #52c41a;
+  color: var(--success);
 }
 .streaming-indicator {
   font-size: 12px;
-  color: #1890ff;
+  color: var(--info);
   font-weight: 500;
 }
 .streaming-indicator::before {
   content: '';
   display: inline-block;
   width: 6px; height: 6px;
-  background: #1890ff;
+  background: var(--info);
   border-radius: 50%;
   margin-right: 4px;
   animation: pulse 1s infinite;
@@ -1394,12 +1393,12 @@ select.param-input { cursor: pointer; appearance: auto; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 .stream-done {
   font-size: 12px;
-  color: #52c41a;
+  color: var(--success);
   font-weight: 500;
 }
 .btn-stop {
   padding: 6px 16px;
-  background: #ff4d4f;
+  background: var(--error);
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -1422,7 +1421,7 @@ select.param-input { cursor: pointer; appearance: auto; }
 }
 .waiting-spinner {
   width: 16px; height: 16px;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--border);
   border-top-color: #667eea;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1444,8 +1443,8 @@ select.param-input { cursor: pointer; appearance: auto; }
   color: #333;
 }
 .stream-text-html :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 10px 14px;
   border-radius: 6px;
   overflow-x: auto;
@@ -1453,7 +1452,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   margin: 6px 0;
 }
 .stream-text-html :deep(code) {
-  background: #f0f0f5;
+  background: var(--bg-surface-2);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
@@ -1465,11 +1464,11 @@ select.param-input { cursor: pointer; appearance: auto; }
 }
 .stream-text-html :deep(p) { margin: 4px 0; }
 .stream-text-html :deep(ul), .stream-text-html :deep(ol) { padding-left: 18px; }
-.stream-text-html :deep(strong) { color: #1a1a2e; }
+.stream-text-html :deep(strong) { color: var(--text-1); }
 .stream-text-html :deep(h1), .stream-text-html :deep(h2), .stream-text-html :deep(h3) {
   font-size: 14px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-1);
   margin: 10px 0 6px;
 }
 
@@ -1486,7 +1485,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   transition: box-shadow 0.2s;
 }
 .run-card-active {
-  box-shadow: 0 0 0 2px #1890ff, 0 2px 8px rgba(24,144,255,0.15);
+  box-shadow: 0 0 0 2px var(--info), 0 2px 8px rgba(24,144,255,0.15);
 }
 .run-header {
   display: flex;
@@ -1496,13 +1495,13 @@ select.param-input { cursor: pointer; appearance: auto; }
   cursor: pointer;
   transition: background 0.15s;
 }
-.run-header:hover { background: #fafafa; }
+.run-header:hover { background: var(--bg-surface-2); }
 .run-left { display: flex; align-items: center; gap: 10px; }
 .run-name { font-size: 13px; font-weight: 500; color: #333; }
 .run-config-tag {
   font-size: 11px;
   color: #667eea;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   padding: 2px 8px;
   border-radius: 4px;
   font-family: monospace;
@@ -1513,13 +1512,13 @@ select.param-input { cursor: pointer; appearance: auto; }
 .run-toggle { font-size: 10px; color: #ccc; }
 .run-running-badge {
   font-size: 11px;
-  color: #1890ff;
+  color: var(--info);
   font-weight: 500;
   animation: pulse 1s infinite;
 }
 .btn-stop-sm {
   padding: 3px 10px;
-  background: #ff4d4f;
+  background: var(--error);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -1543,7 +1542,7 @@ select.param-input { cursor: pointer; appearance: auto; }
 .btn-view-stream:hover { opacity: 0.85; }
 .run-detail {
   padding: 0 16px 16px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-light);
 }
 .detail-case { margin-bottom: 10px; }
 
@@ -1560,13 +1559,31 @@ select.param-input { cursor: pointer; appearance: auto; }
   display: flex;
   justify-content: space-between;
   font-size: 13px;
-  color: #555;
+  color: var(--text-2);
   padding: 6px 0;
 }
-.case-dur { font-size: 11px; color: #999; font-family: monospace; }
+.case-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.case-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.dot-passed { background: var(--success); }
+.dot-failed { background: var(--error); }
+.dot-running { background: var(--info); }
+.dot-error { background: var(--error); }
+.dot-pending { background: var(--text-4); }
+.dot-skipped { background: var(--text-4); }
+.dot-interrupted { background: var(--warning); }
+.case-dur { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
 .detail-output pre {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 11px;
@@ -1577,10 +1594,10 @@ select.param-input { cursor: pointer; appearance: auto; }
   overflow-y: auto;
 }
 .detail-error {
-  color: #ff4d4f;
+  color: var(--error);
   font-size: 12px;
   padding: 4px 8px;
-  background: #fff2f0;
+  background: var(--error-bg);
   border-radius: 4px;
   margin-top: 4px;
 }
@@ -1594,7 +1611,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   cursor: pointer;
   margin-top: 8px;
 }
-.btn-del:hover { color: #ff4d4f; border-color: #ffccc7; }
+.btn-del:hover { color: var(--error); border-color: var(--error-border); }
 .btn-report {
   background: none;
   border: 1px solid #667eea;
@@ -1604,7 +1621,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   color: #667eea;
   cursor: pointer;
 }
-.btn-report:hover { background: #f0f0ff; }
+.btn-report:hover { background: var(--brand-soft); }
 
 /* API 发现信息 */
 .api-discovery-info {
@@ -1612,7 +1629,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   border-radius: 6px;
   font-size: 12px;
   color: #667eea;
@@ -1635,10 +1652,10 @@ select.param-input { cursor: pointer; appearance: auto; }
   font-size: 12px;
   color: #555;
   cursor: pointer;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   padding: 4px 10px;
   border-radius: 4px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--border);
 }
 .module-check input[type="checkbox"] {
   accent-color: #667eea;
@@ -1647,18 +1664,26 @@ select.param-input { cursor: pointer; appearance: auto; }
   width: 100%;
 }
 .module-check-all label {
-  background: #f0f0ff;
+  background: var(--brand-soft);
   border-color: #c0c0e0;
   font-size: 12px;
   color: #667eea;
 }
-.risk-high { color: #e53e3e; }
-.risk-medium { color: #d69e2e; }
-.risk-low { color: #3182ce; }
+/* 风险等级圆点 */
+.risk-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.risk-high { background: var(--error); box-shadow: 0 0 0 3px var(--error-bg); }
+.risk-medium { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-bg); }
+.risk-low { background: var(--info); box-shadow: 0 0 0 3px var(--info-bg); }
 .no-discovery-hint {
   font-size: 12px;
-  color: #faad14;
-  background: #fffbe6;
+  color: var(--warning);
+  background: var(--warning-bg);
   padding: 6px 10px;
   border-radius: 4px;
   width: 100%;
@@ -1674,7 +1699,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   font-size: 11px;
   color: #888;
   font-family: monospace;
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
   padding: 2px 8px;
   border-radius: 4px;
   max-width: 500px;
@@ -1701,34 +1726,40 @@ select.param-input { cursor: pointer; appearance: auto; }
 /* 恢复按钮 */
 .btn-resume {
   background: none;
-  border: 1px solid #faad14;
-  border-radius: 6px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
   padding: 4px 12px;
   font-size: 12px;
-  color: #faad14;
+  color: var(--warning);
   cursor: pointer;
-  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition: background var(--duration-fast) var(--ease);
 }
-.btn-resume:hover { background: #fffbe6; }
+.btn-resume:hover { background: var(--warning-bg); }
 .btn-chat {
   background: none;
-  border: 1px solid #667eea;
-  border-radius: 6px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius-sm);
   padding: 4px 12px;
   font-size: 12px;
-  color: #667eea;
+  color: var(--brand);
   cursor: pointer;
-  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition: background var(--duration-fast) var(--ease);
 }
-.btn-chat:hover { background: #f0f0ff; }
+.btn-chat:hover { background: var(--brand-soft); }
 
 /* 恢复模式标识 */
-.resume-indicator { color: #faad14 !important; }
-.resume-indicator::before { background: #faad14 !important; }
+.resume-indicator { color: var(--warning) !important; }
+.resume-indicator::before { background: var(--warning) !important; }
 
 /* 聊天区域 */
 .chat-area {
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-light);
   padding: 12px 20px;
 }
 .chat-messages {
@@ -1743,22 +1774,33 @@ select.param-input { cursor: pointer; appearance: auto; }
   font-size: 13px;
   line-height: 1.6;
 }
-.chat-avatar { flex-shrink: 0; }
+.chat-avatar {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-2);
+  color: var(--text-2);
+}
+.chat-avatar.brand { background: var(--brand-soft); color: var(--brand); }
 .chat-user .chat-text {
-  background: #f0f0ff;
+  background: var(--brand-soft);
   padding: 6px 12px;
   border-radius: 8px;
   color: #333;
 }
 .chat-assistant .chat-text {
-  background: #fafafa;
+  background: var(--bg-surface-2);
   padding: 6px 12px;
   border-radius: 8px;
   flex: 1;
 }
 .chat-assistant .chat-text :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 8px 12px;
   border-radius: 6px;
   overflow-x: auto;
@@ -1766,7 +1808,7 @@ select.param-input { cursor: pointer; appearance: auto; }
   margin: 4px 0;
 }
 .chat-assistant .chat-text :deep(code) {
-  background: #f0f0f5;
+  background: var(--bg-surface-2);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
@@ -1782,7 +1824,7 @@ select.param-input { cursor: pointer; appearance: auto; }
 .chat-input-row input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
   outline: none;
@@ -1817,14 +1859,15 @@ select.param-input { cursor: pointer; appearance: auto; }
 .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .report-files-modal { width: 640px; max-height: 80vh; }
-.report-files-modal .modal-subtitle { font-size: 12px; color: #8c8c8c; font-weight: 400; margin-left: 8px; }
-.report-loading, .no-data { text-align: center; padding: 24px; color: #8c8c8c; }
+.report-files-modal .modal-subtitle { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: 8px; }
+.report-loading, .no-data { text-align: center; padding: 24px; color: var(--text-3); }
 
 .report-files-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 0; border-bottom: 1px solid #f0f0f0; margin-bottom: 8px;
+  padding: 10px 0; border-bottom: 1px solid var(--border-light); margin-bottom: 8px;
 }
 .select-all-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.report-files-hint { padding: 10px 0; border-bottom: 1px solid var(--border-light); margin-bottom: 8px; }
 .btn-build {
   padding: 5px 14px; background: #667eea; color: white; border: none; border-radius: 4px;
   cursor: pointer; font-size: 12px;
@@ -1835,14 +1878,14 @@ select.param-input { cursor: pointer; appearance: auto; }
 .report-files-list { max-height: 400px; overflow-y: auto; }
 .report-file-item {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+  padding: 8px 10px; border-bottom: 1px solid var(--bg-surface-2); font-size: 13px;
 }
-.report-file-item:hover { background: #fafafa; }
+.report-file-item:hover { background: var(--bg-surface-2); }
 .file-icon { font-size: 14px; flex-shrink: 0; }
 .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-size { color: #8c8c8c; font-size: 11px; flex-shrink: 0; }
+.file-size { color: var(--text-3); font-size: 11px; flex-shrink: 0; }
 .btn-open-file {
-  padding: 2px 10px; background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff;
+  padding: 2px 10px; background: var(--info-bg); color: var(--info); border: 1px solid #91d5ff;
   border-radius: 3px; cursor: pointer; font-size: 11px; flex-shrink: 0;
 }
 .btn-open-file:hover { background: #bae7ff; }

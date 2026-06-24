@@ -24,7 +24,9 @@
             <span class="session-name">{{ s.title || '新会话' }}</span>
             <span class="session-time">{{ formatTime(s.updatedAt) }}</span>
           </div>
-          <button class="session-del" @click.stop="$emit('delete', s.id)" title="删除">✕</button>
+          <button class="session-del" @click.stop="$emit('delete', s.id)" title="删除" aria-label="删除">
+            <Icon :icon="IconAction.close" :size="14" />
+          </button>
         </div>
       </template>
       <div v-if="filtered.length === 0" class="empty-hint">无匹配会话</div>
@@ -42,6 +44,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Session, Skill } from '../../api/types'
+import Icon from '../ui/Icon.vue'
+import { IconAction } from '../../composables/icons'
 
 const props = defineProps<{
   sessions: Session[]
@@ -96,52 +100,52 @@ function formatTime(iso: string) {
 <style scoped>
 .session-sidebar {
   width: 260px;
-  background: #fff;
-  border-right: 1px solid #e8e8e8;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .btn-new {
-  margin: 12px;
+  margin: var(--space-3);
   padding: 10px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
+  background: var(--brand);
+  color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.btn-new:hover { opacity: 0.9; }
+.btn-new:hover { background: var(--brand-hover); }
 
-.search-wrap { padding: 0 12px 8px; }
+.search-wrap { padding: 0 var(--space-3) var(--space-2); }
 .search-input {
   width: 100%;
   padding: 7px 12px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-size: 12px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration) var(--ease);
 }
-.search-input:focus { border-color: #667eea; }
-.search-input::placeholder { color: #bbb; }
+.search-input:focus { border-color: var(--brand); }
+.search-input::placeholder { color: var(--text-4); }
 
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
 }
 .group-label {
   font-size: 11px;
-  color: #aaa;
+  color: var(--text-3);
   font-weight: 500;
   padding: 10px 6px 4px;
   position: sticky;
   top: 0;
-  background: #fff;
+  background: var(--bg-surface);
   z-index: 1;
 }
 .session-item {
@@ -149,13 +153,13 @@ function formatTime(iso: string) {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   margin-bottom: 2px;
-  transition: background 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.session-item:hover { background: #f5f5f7; }
-.session-item.active { background: #eef0ff; }
+.session-item:hover { background: var(--bg-surface-2); }
+.session-item.active { background: var(--brand-soft); }
 .session-info {
   display: flex;
   flex-direction: column;
@@ -166,54 +170,54 @@ function formatTime(iso: string) {
 .session-name {
   font-size: 13px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .session-time {
   font-size: 11px;
-  color: #bbb;
+  color: var(--text-4);
 }
 .session-del {
   background: none;
   border: none;
-  color: #ccc;
+  color: var(--text-4);
   cursor: pointer;
   padding: 4px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   opacity: 0;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease);
 }
 .session-item:hover .session-del { opacity: 1; }
-.session-del:hover { color: #ff4d4f; background: #fff2f0; }
+.session-del:hover { color: var(--error); background: var(--error-bg); }
 .empty-hint {
   text-align: center;
-  color: #ccc;
+  color: var(--text-4);
   font-size: 12px;
   padding: 20px 0;
 }
 .quick-cmds {
-  border-top: 1px solid #e8e8e8;
-  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
 }
-.cmd-title { font-size: 11px; color: #999; margin-bottom: 6px; font-weight: 500; }
+.cmd-title { font-size: 11px; color: var(--text-3); margin-bottom: 6px; font-weight: 500; }
 .cmd-btn {
   display: block;
   width: 100%;
   text-align: left;
   padding: 6px 10px;
-  background: #f5f5f7;
+  background: var(--bg-surface-2);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
   margin-bottom: 4px;
-  font-family: monospace;
-  color: #667eea;
+  font-family: var(--font-mono);
+  color: var(--brand);
   font-weight: 500;
-  transition: background 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.cmd-btn:hover { background: #eef0ff; }
+.cmd-btn:hover { background: var(--brand-soft); }
 </style>

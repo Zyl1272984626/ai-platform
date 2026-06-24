@@ -1,15 +1,12 @@
 <template>
-  <div class="school-page">
-    <header class="page-header">
-      <div>
-        <h1>学校管理</h1>
-        <p class="page-desc">管理所有已部署的学校，支持新增、编辑和一键部署</p>
-      </div>
-      <button class="btn-add" @click="showAddForm = true">+ 添加学校</button>
-    </header>
+  <div class="school-page page-container">
+    <PageHeader title="学校管理" description="管理所有已部署的学校，支持新增、编辑和一键部署">
+      <BaseButton variant="primary" :icon="IconAction.add" @click="showAddForm = true">添加学校</BaseButton>
+    </PageHeader>
 
     <div v-if="schools.length === 0" class="empty-grid">
-      <EmptyState icon="🏫" title="暂无学校" description="点击右上角按钮注册第一所学校">
+      <EmptyState title="暂无学校" description="点击右上角按钮注册第一所学校">
+        <template #icon><Icon :icon="IconNav.school" :size="48" /></template>
         <button class="start-btn" @click="showAddForm = true">添加学校</button>
       </EmptyState>
     </div>
@@ -74,6 +71,10 @@ import { useRouter } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import SchoolForm from '../components/school/SchoolForm.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import Icon from '../components/ui/Icon.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
+import { IconNav, IconAction } from '../composables/icons'
 import { EyeOffOutline, EyeOutline } from '@vicons/ionicons5'
 import { listSchools, addSchool, updateSchool, deleteSchool, deploySchool } from '../api/schools'
 import type { School } from '../api/types'
@@ -154,38 +155,6 @@ async function doDeploy(s: School) {
 </script>
 
 <style scoped>
-.school-page {
-  padding: 28px 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-.page-header h1 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1a1a2e;
-}
-.page-desc {
-  font-size: 13px;
-  color: #999;
-  margin-top: 4px;
-}
-.btn-add {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-}
-.btn-add:hover { opacity: 0.9; }
 
 .school-grid {
   display: grid;
@@ -193,29 +162,34 @@ async function doDeploy(s: School) {
   gap: 16px;
 }
 .school-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  transition: box-shadow var(--duration) var(--ease);
+}
+.school-card:hover {
+  box-shadow: var(--shadow-md);
 }
 .card-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 .school-name {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-1);
   cursor: pointer;
+  transition: color var(--duration-fast) var(--ease);
 }
 .school-name:hover {
-  color: #667eea;
+  color: var(--brand);
 }
-.card-info { flex: 1; margin-bottom: 14px; }
+.card-info { flex: 1; margin-bottom: var(--space-4); }
 .info-row {
   display: flex;
   justify-content: space-between;
@@ -269,20 +243,22 @@ async function doDeploy(s: School) {
   text-align: center;
   transition: all 0.15s;
 }
-.act-edit:hover { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
-.act-config:hover { border-color: #667eea; color: #667eea; background: #f0f0ff; }
-.act-deploy:hover { border-color: #52c41a; color: #52c41a; background: #f6ffed; }
-.act-war:hover { border-color: #fa8c16; color: #fa8c16; background: #fff7e6; }
-.act-del:hover { border-color: #ff4d4f; color: #ff4d4f; background: #fff2f0; }
+.act-edit:hover { border-color: var(--info); color: var(--info); background: var(--info-bg); }
+.act-config:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.act-deploy:hover { border-color: var(--success); color: var(--success); background: var(--success-bg); }
+.act-war:hover { border-color: var(--warning); color: var(--warning); background: var(--warning-bg); }
+.act-del:hover { border-color: var(--error); color: var(--error); background: var(--error-bg); }
 .empty-grid { padding: 40px 0; }
 .start-btn {
   margin-top: 12px;
   padding: 8px 24px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
+  background: var(--brand);
+  color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
+  transition: background var(--duration-fast) var(--ease);
 }
+.start-btn:hover { background: var(--brand-hover); }
 </style>

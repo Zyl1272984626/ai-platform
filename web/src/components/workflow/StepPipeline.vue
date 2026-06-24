@@ -3,8 +3,8 @@
     <div v-for="(step, i) in steps" :key="step.stepId" class="step-node" :class="stepClass(step)">
       <div class="step-dot">
         <span v-if="step.status === 'running'" class="spinner"></span>
-        <span v-else-if="step.status === 'success'">✓</span>
-        <span v-else-if="step.status === 'failed'">✕</span>
+        <Icon v-else-if="step.status === 'success'" :icon="IconStatus.check" :size="14" />
+        <Icon v-else-if="step.status === 'failed'" :icon="IconStatus.x" :size="14" />
         <span v-else>{{ i + 1 }}</span>
       </div>
       <div class="step-label">{{ step.stepId }}</div>
@@ -15,6 +15,8 @@
 
 <script setup lang="ts">
 import type { StepRun } from '../../api/types'
+import Icon from '../ui/Icon.vue'
+import { IconStatus } from '../../composables/icons'
 
 defineProps<{
   steps: StepRun[]
@@ -30,7 +32,7 @@ function stepClass(step: StepRun) {
   display: flex;
   align-items: flex-start;
   gap: 0;
-  padding: 16px 0;
+  padding: var(--space-4) 0;
   overflow-x: auto;
 }
 .step-node {
@@ -49,32 +51,31 @@ function stepClass(step: StepRun) {
   justify-content: center;
   font-size: 13px;
   font-weight: 600;
-  border: 2px solid #ddd;
-  background: #fff;
-  color: #999;
+  border: 2px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-3);
   z-index: 1;
 }
-.step-pending .step-dot { border-color: #ddd; color: #bbb; }
-.step-running .step-dot { border-color: #1890ff; color: #1890ff; background: #e6f7ff; }
-.step-success .step-dot { border-color: #52c41a; color: #fff; background: #52c41a; }
-.step-failed .step-dot { border-color: #ff4d4f; color: #fff; background: #ff4d4f; }
-.step-skipped .step-dot { border-color: #d9d9d9; color: #bbb; background: #f5f5f5; }
-.step-waiting_confirm .step-dot { border-color: #faad14; color: #faad14; background: #fffbe6; }
+.step-pending .step-dot { border-color: var(--border); color: var(--text-4); }
+.step-running .step-dot { border-color: var(--info); color: var(--info); background: var(--info-bg); }
+.step-success .step-dot { border-color: var(--success); color: #fff; background: var(--success); }
+.step-failed .step-dot { border-color: var(--error); color: #fff; background: var(--error); }
+.step-skipped .step-dot { border-color: var(--border-strong); color: var(--text-4); background: var(--bg-surface-2); }
+.step-waiting_confirm .step-dot { border-color: var(--warning); color: var(--warning); background: var(--warning-bg); }
 
 .spinner {
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid #1890ff;
+  border: 2px solid var(--info);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: aui-spin 0.8s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .step-label {
   font-size: 11px;
-  color: #999;
+  color: var(--text-3);
   margin-top: 6px;
   text-align: center;
   max-width: 80px;
@@ -82,9 +83,9 @@ function stepClass(step: StepRun) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.step-success .step-label { color: #52c41a; font-weight: 500; }
-.step-failed .step-label { color: #ff4d4f; font-weight: 500; }
-.step-running .step-label { color: #1890ff; font-weight: 500; }
+.step-success .step-label { color: var(--success); font-weight: 500; }
+.step-failed .step-label { color: var(--error); font-weight: 500; }
+.step-running .step-label { color: var(--info); font-weight: 500; }
 
 .step-line {
   position: absolute;
@@ -92,7 +93,7 @@ function stepClass(step: StepRun) {
   left: calc(50% + 16px);
   width: calc(100% - 32px);
   height: 2px;
-  background: #eee;
+  background: var(--border-light);
 }
-.step-line.active { background: #52c41a; }
+.step-line.active { background: var(--success); }
 </style>

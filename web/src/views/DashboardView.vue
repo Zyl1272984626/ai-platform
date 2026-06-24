@@ -1,37 +1,32 @@
 <template>
-  <div class="dashboard">
-    <header class="dash-header">
-      <div>
-        <h1>AI 工程平台</h1>
-        <p class="subtitle">基于 Claude Code 的全自动化工程平台</p>
-      </div>
-    </header>
+  <div class="dashboard page-container">
+    <PageHeader title="AI 工程平台" description="基于 Claude Code 的全自动化工程平台" />
 
     <!-- 统计卡片 -->
-    <div class="stat-row">
+    <div class="stat-row grid-auto">
       <div class="stat-card">
-        <div class="stat-icon school-icon">🏫</div>
+        <div class="stat-icon school-icon"><Icon :icon="IconNav.school" :size="24" /></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.schools }}</div>
           <div class="stat-label">学校</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon session-icon">💬</div>
+        <div class="stat-icon session-icon"><Icon :icon="IconNav.chat" :size="24" /></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.sessions }}</div>
           <div class="stat-label">会话</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon run-icon">⚙️</div>
+        <div class="stat-icon run-icon"><Icon :icon="IconNav.workflow" :size="24" /></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.runs }}</div>
           <div class="stat-label">工作流执行</div>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon skill-icon">🧩</div>
+        <div class="stat-icon skill-icon"><Icon :icon="IconNav.skill" :size="24" /></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.skills }}</div>
           <div class="stat-label">Skills</div>
@@ -44,27 +39,27 @@
       <h2 class="section-title">快捷操作</h2>
       <div class="action-grid">
         <div class="action-card" @click="$router.push('/chat')">
-          <div class="action-icon">💬</div>
+          <div class="action-icon brand"><Icon :icon="IconNav.chat" :size="26" /></div>
           <div class="action-name">新建对话</div>
           <div class="action-desc">与 Claude Code 对话，自动执行工程任务</div>
         </div>
         <div class="action-card" @click="$router.push('/schools')">
-          <div class="action-icon">🏫</div>
+          <div class="action-icon green"><Icon :icon="IconNav.school" :size="26" /></div>
           <div class="action-name">学校部署</div>
           <div class="action-desc">一键部署新学校，自动生成配置并推送</div>
         </div>
         <div class="action-card" @click="$router.push('/workflows')">
-          <div class="action-icon">⚙️</div>
+          <div class="action-icon orange"><Icon :icon="IconNav.workflow" :size="26" /></div>
           <div class="action-name">执行工作流</div>
           <div class="action-desc">触发自动化工作流：Bug修复、迁移、巡检等</div>
         </div>
         <div class="action-card" @click="$router.push('/skills')">
-          <div class="action-icon">🧩</div>
+          <div class="action-icon purple"><Icon :icon="IconNav.skill" :size="26" /></div>
           <div class="action-name">浏览 Skills</div>
           <div class="action-desc">查看所有可用能力和场景 Skills</div>
         </div>
         <div class="action-card" @click="$router.push('/tests')">
-          <div class="action-icon">🧪</div>
+          <div class="action-icon cyan"><Icon :icon="IconNav.test" :size="26" /></div>
           <div class="action-name">运行测试</div>
           <div class="action-desc">Agent测试、E2E页面测试、前端测试、API测试</div>
         </div>
@@ -109,6 +104,9 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconNav } from '../composables/icons'
 import { listSchools } from '../api/schools'
 import { listSessions } from '../api/sessions'
 import { listRuns } from '../api/workflows'
@@ -144,96 +142,91 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.dashboard {
-  padding: 28px 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.dash-header {
-  margin-bottom: 28px;
-}
-.dash-header h1 {
-  font-size: 26px;
-  font-weight: 700;
-  color: #1a1a2e;
-}
-.subtitle {
-  color: #888;
-  font-size: 14px;
-  margin-top: 4px;
-}
-
 /* 统计卡片 */
 .stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: var(--space-7);
 }
 .stat-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  gap: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--duration) var(--ease);
+}
+.stat-card:hover {
+  box-shadow: var(--shadow-md);
 }
 .stat-icon {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  flex-shrink: 0;
 }
-.school-icon  { background: #f0f7ff; }
-.session-icon { background: #f0fff4; }
-.run-icon     { background: #fff7e6; }
-.skill-icon   { background: #f9f0ff; }
+.school-icon  { background: var(--info-bg); color: var(--info); }
+.session-icon { background: var(--success-bg); color: var(--success); }
+.run-icon     { background: var(--warning-bg); color: var(--warning); }
+.skill-icon   { background: var(--brand-soft); color: var(--brand); }
 .stat-value {
   font-size: 28px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-1);
 }
 .stat-label {
   font-size: 13px;
-  color: #999;
+  color: var(--text-3);
 }
 
 /* 快捷操作 */
 .section {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 14px;
+  color: var(--text-1);
+  margin-bottom: var(--space-4);
 }
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
 }
 .action-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--duration) var(--ease), box-shadow var(--duration) var(--ease), border-color var(--duration) var(--ease);
   border: 2px solid transparent;
 }
 .action-card:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  border-color: var(--brand);
+  box-shadow: var(--shadow-brand);
   transform: translateY(-2px);
 }
-.action-icon { font-size: 28px; margin-bottom: 10px; }
-.action-name { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 4px; }
-.action-desc { font-size: 12px; color: #999; line-height: 1.5; }
+.action-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-bottom: var(--space-3);
+}
+.action-icon.brand  { background: var(--brand); }
+.action-icon.green  { background: var(--success); }
+.action-icon.orange { background: var(--warning); }
+.action-icon.purple { background: #9254de; }.action-icon.cyan   { background: var(--info); }
+.action-name { font-size: 15px; font-weight: 600; color: var(--text-1); margin-bottom: var(--space-1); }
+.action-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; }
 
 /* 活动行 */
 .activity-row {
@@ -252,36 +245,36 @@ onMounted(async () => {
   gap: 8px;
 }
 .run-item {
-  background: #fff;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
   padding: 12px 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  transition: background 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: background var(--duration-fast) var(--ease);
 }
-.run-item:hover { background: #fafafa; }
-.run-name { flex: 1; font-size: 13px; font-weight: 500; color: #333; }
-.run-time { font-size: 11px; color: #bbb; white-space: nowrap; }
+.run-item:hover { background: var(--bg-surface-2); }
+.run-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--text-1); }
+.run-time { font-size: 11px; color: var(--text-4); white-space: nowrap; }
 
 /* 系统信息 */
 .sys-info {
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
 }
 .sys-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #f5f5f5;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-light);
   font-size: 13px;
 }
 .sys-row:last-child { border-bottom: none; }
-.sys-label { color: #999; }
-.sys-value { color: #333; font-family: monospace; font-size: 12px; }
-.sys-value.ok { color: #52c41a; font-weight: 500; font-family: inherit; }
+.sys-label { color: var(--text-3); }
+.sys-value { color: var(--text-1); font-family: var(--font-mono); font-size: 12px; }
+.sys-value.ok { color: var(--success); font-weight: 500; font-family: inherit; }
 </style>

@@ -31,6 +31,10 @@ test-fix-*.png
 # OS
 Thumbs.db
 .DS_Store
+nul
+
+# Vite cache
+web/.vite-cache/
 
 # Logs
 *.log

@@ -4,8 +4,9 @@ import path from 'path';
 
 export default defineConfig({
   cacheDir: '.vite-cache',
+  // 显式预构建 naive-ui,避免按需引入时的首屏卡顿
   optimizeDeps: {
-    disabled: true,
+    include: ['naive-ui', '@vicons/ionicons5'],
   },
   plugins: [vue()],
   resolve: {

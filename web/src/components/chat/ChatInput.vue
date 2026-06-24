@@ -11,7 +11,7 @@
     />
     <!-- streaming 时显示停止按钮，否则显示发送 -->
     <button v-if="streaming" class="stop-btn" @click="emit('stop')">
-      <span class="stop-icon">■</span>
+      <Icon :icon="IconAction.stop" :size="14" />
       <span>停止</span>
     </button>
     <button v-else class="send-btn" :disabled="!text.trim()" @click="send">
@@ -22,6 +22,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+import Icon from '../ui/Icon.vue'
+import { IconAction } from '../../composables/icons'
 
 const props = defineProps<{ disabled?: boolean; streaming?: boolean }>()
 const emit = defineEmits<{ send: [message: string]; stop: [] }>()
@@ -61,44 +63,45 @@ defineExpose({ setInput })
 <style scoped>
 .chat-input-wrap {
   display: flex;
-  gap: 10px;
-  padding: 14px 20px;
-  border-top: 1px solid #e8e8e8;
-  background: #fff;
+  gap: var(--space-3);
+  padding: 14px var(--space-5);
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
 }
 textarea {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid #ddd;
-  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   resize: none;
   font-size: 14px;
   font-family: inherit;
   line-height: 1.5;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration) var(--ease);
   max-height: 160px;
 }
-textarea:focus { border-color: #667eea; }
+textarea:focus { border-color: var(--brand); }
 .send-btn {
   padding: 10px 24px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
+  background: var(--brand);
+  color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
-  transition: opacity 0.2s;
+  transition: background var(--duration) var(--ease);
 }
+.send-btn:hover:not(:disabled) { background: var(--brand-hover); }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .stop-btn {
   padding: 10px 24px;
-  background: #fff;
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
-  border-radius: 10px;
+  background: var(--bg-surface);
+  color: var(--error);
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -106,13 +109,7 @@ textarea:focus { border-color: #667eea; }
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.2s;
+  transition: background var(--duration) var(--ease);
 }
-.stop-btn:hover { background: #fff2f0; }
-.stop-icon {
-  font-size: 10px;
-  display: inline-block;
-}
-.sending { animation: blink 1s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.stop-btn:hover { background: var(--error-bg); }
 </style>

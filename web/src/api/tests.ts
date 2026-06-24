@@ -98,12 +98,15 @@ export function generateTestPrompt(type: string, config: Record<string, unknown>
 export interface ReportFile {
   name: string
   path: string
-  type: 'html' | 'md'
+  type: 'html' | 'md' | 'json'
   size: number
   mtime: string
 }
-export function listReportFiles(projectId: string) {
-  return api.get<{ reportsDir: string; files: ReportFile[] }>('/tests/codereview/report-files', { params: { projectId } }).then(r => r.data)
+export type ReportScanType = 'codereview' | 'frontend' | 'e2e'
+export function listReportFiles(projectId: string, type: ReportScanType = 'codereview') {
+  return api
+    .get<{ reportsDir: string; files: ReportFile[] }>('/tests/report-files', { params: { projectId, type } })
+    .then(r => r.data)
 }
 
 /** 从选中 MD 文件生成 HTML */

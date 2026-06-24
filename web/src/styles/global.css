@@ -1,0 +1,187 @@
+/**
+ * 全局基础样式
+ * ====================================================================
+ * 滚动条美化、文字选中色、键盘焦点环、通用工具类。
+ * 依赖 tokens.css 的变量,需在其后 import。
+ */
+
+/* ========== 文字选中色 ========== */
+::selection {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* ========== 滚动条美化(细滚动条,提升质感) ========== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c8c8d0 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #c8c8d0;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #a8a8b4;
+  background-clip: padding-box;
+}
+
+/* ========== 键盘焦点环(无障碍) ========== */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ========== 全局按钮交互基线 ========== */
+/* 统一原生 button 的过渡曲线,消除各处 transition: all 0.15s 的不一致 */
+button {
+  transition: background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+button:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+
+/* ========== 链接 hover ========== */
+a {
+  transition: color var(--duration-fast) var(--ease);
+}
+
+/* ========== 全局 .btn 通用类(供未迁移的原生按钮使用) ========== */
+.btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-cancel {
+  padding: 8px 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.btn-cancel:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.btn-xs {
+  padding: 2px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+
+/* ========== 通用工具类 ========== */
+
+/* 统一的卡片表面 */
+.surface-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+  transition: box-shadow var(--duration) var(--ease);
+}
+
+/* 次级表面(hover / 内嵌) */
+.surface-soft {
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-md);
+}
+
+/* 页面容器:统一内容区 padding + 最大宽度(响应式) */
+.page-container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-7);
+}
+@media (max-width: 768px) {
+  .page-container {
+    padding: var(--space-5) var(--space-4);
+  }
+}
+
+/* 页面区块(section 标题 + 内容) */
+.page-section {
+  margin-bottom: var(--space-6);
+}
+.section-title-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: var(--space-4);
+}
+
+/* 响应式网格:统计卡片自动降列 */
+.grid-auto {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* 文本截断 */
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 等宽字体(路径 / 代码 / ID) */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ========== 全局动画关键帧(消除各组件重复定义) ========== */
+@keyframes aui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes aui-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes aui-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}

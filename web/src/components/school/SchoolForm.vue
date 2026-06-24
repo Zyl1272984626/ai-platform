@@ -1,27 +1,35 @@
 <template>
-  <div class="school-form" @click.self="$emit('cancel')">
-    <div class="form-card">
-      <h3>{{ mode === 'add' ? '添加学校' : '编辑学校' }}</h3>
-      <form @submit.prevent="handleSubmit">
-        <div class="form-row">
-          <label>学校名称 <span class="req">*</span></label>
-          <input v-model="form.name" placeholder="例：贵州水利" required />
-        </div>
-        <div class="form-row">
-          <label>编码 <span class="req">*</span></label>
-          <input v-model="form.code" placeholder="例：guizhou_shuili" :disabled="mode === 'edit'" required />
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn-cancel" @click="$emit('cancel')">取消</button>
-          <button type="submit" class="btn-save">{{ mode === 'add' ? '添加' : '保存' }}</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <BaseModal
+    :show="true"
+    :title="mode === 'add' ? '添加学校' : '编辑学校'"
+    :width="440"
+    @cancel="$emit('cancel')"
+    @update:show="(v) => { if (!v) $emit('cancel') }"
+  >
+    <form @submit.prevent="handleSubmit">
+      <div class="form-row">
+        <label>学校名称 <span class="req">*</span></label>
+        <input v-model="form.name" placeholder="例：贵州水利" required />
+      </div>
+      <div class="form-row">
+        <label>编码 <span class="req">*</span></label>
+        <input v-model="form.code" placeholder="例：guizhou_shuili" :disabled="mode === 'edit'" required />
+      </div>
+    </form>
+
+    <template #footer>
+      <div class="form-actions">
+        <BaseButton variant="ghost" @click="$emit('cancel')">取消</BaseButton>
+        <BaseButton variant="primary" @click="handleSubmit">{{ mode === 'add' ? '添加' : '保存' }}</BaseButton>
+      </div>
+    </template>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 import { reactive } from 'vue'
+import BaseModal from '../ui/BaseModal.vue'
+import BaseButton from '../ui/BaseButton.vue'
 import type { School } from '../../api/types'
 
 const props = defineProps<{
@@ -58,75 +66,31 @@ function handleSubmit() {
 </script>
 
 <style scoped>
-.school-form {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.form-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 28px;
-  width: 440px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-}
-.form-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a2e;
-  margin-bottom: 20px;
-}
 .form-row {
-  margin-bottom: 14px;
+  margin-bottom: var(--space-4);
 }
 .form-row label {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #555;
-  margin-bottom: 4px;
+  color: var(--text-2);
+  margin-bottom: var(--space-1);
 }
-.req { color: #ff4d4f; }
-.form-row input, .form-row select {
+.req { color: var(--error); }
+.form-row input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--duration-fast) var(--ease);
 }
-.form-row input:focus, .form-row select:focus { border-color: #667eea; }
-.form-row input:disabled { background: #f5f5f5; color: #999; }
+.form-row input:focus { border-color: var(--brand); }
+.form-row input:disabled { background: var(--bg-surface-2); color: var(--text-3); }
 .form-actions {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
   justify-content: flex-end;
-  margin-top: 20px;
-}
-.btn-cancel {
-  padding: 8px 20px;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #666;
-}
-.btn-save {
-  padding: 8px 24px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
 }
 </style>

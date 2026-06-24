@@ -1,25 +1,12 @@
 <template>
-  <div class="detail-page">
-    <!-- Toast -->
-    <Transition name="toast">
-      <div v-if="message" class="toast" :class="message.type">{{ message.text }}</div>
-    </Transition>
-
+  <div class="detail-page page-container">
     <!-- Header -->
-    <header class="page-header">
-      <div class="header-left">
-        <button class="btn-back" @click="router.push('/schools')">&larr; 返回</button>
-        <div>
-          <h1>{{ school?.name || '加载中...' }}</h1>
-          <StatusBadge v-if="school" :status="school.status" />
-        </div>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-save" @click="doSave" :disabled="saving">
-          {{ saving ? '保存中...' : '保存配置' }}
-        </button>
-      </div>
-    </header>
+    <PageHeader show-back :title="school?.name || '加载中...'" @back="router.push('/schools')">
+      <template #badge>
+        <StatusBadge v-if="school" :status="school.status" />
+      </template>
+      <BaseButton variant="primary" :loading="saving" @click="doSave">保存配置</BaseButton>
+    </PageHeader>
 
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -138,7 +125,7 @@
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.security = !collapsed.security">
           <span>安全 & 密码</span>
-          <span class="collapse-icon">{{ collapsed.security ? '▸' : '▾' }}</span>
+          <Icon :icon="collapsed.security ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
         </h2>
         <div v-show="!collapsed.security" class="form-grid">
           <div class="form-group">
@@ -160,7 +147,7 @@
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.common = !collapsed.common">
           <span>高级配置</span>
-          <span class="collapse-icon">{{ collapsed.common ? '▸' : '▾' }}</span>
+          <Icon :icon="collapsed.common ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
         </h2>
         <div v-show="!collapsed.common" class="form-grid">
           <div class="form-group">
@@ -182,7 +169,7 @@
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.oneapi = !collapsed.oneapi">
           <span>OneApi 配置</span>
-          <span class="collapse-icon">{{ collapsed.oneapi ? '▸' : '▾' }}</span>
+          <Icon :icon="collapsed.oneapi ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
         </h2>
         <div v-show="!collapsed.oneapi" class="form-grid">
           <div class="form-group">
@@ -204,7 +191,7 @@
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.knowledge = !collapsed.knowledge">
           <span>知识中心配置</span>
-          <span class="collapse-icon">{{ collapsed.knowledge ? '▸' : '▾' }}</span>
+          <Icon :icon="collapsed.knowledge ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
         </h2>
         <div v-show="!collapsed.knowledge" class="form-grid">
           <div class="form-group full">
@@ -226,7 +213,7 @@
       <section class="setting-section collapsible">
         <h2 class="section-title clickable" @click="collapsed.voice = !collapsed.voice">
           <span>语音配置</span>
-          <span class="collapse-icon">{{ collapsed.voice ? '▸' : '▾' }}</span>
+          <Icon :icon="collapsed.voice ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
         </h2>
         <div v-show="!collapsed.voice" class="form-grid">
           <div class="form-group full">
@@ -251,6 +238,11 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import PasswordInput from '../components/common/PasswordInput.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconArrow } from '../composables/icons'
+import { useToast } from '../composables/useToast'
 import { getSchool, updateSchool } from '../api/schools'
 import type { School } from '../api/types'
 
@@ -261,14 +253,8 @@ const code = route.params.code as string
 const loading = ref(true)
 const saving = ref(false)
 const school = ref<School | null>(null)
-const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
-let messageTimer: ReturnType<typeof setTimeout> | null = null
+const { toast } = useToast()
 
-function showMessage(type: 'success' | 'error', text: string) {
-  if (messageTimer) clearTimeout(messageTimer)
-  message.value = { type, text }
-  messageTimer = setTimeout(() => { message.value = null }, 3000)
-}
 // 三个区块默认折叠
 const collapsed = reactive({
   security: true,
@@ -353,7 +339,7 @@ onMounted(async () => {
     if (!data.deployConfig?.serverOs && data.common?.serverOs) form.deployConfig.serverOs = data.common.serverOs
     if (!data.deployConfig?.windowsDrive && data.common?.windowsDrive) form.deployConfig.windowsDrive = data.common.windowsDrive
   } catch (e: any) {
-    showMessage('error', '加载失败: ' + e.message)
+    toast.error('加载失败: ' + e.message)
   } finally {
     loading.value = false
   }
@@ -400,9 +386,9 @@ async function doSave() {
   try {
     const updated = await updateSchool(code, collectFormData())
     school.value = updated
-    showMessage('success', '配置已保存')
+    toast.success('配置已保存')
   } catch (e: any) {
-    showMessage('error', '保存失败: ' + e.message)
+    toast.error('保存失败: ' + e.message)
   } finally {
     saving.value = false
   }
@@ -410,87 +396,28 @@ async function doSave() {
 </script>
 
 <style scoped>
-.detail-page {
-  padding: 24px 32px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-.header-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-.header-left h1 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1a1a2e;
-  margin: 0 0 4px 0;
-}
-.btn-back {
-  padding: 6px 14px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 13px;
-  color: #666;
-  margin-top: 2px;
-}
-.btn-back:hover {
-  border-color: #667eea;
-  color: #667eea;
-}
-.header-actions {
-  display: flex;
-  gap: 10px;
-}
-.btn {
-  padding: 8px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.btn-save {
-  background: #f0f0f0;
-  color: #333;
-}
-.btn-save:hover:not(:disabled) {
-  background: #e0e0e0;
-}
 .loading {
   text-align: center;
   padding: 60px;
-  color: #888;
+  color: var(--text-3);
   font-size: 16px;
 }
 
 /* Sections */
 .setting-section {
-  background: #fff;
-  border-radius: 10px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   padding: 20px 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-sm);
 }
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  color: var(--text-1);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-light);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -500,17 +427,17 @@ async function doSave() {
   user-select: none;
   margin-bottom: 0;
   border-bottom: none;
-  transition: background 0.15s;
-  border-radius: 6px;
+  transition: background var(--duration-fast) var(--ease);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   margin: -8px -12px 0;
 }
 .section-title.clickable:hover {
-  background: #f8f8ff;
+  background: var(--brand-soft);
 }
 .collapse-icon {
   font-size: 14px;
-  color: #999;
+  color: var(--text-3);
 }
 
 /* Info grid (read-only) */
@@ -526,14 +453,14 @@ async function doSave() {
 }
 .info-item .label {
   font-size: 12px;
-  color: #999;
+  color: var(--text-3);
 }
 .info-item .value {
   font-size: 14px;
-  color: #333;
+  color: var(--text-1);
 }
 .info-item .value.mono {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 
@@ -541,7 +468,7 @@ async function doSave() {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
   padding-top: 12px;
 }
 .form-group {
@@ -552,21 +479,21 @@ async function doSave() {
 .form-group label {
   font-size: 13px;
   font-weight: 500;
-  color: #555;
+  color: var(--text-2);
 }
 .form-group input[type="text"],
 .form-group input[type="password"],
 .form-group input[type="number"],
 .form-group select {
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   font-size: 14px;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration) var(--ease);
 }
 .form-group input:focus,
 .form-group select:focus {
-  border-color: #667eea;
+  border-color: var(--brand);
   outline: none;
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
 }
@@ -589,38 +516,6 @@ async function doSave() {
   display: flex;
   gap: 12px;
   margin: 24px 0;
-}
-
-/* Toast */
-.toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  max-width: 400px;
-}
-.toast.success {
-  background: #f6ffed;
-  color: #52c41a;
-  border: 1px solid #b7eb8f;
-}
-.toast.error {
-  background: #fff2f0;
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
-}
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
-}
-.toast-enter-from,
-.toast-leave-to {
-  opacity: 0;
-  transform: translateY(-12px);
 }
 
 </style>

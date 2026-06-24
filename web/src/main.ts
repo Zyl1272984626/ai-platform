@@ -1,3 +1,8 @@
+// 全局样式(顺序:reset → tokens → global,必须在最顶部)
+import './styles/reset.css'
+import './styles/tokens.css'
+import './styles/global.css'
+
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia } from 'pinia'

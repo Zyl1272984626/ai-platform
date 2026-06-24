@@ -9,11 +9,11 @@
     <div v-if="expanded" class="tool-detail">
       <div v-if="input" class="tool-section">
         <div class="tool-section-label">输入</div>
-        <pre class="tool-code">{{ formatJson(input) }}</pre>
+        <CodeBlock :code="formatJson(input)" lang="json" />
       </div>
       <div v-if="result" class="tool-section">
         <div class="tool-section-label">结果</div>
-        <pre class="tool-code tool-result">{{ truncatedResult }}</pre>
+        <CodeBlock :code="truncatedResult" lang="text" />
         <button v-if="isResultLong" class="toggle-more" @click.stop="showFull = !showFull">
           {{ showFull ? '收起' : '显示全部' }}
         </button>
@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import CodeBlock from '../ui/CodeBlock.vue'
 
 const props = defineProps<{
   name: string
@@ -61,9 +62,9 @@ function formatJson(obj: any): string {
 <style scoped>
 .tool-block {
   margin: 6px 0;
-  border-radius: 8px;
-  border: 1px solid #e8e8f0;
-  background: #fafafe;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
   overflow: hidden;
 }
 .tool-header {
@@ -73,35 +74,34 @@ function formatJson(obj: any): string {
   padding: 8px 12px;
   cursor: pointer;
   font-size: 12px;
-  color: #666;
-  transition: background 0.15s;
+  color: var(--text-2);
+  transition: background var(--duration-fast) var(--ease);
 }
-.tool-header:hover { background: #f0f0f5; }
+.tool-header:hover { background: var(--bg-surface); }
 .tool-status-dot {
   width: 8px; height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
-.dot-done { background: #52c41a; }
+.dot-done { background: var(--success); }
 .dot-loading {
-  background: #1890ff;
-  animation: spin 1s infinite;
+  background: var(--info);
+  animation: aui-blink 1s infinite;
 }
-@keyframes spin { 0%,100%{opacity:1} 50%{opacity:0.3} }
 .tool-name {
   font-weight: 600;
-  color: #1a1a2e;
-  font-family: monospace;
+  color: var(--text-1);
+  font-family: var(--font-mono);
 }
 .tool-preview {
   flex: 1;
-  color: #999;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .tool-toggle {
-  color: #1890ff;
+  color: var(--info);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -110,28 +110,14 @@ function formatJson(obj: any): string {
 }
 .tool-section-label {
   font-size: 11px;
-  color: #999;
+  color: var(--text-3);
   margin-bottom: 4px;
   font-weight: 500;
 }
-.tool-code {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: 'Fira Code', monospace;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 300px;
-  overflow-y: auto;
-}
-.tool-result { color: #a6e3a1; }
 .toggle-more {
   background: none;
   border: none;
-  color: #1890ff;
+  color: var(--info);
   font-size: 11px;
   cursor: pointer;
   margin-top: 4px;

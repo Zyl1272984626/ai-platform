@@ -49,14 +49,14 @@ function onInput(event: Event) {
   width: 100%;
   padding-right: 40px;
   padding: 8px 40px 8px 12px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
   font-size: 14px;
-  transition: border-color 0.2s;
+  transition: border-color var(--duration) var(--ease);
 }
 
 .password-input input:focus {
-  border-color: #667eea;
+  border-color: var(--brand);
   outline: none;
   box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
 }
@@ -73,16 +73,16 @@ function onInput(event: Event) {
   padding: 0;
   line-height: 1;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
-  color: #8c8c8c;
+  color: var(--text-3);
   cursor: pointer;
   transform: translateY(-50%);
 }
 
 .toggle-button:hover {
-  background: #f5f5f5;
-  color: #667eea;
+  background: var(--bg-surface-2);
+  color: var(--brand);
 }
 
 .toggle-button svg {

@@ -1,19 +1,6 @@
 <template>
-  <div class="deploy-page">
-    <!-- Toast -->
-    <Transition name="toast">
-      <div v-if="message" class="toast" :class="message.type">{{ message.text }}</div>
-    </Transition>
-
-    <header class="page-header">
-      <div class="header-left">
-        <button class="btn-back" @click="router.push(`/schools/${code}`)">&larr; 返回配置</button>
-        <div>
-          <h1>生成部署包 - {{ school?.name || '...' }}</h1>
-          <p class="page-desc">选择需要包含的部署步骤，生成 WAR + 分阶段部署脚本</p>
-        </div>
-      </div>
-    </header>
+  <div class="deploy-page page-container">
+    <PageHeader show-back :title="`生成部署包 - ${school?.name || '...'}`" description="选择需要包含的部署步骤，生成 WAR + 分阶段部署脚本" @back="router.push(`/schools/${code}`)" />
 
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -131,25 +118,20 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { EyeOffOutline, EyeOutline } from '@vicons/ionicons5'
+import PageHeader from '../components/layout/PageHeader.vue'
+import { useToast } from '../composables/useToast'
 import { getSchool, deploySchoolFull } from '../api/schools'
 import type { School } from '../api/types'
 
 const router = useRouter()
 const route = useRoute()
 const code = route.params.code as string
+const { toast } = useToast()
 
 const loading = ref(true)
 const deploying = ref(false)
 const showRootPassword = ref(false)
 const school = ref<School | null>(null)
-const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
-let messageTimer: ReturnType<typeof setTimeout> | null = null
-
-function showMessage(type: 'success' | 'error', text: string) {
-  if (messageTimer) clearTimeout(messageTimer)
-  message.value = { type, text }
-  messageTimer = setTimeout(() => { message.value = null }, 3000)
-}
 
 const options = reactive({
   createAgentDatabases: true,
@@ -227,7 +209,7 @@ onMounted(async () => {
   try {
     school.value = await getSchool(code)
   } catch (e: any) {
-    showMessage('error', '加载失败: ' + e.message)
+    toast.error('加载失败: ' + e.message)
   } finally {
     loading.value = false
   }
@@ -259,9 +241,9 @@ async function doDeploy() {
       deployOneapi: effective.deployOneapi,
       initSql: effective.initSql,
     })
-    showMessage('success', '部署包已生成并下载')
+    toast.success('部署包已生成并下载')
   } catch (e: any) {
-    showMessage('error', '部署失败: ' + e.message)
+    toast.error('部署失败: ' + e.message)
   } finally {
     deploying.value = false
   }
@@ -269,41 +251,6 @@ async function doDeploy() {
 </script>
 
 <style scoped>
-.deploy-page {
-  padding: 24px 32px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-.page-header {
-  margin-bottom: 24px;
-}
-.header-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-.header-left h1 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #1a1a2e;
-  margin: 0 0 4px 0;
-}
-.page-desc {
-  font-size: 13px;
-  color: #999;
-  margin: 0;
-}
-.btn-back {
-  padding: 6px 14px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 13px;
-  color: #666;
-  margin-top: 2px;
-}
-.btn-back:hover { border-color: #667eea; color: #667eea; }
 .loading { text-align: center; padding: 60px; color: #888; font-size: 16px; }
 
 /* Sections */
@@ -317,10 +264,10 @@ async function doDeploy() {
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-1);
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 
 /* Summary */
@@ -363,11 +310,11 @@ async function doDeploy() {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #8c8c8c;
+  color: var(--text-3);
   cursor: pointer;
 }
 .summary-secret-toggle:hover {
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
   color: #667eea;
 }
 .summary-secret-toggle svg {
@@ -392,7 +339,7 @@ async function doDeploy() {
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid var(--border);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
@@ -465,30 +412,15 @@ async function doDeploy() {
 }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-deploy {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #667eea, var(--brand-active));
   color: #fff;
 }
 .btn-deploy:hover:not(:disabled) { opacity: 0.9; }
 .btn-config {
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
 }
-.btn-config:hover { background: #e0e0e0; }
+.btn-config:hover { background: var(--border); }
 
-/* Toast */
-.toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  max-width: 400px;
-}
-.toast.success { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
-.toast.error { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-12px); }
+/* Toast 已统一由全局 useToast + ToastHost 提供 */
 </style>

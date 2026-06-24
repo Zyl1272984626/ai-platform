@@ -1,11 +1,6 @@
 <template>
-  <div class="settings-page">
-    <header class="page-header">
-      <div>
-        <h1>系统设置</h1>
-        <p class="subtitle">配置项目路径和服务端口，新同事换电脑后在此页面修改即可</p>
-      </div>
-    </header>
+  <div class="settings-page page-container">
+    <PageHeader title="系统设置" description="配置项目路径和服务端口，新同事换电脑后在此页面修改即可" />
 
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -223,7 +218,7 @@
 
       <!-- Claude 配置 -->
       <section class="setting-section">
-        <h2 class="section-title">🤖 Claude 配置（智谱 CodePlan）</h2>
+        <h2 class="section-title">Claude 配置（智谱 CodePlan）</h2>
         <div class="form-group">
           <label>认证 Token <span class="required">*</span></label>
           <p class="field-desc">智谱 CodePlan 的 ANTHROPIC_AUTH_TOKEN</p>
@@ -254,7 +249,8 @@
         </div>
         <div class="form-group" style="margin-top: 12px;">
           <button class="btn-test-claude" :disabled="testingClaude || !form.claudeConfig.authToken" @click="doTestClaude">
-            {{ testingClaude ? '测试中...' : '🔗 测试连接' }}
+            <Icon v-if="!testingClaude" :icon="IconBiz.link" :size="14" />
+            {{ testingClaude ? '测试中...' : '测试连接' }}
           </button>
           <span v-if="claudeTestResult" class="check-badge" :class="claudeTestResult.ok ? 'ok' : 'err'" style="margin-left: 10px;">
             {{ claudeTestResult.msg }}
@@ -352,9 +348,7 @@
     </div>
 
     <!-- 添加/编辑项目弹窗 -->
-    <div v-if="showProjectModal" class="modal-overlay" @click.self="showProjectModal = false">
-      <div class="modal-content">
-        <h3>{{ editingProject ? '编辑项目' : '添加项目' }}</h3>
+    <BaseModal v-model:show="showProjectModal" :title="editingProject ? '编辑项目' : '添加项目'" :width="560">
         <div class="form-group">
           <label>项目名称 <span class="required">*</span></label>
           <input v-model="projectForm.name" placeholder="例如: 主系统(Agent)" />
@@ -384,19 +378,14 @@
           <p class="field-desc">用于源码分析增强页面发现</p>
           <input v-model="projectForm.sourcePath" placeholder="例如: C:/FengSuKeJi/agent" />
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showProjectModal = false">取消</button>
-          <button class="btn btn-save" @click="saveProject" :disabled="savingProject">
-            {{ savingProject ? '保存中...' : '保存' }}
-          </button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showProjectModal = false">取消</BaseButton>
+          <BaseButton variant="primary" :loading="savingProject" @click="saveProject">保存</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 发现模式选择弹窗 -->
-    <div v-if="showDiscoverDialog" class="modal-overlay" @click.self="showDiscoverDialog = false">
-      <div class="modal-content" style="width: 400px;">
-        <h3>发现页面</h3>
+    <BaseModal v-model:show="showDiscoverDialog" title="发现页面" :width="440">
         <p class="field-desc">选择发现方式（项目{{ discoverDialogProject?.sourcePath ? '已配置源码路径' : '未配置源码路径' }}）</p>
         <div class="discover-options">
           <div class="discover-option" :class="{ active: discoverMode === 'both' }" @click="discoverMode = 'both'">
@@ -412,19 +401,14 @@
             <div class="discover-option-desc">读 vite.config.ts 和 pages 目录，速度快</div>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showDiscoverDialog = false">取消</button>
-          <button class="btn btn-save" @click="confirmDiscover" :disabled="discoveringProject !== null">
-            {{ discoveringProject ? '发现中...' : '开始发现' }}
-          </button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showDiscoverDialog = false">取消</BaseButton>
+          <BaseButton variant="primary" :loading="!!discoveringProject" @click="confirmDiscover">开始发现</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 页面管理弹窗 -->
-    <div v-if="showPageManager" class="modal-overlay" @click.self="closePageManager">
-      <div class="modal-content modal-wide">
-        <h3>页面管理 — {{ pageManagerProjectName }}</h3>
+    <BaseModal v-model:show="showPageManager" :title="`页面管理 — ${pageManagerProjectName}`" :width="760" @cancel="closePageManager">
         <p class="field-desc">
           {{ pageManagerSets.length }} 个页面集 | {{ pageManagerTotalPages }} 个页面
           <button v-if="discoveryEntries.length" class="btn btn-xs" style="margin-left: 8px;" @click="showDiscoveryLog = !showDiscoveryLog">
@@ -435,7 +419,7 @@
         <!-- 公共动态参数 -->
         <div v-if="allDynamicParamNames.length > 0" class="global-params-section">
           <div class="global-params-header" @click="showGlobalParams = !showGlobalParams">
-            <span>{{ showGlobalParams ? '▼' : '▶' }} 公共动态参数 ({{ allDynamicParamNames.length }})</span>
+            <span class="expand-inline"><Icon :icon="showGlobalParams ? IconArrow.down : IconArrow.up" :size="14" /> 公共动态参数 ({{ allDynamicParamNames.length }})</span>
             <span class="global-params-hint">配置一次，所有含该参数的页面自动生效</span>
           </div>
           <div v-if="showGlobalParams" class="global-params-body">
@@ -473,9 +457,9 @@
           <div v-if="discoverySourceEntries.length" class="discovery-source-info">
             源码分析发现 {{ discoverySourceEntries.length }} 个入口: {{ discoverySourceEntries.join(', ') }}
           </div>
-          <div class="discovery-log-title">子应用入口探测结果（✅ 有效入口参与分组，❌ 失败入口不影响结果，多测无害）</div>
+          <div class="discovery-log-title">子应用入口探测结果（有效入口参与分组，失败入口不影响结果，多测无害）</div>
           <div v-for="entry in discoveryEntries" :key="entry.name" class="discovery-entry" :class="entry.status">
-            <span class="entry-status">{{ entry.status === 'valid' ? '✅' : '❌' }}</span>
+            <span class="entry-status"><Icon :icon="entry.status === 'valid' ? IconStatus.success : IconStatus.error" :size="14" /></span>
             <span class="entry-name">
               {{ entry.name }}
               <span v-if="discoverySourceEntries.includes(entry.name)" class="badge badge-source">源码</span>
@@ -494,7 +478,7 @@
         <div v-else class="page-set-list">
           <div v-for="ps in pageManagerSets" :key="ps.id" class="page-set-block">
             <div class="page-set-header" @click="toggleSetExpand(ps.id)">
-              <span class="expand-icon">{{ expandedSetIds.has(ps.id) ? '▼' : '▶' }}</span>
+              <span class="expand-icon"><Icon :icon="expandedSetIds.has(ps.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
               <span class="page-set-name">
                 <!-- 重命名状态 -->
                 <template v-if="renamingSetId === ps.id">
@@ -627,16 +611,13 @@
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="closePageManager">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="closePageManager">关闭</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 管理接口弹窗 -->
-    <div v-if="showApiManager" class="modal-overlay" @click.self="showApiManager = false">
-      <div class="modal-content modal-wide">
-        <h3>管理接口 — {{ apiManagerProjectName }}</h3>
+    <BaseModal v-model:show="showApiManager" :title="`管理接口 — ${apiManagerProjectName}`" :width="760">
         <div v-if="apiManagerLoading" class="loading" style="padding:20px;">加载中...</div>
         <template v-else>
           <div v-if="!apiManagerDiscovery && !apiManagerTests" class="empty-projects">
@@ -654,7 +635,7 @@
               <h4 class="manager-section-title">接口模块</h4>
               <div v-for="mod in apiManagerDiscovery?.modules || []" :key="mod.id" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('api', mod.id)">
-                  <span class="expand-icon">{{ expandedManagerIds.api.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds.api.has(mod.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ mod.name }}</span>
                   <span class="manager-block-count">{{ mod.endpoints?.length || 0 }} 个接口</span>
                   <code v-if="mod.sourcePath" class="manager-block-path">{{ mod.sourcePath }}</code>
@@ -673,7 +654,7 @@
               <h4 class="manager-section-title">测试用例 ({{ apiManagerTests.testModules.reduce((s:number, m:any) => s + (m.tests?.length || 0), 0) }} 个)</h4>
               <div v-for="mod in apiManagerTests.testModules" :key="mod.moduleId" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('api-test', mod.moduleId)">
-                  <span class="expand-icon">{{ expandedManagerIds['api-test'].has(mod.moduleId) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds['api-test'].has(mod.moduleId) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ mod.moduleName }}</span>
                   <span class="manager-block-count">{{ mod.tests?.length || 0 }} 个用例</span>
                 </div>
@@ -690,7 +671,7 @@
         </template>
         <div class="manager-log-section">
           <div class="manager-log-header" @click="showManagerLog && managerLogBlocks.length ? null : loadDiscoveryLog(apiManagerProjectId, 'api')">
-            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <span class="expand-inline"><Icon :icon="showManagerLog ? IconArrow.down : IconArrow.up" :size="14" /> 上次发现日志</span>
             <button class="btn btn-xs" @click.stop="showManagerLog ? showManagerLog = false : loadDiscoveryLog(apiManagerProjectId, 'api')">
               {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
             </button>
@@ -704,16 +685,13 @@
             </template>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showApiManager = false; showManagerLog = false">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showApiManager = false; showManagerLog = false">关闭</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 管理组件弹窗 -->
-    <div v-if="showFrontendManager" class="modal-overlay" @click.self="showFrontendManager = false">
-      <div class="modal-content modal-wide">
-        <h3>管理组件 — {{ frontendManagerProjectName }}</h3>
+    <BaseModal v-model:show="showFrontendManager" :title="`管理组件 — ${frontendManagerProjectName}`" :width="760">
         <div v-if="frontendManagerLoading" class="loading" style="padding:20px;">加载中...</div>
         <template v-else>
           <div v-if="!frontendManagerData" class="empty-projects">
@@ -728,7 +706,7 @@
             <div class="manager-section">
               <div v-for="mod in frontendManagerData.modules || []" :key="mod.id" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('frontend', mod.id)">
-                  <span class="expand-icon">{{ expandedManagerIds.frontend.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds.frontend.has(mod.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ mod.name }}</span>
                   <span class="manager-block-count">{{ mod.files?.length || 0 }} 个文件</span>
                   <span class="manager-block-desc">{{ mod.description }}</span>
@@ -761,7 +739,7 @@
         </template>
         <div class="manager-log-section">
           <div class="manager-log-header" @click.stop>
-            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <span class="expand-inline"><Icon :icon="showManagerLog ? IconArrow.down : IconArrow.up" :size="14" /> 上次发现日志</span>
             <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(frontendManagerProjectId, 'frontend')">
               {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
             </button>
@@ -775,16 +753,13 @@
             </template>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showFrontendManager = false; showManagerLog = false">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showFrontendManager = false; showManagerLog = false">关闭</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 管理审查点弹窗 -->
-    <div v-if="showReviewManager" class="modal-overlay" @click.self="showReviewManager = false">
-      <div class="modal-content modal-wide">
-        <h3>管理审查点 — {{ reviewManagerProjectName }}</h3>
+    <BaseModal v-model:show="showReviewManager" :title="`管理审查点 — ${reviewManagerProjectName}`" :width="760">
         <div v-if="reviewManagerLoading" class="loading" style="padding:20px;">加载中...</div>
         <template v-else>
           <div v-if="!reviewManagerDiscovery && !reviewManagerRules" class="empty-projects">
@@ -810,7 +785,7 @@
               <h4 class="manager-section-title">项目模块</h4>
               <div v-for="mod in reviewManagerDiscovery.modules" :key="mod.id" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('review', mod.id)">
-                  <span class="expand-icon">{{ expandedManagerIds.review.has(mod.id) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds.review.has(mod.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ mod.name }}</span>
                   <span class="risk-badge" :class="mod.riskLevel">{{ mod.riskLevel }}</span>
                   <span class="manager-block-count">{{ mod.files }} 文件</span>
@@ -828,7 +803,7 @@
               <h4 class="manager-section-title">审查维度</h4>
               <div v-for="dim in reviewManagerRules.dimensions" :key="dim.id" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('review-rule', dim.id)">
-                  <span class="expand-icon">{{ expandedManagerIds['review-rule'].has(dim.id) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds['review-rule'].has(dim.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ dim.name }}</span>
                   <span class="severity-badge" :class="dim.severity">{{ dim.severity }}</span>
                   <span class="manager-block-count">{{ dim.rules?.length || 0 }} 条规则</span>
@@ -850,7 +825,7 @@
         </template>
         <div class="manager-log-section">
           <div class="manager-log-header" @click.stop>
-            <span>{{ showManagerLog ? '▼' : '▶' }} 上次发现日志</span>
+            <span class="expand-inline"><Icon :icon="showManagerLog ? IconArrow.down : IconArrow.up" :size="14" /> 上次发现日志</span>
             <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(reviewManagerProjectId, 'review')">
               {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
             </button>
@@ -864,16 +839,13 @@
             </template>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showReviewManager = false; showManagerLog = false">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showReviewManager = false; showManagerLog = false">关闭</BaseButton>
+        </template>
+    </BaseModal>
 
     <!-- 查看知识图谱弹窗 -->
-    <div v-if="showContextManager" class="modal-overlay" @click.self="showContextManager = false">
-      <div class="modal-content modal-wide">
-        <h3>知识图谱 — {{ contextManagerProjectName }}</h3>
+    <BaseModal v-model:show="showContextManager" :title="`知识图谱 — ${contextManagerProjectName}`" :width="760">
         <div v-if="contextManagerLoading" class="loading" style="padding:20px;">加载中...</div>
         <template v-else>
           <div v-if="!contextManagerData || !contextPages.length" class="empty-projects">
@@ -887,7 +859,7 @@
             <div class="manager-section">
               <div v-for="page in contextPages" :key="page.id" class="manager-block">
                 <div class="manager-block-header" @click="toggleManagerExpand('context', page.id)">
-                  <span class="expand-icon">{{ expandedManagerIds.context.has(page.id) ? '▼' : '▶' }}</span>
+                  <span class="expand-icon"><Icon :icon="expandedManagerIds.context.has(page.id) ? IconArrow.down : IconArrow.up" :size="14" /></span>
                   <span class="manager-block-name">{{ page.pageName }}</span>
                   <code class="manager-block-path">{{ page.url }}</code>
                 </div>
@@ -935,7 +907,7 @@
         </template>
         <div class="manager-log-section">
           <div class="manager-log-header" @click.stop>
-            <span>{{ showManagerLog ? '▼' : '▶' }} 上次生成日志</span>
+            <span class="expand-inline"><Icon :icon="showManagerLog ? IconArrow.down : IconArrow.up" :size="14" /> 上次生成日志</span>
             <button class="btn btn-xs" @click="showManagerLog ? showManagerLog = false : loadDiscoveryLog(contextManagerProjectId, 'context')">
               {{ showManagerLog && managerLogBlocks.length ? '收起' : '查看' }}
             </button>
@@ -949,11 +921,10 @@
             </template>
           </div>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-cancel" @click="showContextManager = false; showManagerLog = false">关闭</button>
-        </div>
-      </div>
-    </div>
+        <template #footer>
+          <BaseButton variant="ghost" @click="showContextManager = false; showManagerLog = false">关闭</BaseButton>
+        </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -963,6 +934,11 @@ import { marked } from 'marked'
 import { getSettings, updateSettings, checkSettings, testClaude, testCodex, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import PasswordInput from '../components/common/PasswordInput.vue'
+import PageHeader from '../components/layout/PageHeader.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconArrow, IconBiz, IconStatus } from '../composables/icons'
 import {
   getProjects as fetchProjects,
   addProject as apiAddProject,
@@ -1115,7 +1091,7 @@ function handleStreamEvent(key: string, event: any) {
       stream.rawOutputPreview = event.rawOutputPreview
     }
   } else if (event.type === 'error') {
-    stream.blocks.push({ type: 'text', content: `\n❌ 错误: ${event.message}` })
+    stream.blocks.push({ type: 'text', content: `\n**错误**: ${event.message}` })
     stream.stage = 'error'
   }
 }
@@ -1471,7 +1447,7 @@ async function doDiscover(id: string) {
     await apiDiscoverProject(id, discoverMode.value, (progress) => {
       // E2E 发现的进度格式为 { stage, message }，需转换为统一流格式
       if (progress.stage === 'complete' || progress.stage === 'done') {
-        handleStreamEvent(key, { type: 'text', content: `\n✅ ${progress.message}\n` })
+        handleStreamEvent(key, { type: 'text', content: `\n${progress.message}\n` })
         handleStreamEvent(key, { type: 'done', message: '完成' })
       } else if (progress.stage === 'error') {
         handleStreamEvent(key, { type: 'error', message: progress.message })
@@ -2027,23 +2003,6 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 </script>
 
 <style scoped>
-.settings-page {
-  padding: 24px 32px;
-  max-width: 1100px;
-}
-.page-header {
-  margin-bottom: 28px;
-}
-.page-header h1 {
-  font-size: 22px;
-  font-weight: 600;
-  color: #1a1a2e;
-}
-.subtitle {
-  color: #888;
-  font-size: 14px;
-  margin-top: 4px;
-}
 .loading {
   text-align: center;
   padding: 60px;
@@ -2063,12 +2022,12 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   align-items: center;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 .section-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-1);
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: none;
@@ -2076,7 +2035,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .setting-section > .section-title {
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 .form-group {
   margin-bottom: 16px;
@@ -2089,7 +2048,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   margin-bottom: 4px;
 }
 .required {
-  color: #ff4d4f;
+  color: var(--error);
 }
 .token-row {
   display: flex;
@@ -2103,9 +2062,9 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 }
 .btn-toggle-pw {
   padding: 6px 14px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   cursor: pointer;
   font-size: 12px;
   color: #666;
@@ -2119,7 +2078,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .model-select {
   width: 240px;
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 14px;
   cursor: pointer;
@@ -2131,21 +2090,24 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 }
 .btn-test-claude {
   padding: 8px 20px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--brand);
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition: background var(--duration-fast) var(--ease);
 }
 .btn-test-claude:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .btn-test-claude:not(:disabled):hover {
-  opacity: 0.85;
+  background: var(--brand-hover);
 }
 .field-desc {
   font-size: 12px;
@@ -2161,7 +2123,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .form-group input {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 14px;
   transition: border-color 0.2s;
@@ -2184,16 +2146,16 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   margin-right: 4px;
 }
 .check-badge.ok {
-  color: #52c41a;
-  background: #f6ffed;
+  color: var(--success);
+  background: var(--success-bg);
 }
 .check-badge.err {
-  color: #ff4d4f;
-  background: #fff2f0;
+  color: var(--error);
+  background: var(--error-bg);
 }
 .check-badge.pending {
   color: #999;
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
 }
 .env-check-list {
   display: flex;
@@ -2205,7 +2167,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   border-radius: 6px;
 }
 .env-label {
@@ -2233,28 +2195,28 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .btn-sm {
   padding: 4px 10px;
   font-size: 12px;
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
 }
 .btn-sm:hover:not(:disabled) {
-  background: #e0e0e0;
+  background: var(--border);
 }
 .btn-sm.btn-check {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: var(--info-bg);
+  color: var(--info);
 }
 .btn-sm.btn-check:hover:not(:disabled) {
   background: #bae7ff;
 }
 .btn-sm.btn-danger {
-  background: #fff2f0;
-  color: #ff4d4f;
+  background: var(--error-bg);
+  color: var(--error);
 }
 .btn-sm.btn-danger:hover:not(:disabled) {
-  background: #ffccc7;
+  background: var(--error-border);
 }
 .btn-add {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #667eea, var(--brand-active));
   color: #fff;
   font-size: 13px;
   padding: 6px 14px;
@@ -2263,21 +2225,21 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   opacity: 0.9;
 }
 .btn-check {
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
 }
 .btn-check:hover:not(:disabled) {
-  background: #e0e0e0;
+  background: var(--border);
 }
 .btn-save {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #667eea, var(--brand-active));
   color: #fff;
 }
 .btn-save:hover:not(:disabled) {
   opacity: 0.9;
 }
 .btn-cancel {
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
 }
 .message {
@@ -2287,26 +2249,26 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   font-size: 14px;
 }
 .message.success {
-  background: #f6ffed;
-  color: #52c41a;
+  background: var(--success-bg);
+  color: var(--success);
   border: 1px solid #b7eb8f;
 }
 .message.error {
-  background: #fff2f0;
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error-border);
 }
 
 /* 项目卡片 */
 .project-card {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-light);
   border-radius: 10px;
   padding: 18px 22px;
   margin-bottom: 14px;
   transition: border-color 0.2s;
 }
 .project-card:hover {
-  border-color: #d9d9d9;
+  border-color: var(--border-strong);
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 .project-card.default {
@@ -2327,7 +2289,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .project-name {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text-1);
 }
 .project-tool-actions {
   display: flex;
@@ -2360,7 +2322,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .project-check-results {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #f5f5f5;
+  border-top: 1px solid var(--bg-surface-2);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -2383,7 +2345,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 }
 .discover-stage {
   font-size: 11px;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -2408,7 +2370,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f0f0ff;
+  background: var(--brand-soft);
   font-weight: 500;
   font-size: 13px;
   color: #667eea;
@@ -2431,7 +2393,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .stream-text :deep(h1),
 .stream-text :deep(h2),
 .stream-text :deep(h3) {
-  color: #1a1a2e;
+  color: var(--text-1);
   margin: 8px 0 4px;
   font-size: 14px;
 }
@@ -2441,14 +2403,14 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   margin: 4px 0;
 }
 .stream-text :deep(code) {
-  background: #f0f0f5;
+  background: var(--bg-surface-2);
   padding: 1px 4px;
   border-radius: 3px;
   font-size: 12px;
 }
 .stream-text :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 11px;
@@ -2457,7 +2419,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .stream-warning {
   margin-top: 10px;
   padding: 8px 12px;
-  background: #fffbe6;
+  background: var(--warning-bg);
   border: 1px solid #ffe58f;
   border-radius: 6px;
   font-size: 12px;
@@ -2467,7 +2429,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 /* 管理弹窗日志区域 */
 .manager-log-section {
   margin-top: 16px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-light);
   padding-top: 12px;
 }
 .manager-log-header {
@@ -2520,7 +2482,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   padding: 2px 8px !important;
 }
 .btn-prompt-copy:hover {
-  background: #f0f0ff !important;
+  background: var(--brand-soft) !important;
 }
 .btn-discover-api {
   background: #13c2c2 !important;
@@ -2559,53 +2521,15 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   color: #fff;
 }
 .badge-active {
-  background: #f6ffed;
-  color: #52c41a;
+  background: var(--success-bg);
+  color: var(--success);
 }
 .badge-inactive {
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
   color: #999;
 }
 
 /* 弹窗 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-.modal-content {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px 28px;
-  width: 480px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-}
-.modal-content h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  color: #1a1a2e;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-.modal-wide {
-  width: 1080px;
-  max-height: 90vh;
-}
-
 /* 页面管理 */
 .btn-manage {
   background: #f9f0ff !important;
@@ -2620,7 +2544,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   overflow-y: auto;
 }
 .page-set-block {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   margin-bottom: 8px;
   overflow: hidden;
@@ -2630,17 +2554,24 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   cursor: pointer;
   user-select: none;
 }
 .page-set-header:hover {
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
 }
 .expand-icon {
-  font-size: 10px;
-  color: #999;
+  color: var(--text-3);
   width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.expand-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 .page-set-name {
   font-weight: 500;
@@ -2651,7 +2582,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .page-set-count {
   font-size: 11px;
   color: #999;
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -2704,11 +2635,11 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-light);
 }
 .inline-input {
   padding: 4px 8px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   font-size: 12px;
   flex: 1;
@@ -2825,7 +2756,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .param-ref-list {
   margin: 4px 0 8px 68px;
   padding: 6px 8px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   border-radius: 4px;
   max-height: 180px;
   overflow-y: auto;
@@ -2837,7 +2768,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   padding: 3px 0;
   cursor: pointer;
   font-size: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 .param-ref-item:last-child {
   border-bottom: none;
@@ -2875,7 +2806,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .resolved-url-label {
   font-size: 10px;
   color: #888;
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 1px 6px;
   border-radius: 3px;
   white-space: nowrap;
@@ -2911,51 +2842,51 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 }
 .move-select {
   padding: 4px 6px;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   font-size: 12px;
 }
 .btn-xs {
   padding: 2px 8px;
   font-size: 11px;
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
   border: none;
   border-radius: 3px;
   cursor: pointer;
 }
 .btn-xs:hover {
-  background: #e0e0e0;
+  background: var(--border);
 }
 .btn-xs.btn-danger {
-  background: #fff2f0;
-  color: #ff4d4f;
+  background: var(--error-bg);
+  color: var(--error);
 }
 .btn-xs.btn-danger:hover {
-  background: #ffccc7;
+  background: var(--error-border);
 }
 .btn-xs.btn-save {
   background: #667eea;
   color: #fff;
 }
 .btn-xs.btn-cancel {
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #666;
 }
 .badge-warn {
-  background: #fffbe6;
-  color: #faad14;
+  background: var(--warning-bg);
+  color: var(--warning);
   border: 1px solid #ffe58f;
 }
 .badge-info {
-  background: #e6f7ff;
-  color: #1890ff;
+  background: var(--info-bg);
+  color: var(--info);
 }
 
 /* 发现日志 */
 .discovery-log-panel {
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 12px;
@@ -2992,10 +2923,10 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   margin-bottom: 2px;
 }
 .discovery-entry.valid {
-  background: #f6ffed;
+  background: var(--success-bg);
 }
 .discovery-entry.error {
-  background: #fff2f0;
+  background: var(--error-bg);
 }
 .entry-status {
   width: 16px;
@@ -3013,8 +2944,8 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 
 /* 打开按钮 */
 .btn-open {
-  background: #e6f7ff !important;
-  color: #1890ff !important;
+  background: var(--info-bg) !important;
+  color: var(--info) !important;
 }
 .btn-open:hover {
   background: #bae7ff !important;
@@ -3050,7 +2981,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   font-size: 12px;
 }
 .page-detail-row code {
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 2px 6px;
   border-radius: 3px;
   font-size: 12px;
@@ -3066,14 +2997,14 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   margin-top: 12px;
 }
 .discover-option {
-  border: 2px solid #f0f0f0;
+  border: 2px solid var(--border-light);
   border-radius: 8px;
   padding: 12px 16px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .discover-option:hover {
-  border-color: #d9d9d9;
+  border-color: var(--border-strong);
 }
 .discover-option.active {
   border-color: #667eea;
@@ -3099,7 +3030,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   grid-template-columns: 1fr 1fr;
   gap: 10px 24px;
   padding: 12px 0 4px;
-  border-top: 1px solid #f5f5f5;
+  border-top: 1px solid var(--bg-surface-2);
 }
 .action-group {
   display: flex;
@@ -3169,10 +3100,10 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   color: #333;
   margin-bottom: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-light);
 }
 .manager-block {
-  border: 1px solid #f0f0f0;
+  border: 1px solid var(--border-light);
   border-radius: 6px;
   margin-bottom: 6px;
   overflow: hidden;
@@ -3182,13 +3113,13 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   cursor: pointer;
   user-select: none;
   font-size: 13px;
 }
 .manager-block-header:hover {
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
 }
 .manager-block-name {
   font-weight: 500;
@@ -3197,7 +3128,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .manager-block-count {
   font-size: 11px;
   color: #999;
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -3212,7 +3143,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .manager-block-path {
   font-size: 11px;
   color: #888;
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -3250,7 +3181,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   font-size: 11px;
   color: #666;
   font-family: monospace;
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
   padding: 1px 4px;
   border-radius: 2px;
 }
@@ -3275,7 +3206,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 .frontend-file-path {
   font-size: 12px;
   color: #333;
-  background: #f5f5f5;
+  background: var(--bg-surface-2);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -3285,9 +3216,9 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   border-radius: 3px;
   font-weight: 500;
 }
-.complexity-badge.low { background: #f6ffed; color: #52c41a; }
-.complexity-badge.medium { background: #fffbe6; color: #faad14; }
-.complexity-badge.high { background: #fff2f0; color: #ff4d4f; }
+.complexity-badge.low { background: var(--success-bg); color: var(--success); }
+.complexity-badge.medium { background: var(--warning-bg); color: var(--warning); }
+.complexity-badge.high { background: var(--error-bg); color: var(--error); }
 .frontend-file-detail {
   width: 100%;
   padding-left: 12px;
@@ -3321,7 +3252,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   padding: 1px 0;
 }
 .frontend-fn code {
-  background: #f0f0f0;
+  background: var(--border-light);
   padding: 0 4px;
   border-radius: 2px;
   font-size: 10px;
@@ -3335,24 +3266,24 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   padding: 1px 6px;
   border-radius: 3px;
 }
-.risk-badge.high { background: #fff2f0; color: #ff4d4f; }
-.risk-badge.medium { background: #fffbe6; color: #faad14; }
-.risk-badge.low { background: #f6ffed; color: #52c41a; }
+.risk-badge.high { background: var(--error-bg); color: var(--error); }
+.risk-badge.medium { background: var(--warning-bg); color: var(--warning); }
+.risk-badge.low { background: var(--success-bg); color: var(--success); }
 .severity-badge {
   font-size: 10px;
   font-weight: 500;
   padding: 1px 6px;
   border-radius: 3px;
 }
-.severity-badge.critical { background: #fff2f0; color: #ff4d4f; }
-.severity-badge.warning { background: #fffbe6; color: #faad14; }
-.severity-badge.info { background: #e6f7ff; color: #1890ff; }
+.severity-badge.critical { background: var(--error-bg); color: var(--error); }
+.severity-badge.warning { background: var(--warning-bg); color: var(--warning); }
+.severity-badge.info { background: var(--info-bg); color: var(--info); }
 .manager-info-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--bg-surface-2);
   border-radius: 6px;
 }
 .manager-info-item {
@@ -3392,7 +3323,7 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
 }
 .review-rule-suggestion {
   font-size: 11px;
-  color: #52c41a;
+  color: var(--success);
   padding-left: 60px;
 }
 
@@ -3434,12 +3365,12 @@ async function doCopyDiscoveryPrompt(projectId: string, type: string) {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 3px;
-  background: #f0f0f0;
+  background: var(--border-light);
   color: #333;
 }
 .context-tag-warn {
-  background: #fffbe6;
-  color: #faad14;
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 .context-api-list,
 .context-interaction-list {

@@ -13,10 +13,10 @@
       <!-- 空状态 -->
       <EmptyState
         v-if="!currentSession"
-        icon="💬"
         title="AI 工程助手"
         description="创建一个新会话开始与 Claude Code 对话，自动执行工程任务"
       >
+        <template #icon><Icon :icon="IconNav.chat" :size="48" /></template>
         <button class="start-btn" @click="handleCreate">开始对话</button>
       </EmptyState>
 
@@ -43,7 +43,7 @@
             />
             <div v-else-if="item.type === 'thinking'" class="thinking-block">
               <div class="thinking-header" @click="toggleThinking(i)">
-                <span class="thinking-icon">💭</span>
+                <span class="thinking-icon"><Icon :icon="IconBiz.thinking" :size="14" /></span>
                 <span>思考过程</span>
                 <span class="thinking-toggle">{{ openThinking.has(i) ? '收起' : '展开' }}</span>
               </div>
@@ -79,6 +79,8 @@ import MessageBubble from '../components/chat/MessageBubble.vue'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import ChatInput from '../components/chat/ChatInput.vue'
 import EmptyState from '../components/common/EmptyState.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconNav, IconBiz } from '../composables/icons'
 import { listSessions, createSession, getSession, deleteSession as apiDeleteSession, sendMessage } from '../api/sessions'
 import { listSkills } from '../api/skills'
 import { toast } from '../composables/useToast'
@@ -326,44 +328,45 @@ function scrollToBottom() {
 .start-btn {
   margin-top: 12px;
   padding: 10px 28px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
+  background: var(--brand);
+  color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   cursor: pointer;
   font-weight: 500;
+  transition: background var(--duration-fast) var(--ease);
 }
-.start-btn:hover { opacity: 0.9; }
+.start-btn:hover { background: var(--brand-hover); }
 
 /* 欢迎提示 */
 .welcome-hints { padding: 20px 0; }
-.welcome-title { font-size: 14px; color: #888; margin-bottom: 12px; }
-.hint-list { display: flex; flex-direction: column; gap: 8px; }
+.welcome-title { font-size: 14px; color: var(--text-3); margin-bottom: var(--space-3); }
+.hint-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .hint-item {
   padding: 10px 16px;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
   font-size: 13px;
-  color: #666;
+  color: var(--text-2);
   cursor: pointer;
-  border: 1px solid #eee;
-  transition: all 0.15s;
+  border: 1px solid var(--border);
+  transition: all var(--duration-fast) var(--ease);
 }
-.hint-item:hover { border-color: #667eea; color: #667eea; }
+.hint-item:hover { border-color: var(--brand); color: var(--brand); }
 
 /* 流式消息 */
 .streaming-msg {
   display: flex;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   max-width: 85%;
 }
 .streaming-msg .msg-avatar {
   width: 32px; height: 32px;
-  border-radius: 50%;
-  background: #f0f0f5;
-  color: #666;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-2);
+  color: var(--text-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -372,20 +375,20 @@ function scrollToBottom() {
   flex-shrink: 0;
 }
 .streaming-msg .msg-body {
-  background: #fff;
-  border-radius: 14px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   border-bottom-left-radius: 4px;
   padding: 10px 16px;
   line-height: 1.6;
   font-size: 14px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  color: #333;
+  box-shadow: var(--shadow-sm);
+  color: var(--text-2);
 }
 .streaming-msg .msg-body :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow-x: auto;
   font-size: 13px;
 }
@@ -398,8 +401,8 @@ function scrollToBottom() {
 }
 .thinking-dot {
   width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #667eea;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
   animation: bounce 1.4s infinite ease-in-out both;
 }
 .thinking-dot:nth-child(1) { animation-delay: 0s; }
@@ -412,21 +415,21 @@ function scrollToBottom() {
 
 /* 错误信息 */
 .inline-error {
-  background: #fff2f0;
-  color: #ff4d4f;
+  background: var(--error-bg);
+  color: var(--error);
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 13px;
-  border: 1px solid #ffccc7;
-  margin: 8px 0;
+  border: 1px solid var(--error-border);
+  margin: var(--space-2) 0;
 }
 
 /* 思考过程块 */
 .thinking-block {
   margin: 6px 0;
-  border-radius: 8px;
-  border: 1px dashed #d6d6e8;
-  background: #fafaff;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--brand-border);
+  background: var(--brand-soft);
   overflow: hidden;
   max-width: 85%;
 }
@@ -437,23 +440,23 @@ function scrollToBottom() {
   padding: 7px 12px;
   cursor: pointer;
   font-size: 12px;
-  color: #888;
+  color: var(--text-3);
   user-select: none;
-  transition: background 0.15s;
+  transition: background var(--duration-fast) var(--ease);
 }
-.thinking-header:hover { background: #f0f0f8; }
+.thinking-header:hover { background: var(--bg-surface); }
 .thinking-icon { font-size: 13px; }
 .thinking-toggle {
   margin-left: auto;
-  color: #667eea;
+  color: var(--brand);
   font-weight: 500;
 }
 .thinking-content {
   margin: 0;
   padding: 10px 14px;
-  border-top: 1px dashed #e0e0ee;
+  border-top: 1px dashed var(--border);
   font-size: 12px;
-  color: #666;
+  color: var(--text-2);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -467,9 +470,9 @@ function scrollToBottom() {
   margin: 6px 0;
   padding: 5px 12px;
   font-size: 11px;
-  color: #999;
-  background: #f7f7fa;
-  border-radius: 6px;
-  border-left: 3px solid #d0d0e0;
+  color: var(--text-3);
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-strong);
 }
 </style>

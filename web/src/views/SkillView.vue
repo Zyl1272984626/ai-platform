@@ -1,23 +1,19 @@
 <template>
-  <div class="skill-page">
-    <header class="page-header">
-      <div>
-        <h1>Skills</h1>
-        <p class="page-desc">浏览所有可用的能力和场景 Skills</p>
+  <div class="skill-page page-container">
+    <PageHeader title="Skills" description="浏览所有可用的能力和场景 Skills" />
+
+    <div class="filter-bar">
+      <input v-model="search" class="search-input" placeholder="搜索 Skills..." />
+      <div class="filter-tabs">
+        <button class="ftab" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部</button>
+        <button class="ftab" :class="{ active: filter === 'scene' }" @click="filter = 'scene'">场景</button>
+        <button class="ftab" :class="{ active: filter === 'capability' }" @click="filter = 'capability'">能力</button>
+        <button class="ftab" :class="{ active: filter === 'test' }" @click="filter = 'test'">测试</button>
+        <button class="ftab" :class="{ active: filter === 'base' }" @click="filter = 'base'">基础</button>
+        <button class="ftab" :class="{ active: filter === 'pipeline' }" @click="filter = 'pipeline'">流水线</button>
+        <button class="ftab" :class="{ active: filter === 'codex' }" @click="filter = 'codex'">Codex</button>
       </div>
-      <div class="filter-bar">
-        <input v-model="search" class="search-input" placeholder="搜索 Skills..." />
-        <div class="filter-tabs">
-          <button class="ftab" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部</button>
-          <button class="ftab" :class="{ active: filter === 'scene' }" @click="filter = 'scene'">场景</button>
-          <button class="ftab" :class="{ active: filter === 'capability' }" @click="filter = 'capability'">能力</button>
-          <button class="ftab" :class="{ active: filter === 'test' }" @click="filter = 'test'">测试</button>
-          <button class="ftab" :class="{ active: filter === 'base' }" @click="filter = 'base'">基础</button>
-          <button class="ftab" :class="{ active: filter === 'pipeline' }" @click="filter = 'pipeline'">流水线</button>
-          <button class="ftab" :class="{ active: filter === 'codex' }" @click="filter = 'codex'">Codex</button>
-        </div>
-      </div>
-    </header>
+    </div>
 
     <div class="skill-grid">
       <div
@@ -44,15 +40,11 @@
     <div v-if="filteredSkills.length === 0" class="no-result">没有找到匹配的 Skill</div>
 
     <!-- 详情弹窗 -->
-    <div v-if="detailSkill" class="detail-overlay" @click.self="detailSkill = null">
-      <div class="detail-card">
-        <div class="detail-header">
-          <div>
-            <span class="skill-type-badge" :class="detailSkill.type">{{ skillTypeLabel(detailSkill.type) }}</span>
-            <h2>{{ detailSkill.name }}</h2>
-          </div>
-          <button class="close-btn" @click="detailSkill = null">✕</button>
-        </div>
+    <BaseModal v-model:show="detailSkillVisible" :title="detailSkill?.name || ''" :width="680">
+      <template v-if="detailSkill" #header-extra>
+        <span class="skill-type-badge" :class="detailSkill.type">{{ skillTypeLabel(detailSkill.type) }}</span>
+      </template>
+      <template v-if="detailSkill">
         <p class="detail-desc">{{ detailSkill.description }}</p>
         <div class="detail-tags">
           <span v-for="tag in detailSkill.tags" :key="tag" class="tag">{{ tag }}</span>
@@ -70,11 +62,11 @@
           </ul>
         </div>
         <div class="detail-content" v-html="renderedContent"></div>
-        <div v-if="detailSkill.type === 'scene'" class="detail-actions">
-          <button class="btn-try" @click="tryInChat">在对话中试用</button>
-        </div>
-      </div>
-    </div>
+      </template>
+      <template v-if="detailSkill?.type === 'scene'" #footer>
+        <BaseButton variant="primary" @click="tryInChat">在对话中试用</BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
@@ -84,6 +76,11 @@ import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import { listSkills, getSkill } from '../api/skills'
 import type { Skill } from '../api/types'
+import PageHeader from '../components/layout/PageHeader.vue'
+import BaseModal from '../components/ui/BaseModal.vue'
+import BaseButton from '../components/ui/BaseButton.vue'
+import Icon from '../components/ui/Icon.vue'
+import { IconAction } from '../composables/icons'
 
 const router = useRouter()
 const skills = ref<Skill[]>([])
@@ -91,6 +88,11 @@ const search = ref('')
 const filter = ref<'all' | 'scene' | 'capability' | 'test' | 'base' | 'pipeline' | 'codex'>('all')
 const detailSkill = ref<Skill | null>(null)
 const detailContent = ref('')
+// BaseModal 的 show 双向绑定:detailSkill 非空时显示,关闭时置空
+const detailSkillVisible = computed({
+  get: () => detailSkill.value !== null,
+  set: (v) => { if (!v) detailSkill.value = null },
+})
 
 const filteredSkills = computed(() => {
   let list = skills.value
@@ -143,93 +145,85 @@ function skillTypeLabel(type: Skill['type']) {
 </script>
 
 <style scoped>
-.skill-page {
-  padding: 28px 32px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.page-header { margin-bottom: 24px; }
-.page-header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; }
-.page-desc { font-size: 13px; color: #999; margin-top: 4px; }
 .filter-bar {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
-  margin-top: 16px;
+  margin-top: var(--space-4);
 }
 .search-input {
   padding: 8px 14px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-size: 13px;
   outline: none;
   width: 240px;
-  transition: border-color 0.15s;
+  transition: border-color var(--duration-fast) var(--ease);
 }
-.search-input:focus { border-color: #667eea; }
+.search-input:focus { border-color: var(--brand); }
 .filter-tabs { display: flex; gap: 4px; }
 .ftab {
   padding: 6px 14px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
   font-size: 12px;
   cursor: pointer;
-  color: #666;
-  transition: all 0.15s;
+  color: var(--text-2);
+  transition: all var(--duration-fast) var(--ease);
 }
 .ftab.active {
-  background: #667eea;
+  background: var(--brand);
   color: #fff;
-  border-color: #667eea;
+  border-color: var(--brand);
 }
 
 .skill-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 14px;
+  gap: var(--space-4);
 }
 .skill-card {
-  background: #fff;
-  border-radius: 12px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   padding: 18px;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration) var(--ease);
   border: 2px solid transparent;
 }
 .skill-card:hover {
-  border-color: #667eea;
+  border-color: var(--brand);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.12);
+  box-shadow: var(--shadow-brand);
 }
 .skill-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 .skill-type-badge {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
   font-weight: 500;
 }
-.skill-type-badge.scene { background: #eef0ff; color: #667eea; }
-.skill-type-badge.capability { background: #f0fff4; color: #52c41a; }
+.skill-type-badge.scene { background: var(--brand-soft); color: var(--brand); }
+.skill-type-badge.capability { background: var(--success-bg); color: var(--success); }
 .skill-type-badge.test { background: #f9f0ff; color: #722ed1; }
-.skill-type-badge.base { background: #e6f7ff; color: #1890ff; }
-.skill-type-badge.pipeline { background: #fff7e6; color: #fa8c16; }
+.skill-type-badge.base { background: var(--info-bg); color: var(--info); }
+.skill-type-badge.pipeline { background: var(--warning-bg); color: var(--warning); }
 .skill-type-badge.codex { background: #ecfdf3; color: #087443; }
 .skill-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1a1a2e;
-  font-family: monospace;
+  color: var(--text-1);
+  font-family: var(--font-mono);
 }
 .skill-desc {
   font-size: 13px;
-  color: #888;
+  color: var(--text-3);
   line-height: 1.5;
   margin-bottom: 10px;
 }
@@ -237,99 +231,60 @@ function skillTypeLabel(type: Skill['type']) {
 .tag {
   font-size: 11px;
   padding: 2px 8px;
-  border-radius: 4px;
-  background: #f5f5f7;
-  color: #999;
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface-2);
+  color: var(--text-3);
 }
 .tag-constraint {
-  background: #fff2f0;
-  color: #ff4d4f;
-  border: 1px solid #ffccc7;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error-border);
 }
 .skill-deps {
   font-size: 11px;
-  color: #bbb;
-  margin-top: 8px;
+  color: var(--text-4);
+  margin-top: var(--space-2);
 }
 .no-result {
   text-align: center;
-  color: #bbb;
+  color: var(--text-4);
   padding: 40px;
   font-size: 14px;
 }
 
-/* 详情弹窗 */
-.detail-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.detail-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 28px;
-  width: 640px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-}
-.detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-.detail-header h2 {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1a1a2e;
-  margin-top: 4px;
-}
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 18px;
-  color: #999;
-  cursor: pointer;
-  padding: 4px;
-}
-.close-btn:hover { color: #333; }
+/* 详情弹窗内容(BaseModal 提供外壳) */
 .detail-desc {
   font-size: 14px;
-  color: #666;
+  color: var(--text-2);
   line-height: 1.6;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
-.detail-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.detail-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: var(--space-3); }
 .detail-deps {
   font-size: 13px;
-  color: #888;
-  margin-bottom: 12px;
+  color: var(--text-3);
+  margin-bottom: var(--space-3);
   padding: 8px 12px;
-  background: #f5f5f7;
-  border-radius: 6px;
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
 }
 .detail-usage {
   font-size: 13px;
-  color: #1890ff;
-  margin-bottom: 12px;
+  color: var(--info);
+  margin-bottom: var(--space-3);
   padding: 8px 12px;
-  background: #e6f7ff;
-  border-radius: 6px;
+  background: var(--info-bg);
+  border-radius: var(--radius-sm);
   line-height: 1.6;
 }
 .detail-constraints {
   font-size: 13px;
-  color: #cf1322;
-  margin-bottom: 16px;
+  color: var(--error);
+  margin-bottom: var(--space-4);
   padding: 8px 12px;
-  background: #fff2f0;
-  border-radius: 6px;
-  border: 1px solid #ffccc7;
+  background: var(--error-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--error-border);
 }
 .detail-constraints ul {
   margin: 6px 0 0;
@@ -340,48 +295,32 @@ function skillTypeLabel(type: Skill['type']) {
   line-height: 1.5;
 }
 .detail-content {
-  border-top: 1px solid #eee;
-  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
   font-size: 13px;
-  color: #555;
+  color: var(--text-2);
   line-height: 1.7;
 }
 .detail-content :deep(h1), .detail-content :deep(h2), .detail-content :deep(h3) {
-  color: #1a1a2e;
+  color: var(--text-1);
   margin: 16px 0 8px;
 }
 .detail-content :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow-x: auto;
   font-size: 12px;
 }
 .detail-content :deep(code) {
-  background: #f0f0f5;
+  background: var(--bg-surface-2);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
 }
 .detail-content :deep(pre code) {
   background: none;
   padding: 0;
 }
-.detail-actions {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-}
-.btn-try {
-  padding: 8px 24px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-}
-.btn-try:hover { opacity: 0.9; }
 </style>

@@ -1,0 +1,107 @@
+/**
+ * 全局设计令牌 (Design Tokens)
+ * ====================================================================
+ * 所有颜色、圆角、阴影、间距、动画曲线的唯一定义来源。
+ * 全站样式应引用 var(--xxx),禁止再硬编码色值。
+ *
+ * 品牌色:紫蓝系(收敛自原 #667eea 渐变,改为纯色主色)
+ * 语义色:沿用 StatusBadge 的 Ant Design 调色板(浅底+深字+边框三件套)
+ */
+
+:root {
+  /* ========== 品牌色 ========== */
+  --brand: #667eea;
+  --brand-hover: #5a6fd6;
+  --brand-active: #4f62c2;
+  --brand-soft: #f0f1ff;        /* 主色浅底(按钮 hover、选中态、tag 背景) */
+  --brand-border: #c5c9f5;
+  --brand-grad: linear-gradient(135deg, #667eea, #764ba2); /* 仅 logo / 品牌点缀用 */
+
+  /* ========== 语义色(成功/警告/错误/信息) ========== */
+  /* success - 绿 */
+  --success: #52c41a;
+  --success-bg: #f6ffed;
+  --success-border: #b7eb8f;
+  /* warning - 黄 */
+  --warning: #faad14;
+  --warning-bg: #fffbe6;
+  --warning-border: #ffe58f;
+  /* error / danger - 红 */
+  --error: #ff4d4f;
+  --error-bg: #fff2f0;
+  --error-border: #ffccc7;
+  /* info - 蓝 */
+  --info: #1890ff;
+  --info-bg: #e6f7ff;
+  --info-border: #91d5ff;
+
+  /* ========== 文字 / 中性灰阶 ========== */
+  --text-1: #1a1a2e;   /* 标题 / 主要文字(沿用原主标题色) */
+  --text-2: #555;      /* 正文 */
+  --text-3: #8c8c8c;   /* 次要 / 辅助 */
+  --text-4: #bfbfbf;   /* 占位 / 最弱 */
+
+  /* ========== 背景与表面 ========== */
+  --bg-page: #f0f2f5;        /* 主内容区页面背景(原 .app-main) */
+  --bg-surface: #ffffff;     /* 卡片 / 表面 */
+  --bg-surface-2: #fafafa;   /* 次级表面(hover / 内嵌) */
+  --bg-dark: #1a1a2e;        /* 侧边栏深色背景 */
+  --bg-dark-2: #25254a;      /* 侧边栏次级(hover) */
+
+  /* ========== 边框 ========== */
+  --border: #e8e8e8;         /* 常规分割线 */
+  --border-light: #f0f0f0;   /* 轻分割线 */
+  --border-strong: #d9d9d9;  /* 输入框等强边框 */
+
+  /* ========== 圆角令牌 ========== */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;      /* 胶囊/圆点 */
+
+  /* ========== 阴影令牌 ========== */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+  --shadow-brand: 0 4px 12px rgba(102, 126, 234, 0.15); /* 主色光晕 */
+
+  /* ========== 间距令牌(4px 基准) ========== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ========== 过渡曲线 ========== */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.0, 0, 0.2, 1);
+  --duration-fast: 0.15s;
+  --duration: 0.2s;
+
+  /* ========== 布局 ========== */
+  --container-max: 1200px;
+  --sidebar-w: 200px;
+  --sidebar-w-collapsed: 56px;
+  --header-h: 56px;
+
+  /* ========== z-index 层级 ========== */
+  --z-header: 100;
+  --z-drawer: 1000;
+  --z-modal: 1100;
+  --z-toast: 9999;
+
+  /* ========== 字体 ========== */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+
+  /* ========== 代码块暗色主题(Catppuccin Mocha,统一 MessageBubble/ToolCallBlock) ========== */
+  --code-bg: #1e1e2e;
+  --code-bg-2: #181825;
+  --code-text: #cdd6f4;
+  --code-green: #a6e3a1;
+}

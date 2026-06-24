@@ -108,33 +108,33 @@ watch(rendered, () => nextTick(enhanceCodeBlocks))
   flex-shrink: 0;
 }
 .message.user .msg-avatar {
-  background: #667eea;
+  background: var(--brand);
   color: #fff;
 }
 .message.assistant .msg-avatar {
-  background: #f0f0f5;
-  color: #666;
+  background: var(--bg-surface-2);
+  color: var(--text-2);
 }
 .msg-body {
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   padding: 10px 16px;
   line-height: 1.6;
   font-size: 14px;
 }
 .message.user .msg-body {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--brand);
   color: #fff;
   border-bottom-right-radius: 4px;
 }
 .message.assistant .msg-body {
-  background: #fff;
-  color: #333;
+  background: var(--bg-surface);
+  color: var(--text-2);
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-sm);
 }
 .msg-html :deep(.code-wrap) {
   margin: 8px 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid #313244;
 }
@@ -143,12 +143,12 @@ watch(rendered, () => nextTick(enhanceCodeBlocks))
   justify-content: space-between;
   align-items: center;
   padding: 4px 12px;
-  background: #181825;
+  background: var(--code-bg-2);
   font-size: 11px;
 }
 .msg-html :deep(.code-lang) {
   color: #7f849c;
-  font-family: monospace;
+  font-family: var(--font-mono);
   text-transform: lowercase;
 }
 .msg-html :deep(.copy-btn) {
@@ -157,33 +157,33 @@ watch(rendered, () => nextTick(enhanceCodeBlocks))
   color: #bac2de;
   font-size: 11px;
   padding: 1px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-fast) var(--ease);
 }
 .msg-html :deep(.copy-btn:hover) {
   background: #313244;
-  color: #cdd6f4;
+  color: var(--code-text);
 }
 .msg-html :deep(.code-wrap pre) {
   margin: 0;
   border-radius: 0;
 }
 .msg-html :deep(pre) {
-  background: #1e1e2e;
-  color: #cdd6f4;
+  background: var(--code-bg);
+  color: var(--code-text);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow-x: auto;
   font-size: 13px;
   margin: 8px 0;
 }
 .msg-html :deep(code) {
-  background: #f0f0f5;
+  background: var(--bg-surface-2);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
-  font-family: 'Fira Code', monospace;
+  font-family: var(--font-mono);
 }
 .msg-html :deep(pre code) {
   background: none;
@@ -191,5 +191,5 @@ watch(rendered, () => nextTick(enhanceCodeBlocks))
 }
 .msg-html :deep(p) { margin: 6px 0; }
 .msg-html :deep(ul), .msg-html :deep(ol) { padding-left: 20px; }
-.msg-html :deep(strong) { color: #1a1a2e; }
+.msg-html :deep(strong) { color: var(--text-1); }
 </style>

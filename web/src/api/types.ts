@@ -225,13 +225,14 @@ export interface PipelineArtifactStage extends PipelineRelayStage {
   preview?: string
   quality: 'missing' | 'weak' | 'ok'
   qualityIssues: string[]
+  stageMark?: 'working' | 'rework' | 'accepted' | 'skipped'
 }
 
 export interface PipelineArtifactScan {
   runId: string
   artifactRoot: string
   runDir: string
-  baseEngine?: 'codex' | 'claudecode'
+  baseEngine?: 'codex' | 'claudecode' | 'zcode'
   stages: PipelineArtifactStage[]
 }
 
@@ -240,11 +241,123 @@ export interface PipelineArtifactRun {
   runDir: string
   requirement?: string
   projectId?: string
-  baseEngine?: 'codex' | 'claudecode'
+  baseEngine?: 'codex' | 'claudecode' | 'zcode'
   updatedAt?: string
   completedStages: number
   qualifiedStages?: number
+  workingStages?: number
+  reworkStages?: number
+  acceptedStages?: number
   totalStages: number
+}
+
+/** 单个阶段产物的完整内容（用于 Markdown 预览） */
+export interface RelayStageContent {
+  runId: string
+  stageId: string
+  path: string
+  exists: boolean
+  content: string
+}
+
+/** 单个 relay 阶段导出的 SKILL.md 内容 */
+export interface RelayStageSkillExport {
+  filename: string
+  content: string
+}
+
+// ========== Relay 执行器（P2） ==========
+
+export interface RelayExecutorConfig {
+  deepseekEnabled: boolean
+  deepseekMaxTokens: number
+}
+
+export interface ExecutorConfigResponse {
+  config: RelayExecutorConfig
+  deepseekAvailable: boolean
+}
+
+export interface ExecutorResult {
+  ok: boolean
+  executor: 'deepseek'
+  stageId: string
+  artifactPath?: string
+  output: string
+  durationMs: number
+  error?: string
+  meta?: Record<string, unknown>
+}
+
+// ========== Trace 审计（P3） ==========
+
+export type TraceEventType =
+  | 'prompt-generated'
+  | 'stage-mark-changed'
+  | 'executor-called'
+  | 'artifact-dependency'
+  | 'final-decision'
+
+export interface TraceEvent {
+  id: string
+  runId: string
+  type: TraceEventType
+  actor: 'platform' | 'user' | 'executor'
+  timestamp: string
+  summary: string
+  detail: Record<string, unknown>
+}
+
+export interface TraceRun {
+  runId: string
+  eventCount: number
+  lastEventAt: string
+  firstEventAt: string
+  types: TraceEventType[]
+}
+
+export interface TraceRunDetail {
+  runId: string
+  events: TraceEvent[]
+}
+
+// ========== 接力上下文同步 ==========
+
+export interface RelayStageStatus {
+  index: number
+  id: string
+  name: string
+  ownerLabel: string
+  purpose: string
+  artifactFile: string
+  artifactPath: string
+  exists: boolean
+  quality: 'missing' | 'weak' | 'ok'
+  stageMark?: 'working' | 'rework' | 'accepted' | 'skipped'
+  progress: 'done' | 'current' | 'pending'
+}
+
+export interface RelayContextSnapshot {
+  runId: string
+  requirement: string
+  baseEngine: 'codex' | 'claudecode' | 'zcode'
+  projectId?: string
+  artifactRoot: string
+  runDir: string
+  currentStage?: RelayStageStatus
+  currentIndex: number
+  stages: RelayStageStatus[]
+  memoryBundle: string
+}
+
+export interface RelayContextSyncResult {
+  ok: boolean
+  snapshot: RelayContextSnapshot
+}
+
+export interface RelayContextReadResult {
+  synced: boolean
+  contextPath: string
 }
 
 export interface PipelineSSEEvent {
@@ -341,4 +454,157 @@ export interface GeneratedArtifact {
   content: string
   generatedAt: string
   applied: boolean
+}
+
+export type MemoryItemType =
+  | 'term'
+  | 'preference'
+  | 'project_rule'
+  | 'workflow'
+  | 'decision'
+  | 'entity'
+  | 'skill'
+  | 'warning'
+  | 'source'
+
+export type MemoryItemStatus =
+  | 'candidate'
+  | 'approved'
+  | 'active'
+  | 'stale'
+  | 'conflict'
+  | 'archived'
+  | 'rejected'
+
+export interface MemoryItem {
+  id: string
+  type: MemoryItemType
+  title: string
+  content: string
+  normalizedContent: string
+  scope: 'global' | 'project' | 'platform' | 'session'
+  projectPath?: string
+  platform?: ConversationSummary['source']
+  sourceRefs: Array<{
+    source: ConversationSummary['source'] | 'system' | 'insight'
+    conversationId?: string
+    insightId?: string
+    messageIds?: string[]
+  }>
+  confidence: number
+  status: MemoryItemStatus
+  tags: string[]
+  aliases?: string[]
+  evidenceCount: number
+  usageCount: number
+  lastUsedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MemoryRecallResult {
+  query: string
+  projectPath?: string
+  platform?: ConversationSummary['source']
+  generatedAt: string
+  items: MemoryItem[]
+  bundle: string
+}
+
+// 召回结果升级版（Phase 4/5）：含召回理由和目标
+export interface MemoryRecallReason {
+  itemId: string
+  score: number
+  factors: string[]
+}
+
+export type MemoryRecallTarget = 'chat' | 'pipeline' | 'test' | 'review'
+
+export interface MemoryRecallResultWithReasons extends MemoryRecallResult {
+  reasons: MemoryRecallReason[]
+  target: MemoryRecallTarget
+}
+
+export interface MemoryVectorStatus {
+  documentCount: number
+  builtAt: string
+  hasIndex: boolean
+}
+
+export interface CurateResult {
+  conversationId: string
+  drafts: MemoryItem[]
+  rawDrafts: number
+  skipped: number
+}
+
+export interface CurateBatchResult {
+  total: number
+  curated: number
+  draftsCreated: number
+  results: CurateResult[]
+}
+
+// ========== 冷库概览（首页） ==========
+export interface MemoryOverviewTotals {
+  total: number
+  recallable: number
+  candidate: number
+  weeklyInjections: number
+  avgHitPerInjection: number
+}
+
+export interface MemoryOverview {
+  totals: MemoryOverviewTotals
+  knowledgeByType: Record<string, MemoryItem[]>
+  topUsed: MemoryItem[]
+  dormant: MemoryItem[]
+  topPositiveFeedback: Array<{ item: MemoryItem; usefulCount: number }>
+  distribution: {
+    byType: Record<string, number>
+    byScope: Record<string, number>
+    bySource: Record<string, number>
+    byStatus: Record<string, number>
+  }
+  exportPreview: string
+}
+
+// ========== 智能筛选 ==========
+export type FilterSuggestion = 'approve' | 'reject' | 'review'
+
+export interface SmartFilterResult {
+  items: Array<{ id: string; suggestion: FilterSuggestion; reason: string }>
+  summary: { approve: number; reject: number; review: number; total: number }
+  mode: 'rule' | 'llm'
+}
+
+export interface MemoryAutomationLog {
+  id: string
+  startedAt: string
+  finishedAt: string
+  status: 'success' | 'failed'
+  trigger: 'manual' | 'startup' | 'scheduled' | 'api'
+  scan?: { scanned: number; newCount: number; updated: number }
+  candidates?: { created: number; updated: number; skipped: number }
+  error?: string
+}
+
+export interface MemoryConfig {
+  autoInject: boolean
+  startupAutomation: boolean
+  recallLimit: number
+  includeCandidatesInRecall: boolean
+  maxInjectionTokens: number
+}
+
+export interface MemoryInjectionLog {
+  id: string
+  request: string
+  projectPath?: string
+  platform?: ConversationSummary['source']
+  memoryIds: string[]
+  bundle: string
+  generatedAt: string
+  target: 'chat' | 'pipeline' | 'test' | 'review'
+  feedback?: 'useful' | 'wrong' | 'irrelevant'
 }
