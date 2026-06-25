@@ -112,14 +112,16 @@ function handleBack() {
 }
 .page-header-title {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-1);
-  line-height: 1.3;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
 }
 .page-header-desc {
   font-size: 13px;
   color: var(--text-3);
-  margin-top: 4px;
+  margin-top: 6px;
+  line-height: var(--leading-normal);
 }
 .page-header-actions {
   display: flex;

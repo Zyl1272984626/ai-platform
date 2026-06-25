@@ -148,16 +148,19 @@ onMounted(async () => {
 }
 .stat-card {
   background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: var(--space-5);
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--duration) var(--ease);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--duration) var(--ease), border-color var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 .stat-card:hover {
   box-shadow: var(--shadow-md);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 .stat-icon {
   width: 48px;
@@ -176,10 +179,13 @@ onMounted(async () => {
   font-size: 28px;
   font-weight: 700;
   color: var(--text-1);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
 }
 .stat-label {
   font-size: 13px;
   color: var(--text-3);
+  margin-top: 2px;
 }
 
 /* 快捷操作 */
@@ -202,14 +208,17 @@ onMounted(async () => {
   border-radius: var(--radius-lg);
   padding: var(--space-5);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
   transition: transform var(--duration) var(--ease), box-shadow var(--duration) var(--ease), border-color var(--duration) var(--ease);
-  border: 2px solid transparent;
+  border: 1px solid var(--border);
 }
 .action-card:hover {
-  border-color: var(--brand);
-  box-shadow: var(--shadow-brand);
+  border-color: var(--brand-border);
+  box-shadow: var(--shadow-md);
   transform: translateY(-2px);
+}
+.action-card:active {
+  transform: translateY(0);
 }
 .action-icon {
   width: 44px;

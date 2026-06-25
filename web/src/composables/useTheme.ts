@@ -1,7 +1,7 @@
 /**
  * naive-ui 主题覆盖
  * ====================================================================
- * 将 naive-ui 组件库的全局主题对齐到本项目的设计令牌(紫蓝主色 #667eea)。
+ * 将 naive-ui 组件库的全局主题对齐到本项目的设计令牌(indigo 主色 #6366f1)。
  * 在 App.vue 根部通过 <n-config-provider :theme-overrides="themeOverrides"> 注入。
  *
  * 文档:https://www.naiveui.com/zh-CN/os-theme/docs/customize-theme
@@ -10,30 +10,34 @@ import type { GlobalThemeOverrides } from 'naive-ui'
 
 export const themeOverrides: GlobalThemeOverrides = {
   common: {
-    // 品牌色
-    primaryColor: '#667eea',
-    primaryColorHover: '#5a6fd6',
-    primaryColorPressed: '#4f62c2',
-    primaryColorSuppl: '#667eea',
+    // 品牌色(indigo 系,对齐 token)
+    primaryColor: '#6366f1',
+    primaryColorHover: '#5558e3',
+    primaryColorPressed: '#4f46e5',
+    primaryColorSuppl: '#6366f1',
 
-    // 信息色
-    infoColor: '#1890ff',
-    infoColorHover: '#40a9ff',
-    infoColorPressed: '#096dd9',
-    successColor: '#52c41a',
-    successColorHover: '#73d13d',
-    successColorPressed: '#389e0d',
-    warningColor: '#faad14',
-    warningColorHover: '#ffc53d',
-    warningColorPressed: '#d48806',
-    errorColor: '#ff4d4f',
-    errorColorHover: '#ff7875',
-    errorColorPressed: '#d9363e',
+    // 语义色(对齐 token 的现代调色板)
+    infoColor: '#0ea5e9',
+    infoColorHover: '#38bdf8',
+    infoColorPressed: '#0284c7',
+    successColor: '#10b981',
+    successColorHover: '#34d399',
+    successColorPressed: '#059669',
+    warningColor: '#f59e0b',
+    warningColorHover: '#fbbf24',
+    warningColorPressed: '#d97706',
+    errorColor: '#ef4444',
+    errorColorHover: '#f87171',
+    errorColorPressed: '#dc2626',
 
-    // 文字与边框(对齐 token)
-    textColorBase: '#1a1a2e',
-    bodyColor: '#f0f2f5',
-    borderColor: '#e8e8e8',
+    // 文字与边框(对齐 slate 灰阶)
+    textColorBase: '#0f172a',
+    textColor1: '#0f172a',
+    textColor2: '#334155',
+    textColor3: '#64748b',
+    bodyColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    dividerColor: '#f1f5f9',
 
     // 圆角
     borderRadius: '8px',
@@ -60,9 +64,9 @@ export const themeOverrides: GlobalThemeOverrides = {
 
   Input: {
     borderRadius: '8px',
-    borderHover: '1px solid #667eea',
-    borderFocus: '1px solid #667eea',
-    boxShadowFocus: '0 0 0 2px rgba(102, 126, 234, 0.15)',
+    borderHover: '1px solid #6366f1',
+    borderFocus: '1px solid #6366f1',
+    boxShadowFocus: '0 0 0 2px rgba(99, 102, 241, 0.15)',
   },
 
   Select: {

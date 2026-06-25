@@ -118,45 +118,53 @@ onUnmounted(() => {
   transition: width var(--duration) var(--ease);
   overflow: hidden;
   position: relative;
+  /* 右侧细分割线,增强与内容区的分离感 */
+  box-shadow: 1px 0 0 0 var(--border);
 }
 .sidebar.collapsed {
   width: var(--sidebar-w-collapsed);
   min-width: var(--sidebar-w-collapsed);
 }
+
+/* 品牌区 */
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 18px 16px;
+  gap: 12px;
+  padding: 20px 18px 18px;
   cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .brand-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   background: var(--brand-grad);
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   color: #fff;
   flex-shrink: 0;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 .brand-text {
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
+  letter-spacing: var(--tracking-tight);
 }
+
+/* 折叠按钮 */
 .collapse-btn {
   position: absolute;
-  top: 24px;
+  top: 28px;
   right: -12px;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--radius-pill);
   background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-3);
@@ -171,75 +179,104 @@ onUnmounted(() => {
 .collapse-btn:hover {
   color: var(--brand);
   border-color: var(--brand);
+  transform: scale(1.1);
 }
+
+/* 导航区 */
 .sidebar-nav {
   flex: 1;
-  padding: 12px 8px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
 }
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 9px 12px;
   border-radius: var(--radius-md);
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-4);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 500;
   transition: all var(--duration-fast) var(--ease);
   white-space: nowrap;
 }
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--bg-dark-hover);
+  color: #e2e8f0;
 }
+/* 激活态:左侧指示条 + 微妙品牌色背景,而非重色块 */
 .nav-item.active {
-  background: rgba(102, 126, 234, 0.2);
+  background: var(--bg-dark-active);
   color: #fff;
+}
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--brand);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 .nav-icon {
   font-size: 18px;
   flex-shrink: 0;
-  width: 24px;
+  width: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.6);
-  transition: color var(--duration) var(--ease);
+  color: inherit;
+  transition: color var(--duration-fast) var(--ease);
 }
-.nav-item:hover .nav-icon,
+.nav-item:hover .nav-icon {
+  color: #e2e8f0;
+}
 .nav-item.active .nav-icon {
-  color: #fff;
+  color: var(--brand);
 }
 .nav-label {
   white-space: nowrap;
 }
+
+/* 底部健康状态 */
 .sidebar-footer {
-  padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 .health-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
+  position: relative;
 }
 .health-dot.ok {
   background: var(--success);
-  box-shadow: 0 0 6px rgba(82, 196, 26, 0.5);
+}
+.health-dot.ok::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+  opacity: 0.3;
+  animation: aui-pulse 2s infinite;
 }
 .health-dot.err {
   background: var(--error);
-  box-shadow: 0 0 6px rgba(255, 77, 79, 0.5);
 }
 .health-text {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-4);
   font-size: 12px;
   white-space: nowrap;
 }
