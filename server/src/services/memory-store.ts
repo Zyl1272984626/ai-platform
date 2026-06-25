@@ -18,6 +18,9 @@ const MEMORY_DIR = path.resolve(__dirname, '../../data/memory');
 const CONV_DIR = path.join(MEMORY_DIR, 'conversations');
 const INSIGHTS_DIR = path.join(MEMORY_DIR, 'insights');
 const ARTIFACTS_DIR = path.join(MEMORY_DIR, 'artifacts');
+const ITEMS_DIR = path.join(MEMORY_DIR, 'items');
+const AUTOMATION_DIR = path.join(MEMORY_DIR, 'automation');
+const INJECTIONS_DIR = path.join(MEMORY_DIR, 'injections');
 
 // ========== 类型定义 ==========
 
@@ -76,6 +79,94 @@ export interface GeneratedArtifact {
   applied: boolean;
 }
 
+export type MemoryItemType =
+  | 'term'
+  | 'preference'
+  | 'project_rule'
+  | 'workflow'
+  | 'decision'
+  | 'entity'
+  | 'skill'
+  | 'warning'
+  | 'source';
+
+export type MemoryItemStatus =
+  | 'candidate'
+  | 'approved'
+  | 'active'
+  | 'stale'
+  | 'conflict'
+  | 'archived'
+  | 'rejected';
+
+export interface MemorySourceRef {
+  source: ConversationSummary['source'] | 'system' | 'insight';
+  conversationId?: string;
+  insightId?: string;
+  messageIds?: string[];
+}
+
+export interface MemoryItem {
+  id: string;
+  type: MemoryItemType;
+  title: string;
+  content: string;
+  normalizedContent: string;
+  scope: 'global' | 'project' | 'platform' | 'session';
+  projectPath?: string;
+  platform?: ConversationSummary['source'];
+  sourceRefs: MemorySourceRef[];
+  confidence: number;
+  status: MemoryItemStatus;
+  tags: string[];
+  aliases?: string[];
+  evidenceCount: number;
+  usageCount: number;
+  lastUsedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryRecallResult {
+  query: string;
+  projectPath?: string;
+  platform?: ConversationSummary['source'];
+  generatedAt: string;
+  items: MemoryItem[];
+  bundle: string;
+}
+
+export interface MemoryAutomationLog {
+  id: string;
+  startedAt: string;
+  finishedAt: string;
+  status: 'success' | 'failed';
+  trigger: 'manual' | 'startup' | 'scheduled' | 'api';
+  scan?: { scanned: number; newCount: number; updated: number };
+  candidates?: { created: number; updated: number; skipped: number };
+  error?: string;
+}
+
+/**
+ * 注入日志：根 AI 调用前从冷库召回并注入上下文的记录。
+ * 让"本次对话注入了哪些记忆"变得可解释、可反馈。
+ */
+export interface MemoryInjectionLog {
+  id: string;
+  /** 触发注入的请求文本（截断，仅作回溯线索） */
+  request: string;
+  projectPath?: string;
+  platform?: ConversationSummary['source'];
+  /** 本次注入的记忆 id 列表 */
+  memoryIds: string[];
+  /** 实际拼入根 AI system prompt 的 bundle */
+  bundle: string;
+  generatedAt: string;
+  target: 'chat' | 'pipeline' | 'test' | 'review';
+  /** 用户对本次注入质量的标记 */
+  feedback?: 'useful' | 'wrong' | 'irrelevant';
+}
+
 // ========== 工具方法 ==========
 
 function ensureDir(dir: string) {
@@ -110,6 +201,9 @@ export function ensureMemoryDirs() {
   ensureDir(CONV_DIR);
   ensureDir(INSIGHTS_DIR);
   ensureDir(ARTIFACTS_DIR);
+  ensureDir(ITEMS_DIR);
+  ensureDir(AUTOMATION_DIR);
+  ensureDir(INJECTIONS_DIR);
 }
 
 // ========== 对话索引 ==========
@@ -248,6 +342,128 @@ export function updateArtifact(id: string, updates: Partial<GeneratedArtifact>) 
 
 // ========== 统计 ==========
 
+const ITEMS_FILE = path.join(ITEMS_DIR, 'index.json');
+
+export function loadMemoryItems(): MemoryItem[] {
+  return readJsonFile<MemoryItem[]>(ITEMS_FILE, []);
+}
+
+export function saveMemoryItems(items: MemoryItem[]) {
+  writeJsonFile(ITEMS_FILE, items);
+}
+
+export function upsertMemoryItems(newItems: MemoryItem[]): { created: number; updated: number; skipped: number } {
+  const all = loadMemoryItems();
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const item of newItems) {
+    const idx = all.findIndex(existing => existing.id === item.id);
+    if (idx >= 0) {
+      if (all[idx].status === 'rejected' || all[idx].status === 'archived') {
+        skipped++;
+        continue;
+      }
+      all[idx] = {
+        ...all[idx],
+        ...item,
+        status: all[idx].status,
+        usageCount: all[idx].usageCount || 0,
+        lastUsedAt: all[idx].lastUsedAt,
+        createdAt: all[idx].createdAt,
+        updatedAt: new Date().toISOString(),
+        evidenceCount: Math.max(all[idx].evidenceCount || 1, item.evidenceCount || 1),
+        sourceRefs: mergeSourceRefs(all[idx].sourceRefs || [], item.sourceRefs || []),
+      };
+      updated++;
+    } else {
+      all.push(item);
+      created++;
+    }
+  }
+
+  saveMemoryItems(all);
+  return { created, updated, skipped };
+}
+
+export function updateMemoryItem(id: string, updates: Partial<MemoryItem>): MemoryItem | null {
+  const all = loadMemoryItems();
+  const item = all.find(m => m.id === id);
+  if (!item) return null;
+  Object.assign(item, updates, { updatedAt: new Date().toISOString() });
+  saveMemoryItems(all);
+  return item;
+}
+
+export function getMemoryItemById(id: string): MemoryItem | null {
+  return loadMemoryItems().find(item => item.id === id) || null;
+}
+
+export function recordMemoryUsage(ids: string[]) {
+  const idSet = new Set(ids);
+  const all = loadMemoryItems();
+  const now = new Date().toISOString();
+  let changed = false;
+  for (const item of all) {
+    if (idSet.has(item.id)) {
+      item.usageCount = (item.usageCount || 0) + 1;
+      item.lastUsedAt = now;
+      item.updatedAt = now;
+      changed = true;
+    }
+  }
+  if (changed) saveMemoryItems(all);
+}
+
+function mergeSourceRefs(a: MemorySourceRef[], b: MemorySourceRef[]): MemorySourceRef[] {
+  const seen = new Set<string>();
+  const out: MemorySourceRef[] = [];
+  for (const ref of [...a, ...b]) {
+    const key = `${ref.source}:${ref.conversationId || ''}:${ref.insightId || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
+const AUTOMATION_FILE = path.join(AUTOMATION_DIR, 'runs.json');
+
+export function loadAutomationLogs(): MemoryAutomationLog[] {
+  return readJsonFile<MemoryAutomationLog[]>(AUTOMATION_FILE, []);
+}
+
+export function addAutomationLog(log: MemoryAutomationLog) {
+  const logs = loadAutomationLogs();
+  logs.unshift(log);
+  writeJsonFile(AUTOMATION_FILE, logs.slice(0, 80));
+}
+
+// ========== 注入日志 ==========
+
+const INJECTIONS_FILE = path.join(INJECTIONS_DIR, 'index.json');
+const MAX_INJECTION_LOGS = 200;
+
+export function loadInjections(): MemoryInjectionLog[] {
+  return readJsonFile<MemoryInjectionLog[]>(INJECTIONS_FILE, []);
+}
+
+export function addInjectionLog(log: MemoryInjectionLog) {
+  const logs = loadInjections();
+  logs.unshift(log);
+  writeJsonFile(INJECTIONS_FILE, logs.slice(0, MAX_INJECTION_LOGS));
+}
+
+export function updateInjectionFeedback(id: string, feedback: MemoryInjectionLog['feedback']): MemoryInjectionLog | null {
+  const logs = loadInjections();
+  const item = logs.find(l => l.id === id);
+  if (!item) return null;
+  item.feedback = feedback;
+  writeJsonFile(INJECTIONS_FILE, logs);
+  return item;
+}
+
 export interface MemoryStats {
   totalConversations: number;
   bySource: Record<string, number>;
@@ -255,12 +471,16 @@ export interface MemoryStats {
   totalInsights: number;
   totalArtifacts: number;
   appliedArtifacts: number;
+  totalMemoryItems: number;
+  activeMemoryItems: number;
+  candidateMemoryItems: number;
 }
 
 export function getMemoryStats(): MemoryStats {
   const conversations = loadConversationIndex();
   const insights = loadInsights();
   const artifacts = loadArtifacts();
+  const memoryItems = loadMemoryItems();
 
   const bySource: Record<string, number> = {};
   const byProject: Record<string, number> = {};
@@ -277,6 +497,9 @@ export function getMemoryStats(): MemoryStats {
     totalInsights: insights.length,
     totalArtifacts: artifacts.length,
     appliedArtifacts: artifacts.filter(a => a.applied).length,
+    totalMemoryItems: memoryItems.length,
+    activeMemoryItems: memoryItems.filter(a => ['approved', 'active'].includes(a.status)).length,
+    candidateMemoryItems: memoryItems.filter(a => a.status === 'candidate').length,
   };
 }
 
