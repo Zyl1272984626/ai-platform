@@ -22,6 +22,8 @@ import {
   type SessionConfig,
   type SessionMessage,
 } from './session-store.js';
+import { recallMemory, recordInjection } from './memory-curator.js';
+import { getMemoryConfig } from './memory-config.js';
 
 // 动态加载 claude-code，避免启动时阻塞
 let _query: typeof import('@anthropic-ai/claude-code').query | null = null;
@@ -153,6 +155,8 @@ export async function sendMessage(
     }
     // 无超时限制，让 Claude Code 自然完成
     const timer = setTimeout(() => {}, 0);
+    const memoryContext = buildMemoryContext(message, session.config.cwd);
+    const appendSystemPrompt = [session.config.systemPrompt, memoryContext].filter(Boolean).join('\n\n');
 
     // 调用 Agent SDK
     const query = await getClaudeQuery();
@@ -165,7 +169,7 @@ export async function sendMessage(
         // 关键：bypassPermissions 让所有工具调用自动通过
         permissionMode: 'bypassPermissions',
         abortController,
-        appendSystemPrompt: session.config.systemPrompt,
+        appendSystemPrompt,
       },
     });
 
@@ -377,5 +381,54 @@ export async function executeStep(
   } catch (err) {
     clearTimeout(timer);
     throw err;
+  }
+}
+
+function buildMemoryContext(message: string, cwd: string): string {
+  try {
+    const config = getMemoryConfig();
+    // 全局开关：关闭则完全不注入
+    if (!config.autoInject) return '';
+
+    const recalled = recallMemory({
+      query: message,
+      projectPath: cwd,
+      platform: 'codex',
+      limit: config.recallLimit,
+      includeCandidates: config.includeCandidatesInRecall,
+      recordUsage: true,
+      target: 'chat',
+    });
+    if (!recalled.items.length) return '';
+
+    // 粗略 token 预算：1 token ≈ 4 字符，截断 bundle
+    const maxChars = Math.max(0, config.maxInjectionTokens) * 4;
+    const bundle = maxChars > 0 && recalled.bundle.length > maxChars
+      ? recalled.bundle.slice(0, maxChars)
+      : recalled.bundle;
+
+    // 落注入日志，让"本次对话注入了哪些记忆"可解释、可反馈
+    try {
+      recordInjection({
+        request: message,
+        projectPath: cwd,
+        platform: 'codex',
+        memoryIds: recalled.items.map(item => item.id),
+        bundle,
+        target: 'chat',
+      });
+    } catch (logErr: any) {
+      console.warn('[Memory] injection log skipped:', logErr?.message || logErr);
+    }
+
+    return [
+      'The following context was automatically recalled from the local Memory Hub.',
+      'Use it as background only. Current user instructions and current code take precedence.',
+      '',
+      bundle,
+    ].join('\n');
+  } catch (err: any) {
+    console.warn('[Memory] recall injection skipped:', err?.message || err);
+    return '';
   }
 }

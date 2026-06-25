@@ -15,6 +15,10 @@ import { memoryRouter } from './routes/memory.js';
 import { startWorkflow } from './services/workflow-engine.js';
 import { initScheduler } from './services/scheduler.js';
 import { getConfig } from './services/config.js';
+import { runMemoryAutomation } from './services/memory-curator.js';
+import { getMemoryConfig } from './services/memory-config.js';
+import { initFromPlatformConfig as initDeepSeekFromConfig } from './services/deepseek-client.js';
+import { initExecutorConfig } from './services/relay-executor.js';
 
 const app = express();
 const PORT = process.env.PORT || 3100;
@@ -61,6 +65,13 @@ app.listen(PORT, () => {
   console.log(`[AI Platform] Server running on http://localhost:${PORT}`);
   console.log(`[AI Platform] Projects: ${config.projects.length}`);
 
+  // 启动即加载 DeepSeek 配置（修复：此前只在打开 Model Tab 时才初始化，
+  // 导致 code-review 阶段的交叉审查可能在 apiKey 未注入时被静默跳过）
+  initDeepSeekFromConfig();
+
+  // 加载执行器开关（默认全部关闭，避免把平台变回伪自动化）
+  initExecutorConfig();
+
   // 预加载 Claude Code SDK（~75MB），避免首次测试时等待
   import('@anthropic-ai/claude-code').then(() => {
     console.log('[AI Platform] Claude Code SDK 预加载完成');
@@ -72,4 +83,19 @@ app.listen(PORT, () => {
   initScheduler((workflowName, params, emitter) => {
     startWorkflow(workflowName, params, emitter);
   });
+
+  setTimeout(() => {
+    // 启动自动化受冷库配置开关控制；关闭时跳过，避免每次启动都重算
+    if (!getMemoryConfig().startupAutomation) {
+      console.log('[Memory] startup automation skipped (disabled by config)');
+      return;
+    }
+    runMemoryAutomation({ limit: 160, trigger: 'startup' })
+      .then((result) => {
+        console.log(`[Memory] startup automation done: scanned=${result.scan.scanned}, candidates+${result.candidates.created}`);
+      })
+      .catch((err: any) => {
+        console.warn('[Memory] startup automation failed:', err?.message || err);
+      });
+  }, 5000);
 });

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 import { marked } from 'marked';
 import { AI_PLATFORM_ROOT, getConfig, getProjectById, type TestProject, type PageConfig } from './config.js';
 import { testBus } from './test-events.js';
+import { buildWorkflowMemoryContext } from './memory-curator.js';
 
 // ========== 类型 ==========
 
@@ -2455,27 +2456,75 @@ async function runSingleModuleReview(
   testBus.emit('test:update', { suiteId: suite.id, caseId: tc.id, caseName: tc.name, status: tc.status, duration: tc.duration });
 }
 
-/** 扫描报告目录，返回所有 HTML/MD 文件 */
-export function listReportFiles(projectId: string): { reportsDir: string; files: { name: string; path: string; type: 'html' | 'md'; size: number; mtime: string }[] } {
+/** 单个报告文件的描述 */
+export interface ReportFileItem {
+  name: string;
+  path: string;
+  type: 'html' | 'md' | 'json';
+  size: number;
+  mtime: string;
+}
+
+/** 扫描报告，返回该类型/项目下所有可见的报告文件。
+ *  - codereview：扫描 codereview/reports/{slug}/ 下的 html + md（向后兼容默认值）
+ *  - frontend ：扫描 frontend/reports/{slug}/ 下的 html + json（自动跑 vitest 后生成的成品）
+ *  - e2e      ：从该项目的 e2e 历史 run 记录收集 config.reportPath（报告由 AI 写在源码目录）
+ */
+export function listReportFiles(
+  projectId: string,
+  type: 'codereview' | 'frontend' | 'e2e' = 'codereview',
+): { reportsDir: string; files: ReportFileItem[] } {
   const project = getProjectById(projectId);
   if (!project) throw new Error('项目不存在');
   const projectSlug = project.name.replace(/[<>:"/\\|?*\s]+/g, '_');
   const base = getConfig().testDataDir || getConfig().e2eDataDir;
-  const reportsDir = path.join(base, 'codereview', 'reports', projectSlug);
-  const files: { name: string; path: string; type: 'html' | 'md'; size: number; mtime: string }[] = [];
+
+  // e2e 特殊处理：报告不在 testDataDir，从历史 run 记录收集 reportPath
+  if (type === 'e2e') {
+    const files: ReportFileItem[] = [];
+    const e2eRuns = listTestRuns('e2e').filter(r => r.config?.projectId === projectId);
+    for (const r of e2eRuns) {
+      const reportPath = r.config?.reportPath as string | undefined;
+      if (!reportPath) continue;
+      if (!fs.existsSync(reportPath)) continue;
+      try {
+        const stat = fs.statSync(reportPath);
+        files.push({
+          name: `${r.name}（${new Date(r.startedAt).toLocaleString('zh-CN')}）`,
+          path: reportPath,
+          type: 'html',
+          size: stat.size,
+          mtime: stat.mtime.toISOString(),
+        });
+      } catch { /* skip unreadable */ }
+    }
+    // 按 mtime 倒序（最新在上）
+    files.sort((a, b) => b.mtime.localeCompare(a.mtime));
+    return { reportsDir: '(从历史运行记录收集)', files };
+  }
+
+  // codereview / frontend：扫描各自目录
+  const dirName = type === 'frontend' ? 'frontend' : 'codereview';
+  // frontend 只要 html + json；codereview 要 html + md
+  const allowedExts = type === 'frontend' ? ['.html', '.json'] : ['.html', '.md'];
+  const reportsDir = path.join(base, dirName, 'reports', projectSlug);
+  const files: ReportFileItem[] = [];
   if (fs.existsSync(reportsDir)) {
     for (const f of fs.readdirSync(reportsDir)) {
       const ext = path.extname(f).toLowerCase();
-      if (ext !== '.html' && ext !== '.md') continue;
+      if (!allowedExts.includes(ext)) continue;
       const full = path.join(reportsDir, f);
-      const stat = fs.statSync(full);
-      files.push({
-        name: f,
-        path: full,
-        type: ext === '.html' ? 'html' : 'md',
-        size: stat.size,
-        mtime: stat.mtime.toISOString(),
-      });
+      try {
+        const stat = fs.statSync(full);
+        if (!stat.isFile()) continue;
+        files.push({
+          name: f,
+          path: full,
+          type: ext === '.html' ? 'html' : ext === '.md' ? 'md' : 'json',
+          size: stat.size,
+          mtime: stat.mtime.toISOString(),
+        });
+      } catch { /* skip */ }
     }
   }
   files.sort((a, b) => a.name.localeCompare(b.name));
@@ -3382,6 +3431,31 @@ export function generateTestPrompt(type: TestType, config: Record<string, unknow
   const projectId = config.projectId as string | undefined;
   const project = projectId ? getProjectById(projectId) : undefined;
 
+  // 跨工作流记忆注入：代码审查用 review 策略，其余测试用 test 策略
+  const memoryTarget = type === 'codereview' ? 'review' : 'test';
+  const memoryContext = buildWorkflowMemoryContext(
+    memoryTarget,
+    `对项目 ${project?.name || ''} 执行 ${type} 测试`,
+    project?.sourcePath,
+  );
+  /** 把记忆上下文注入到 prompt：插在“项目信息”类公共段之后 */
+  const withMemory = (prompt: string): string => {
+    if (!memoryContext) return prompt;
+    // 优先插在“## 项目信息”或“## 项目”之后；找不到则追加在末尾
+    const markers = ['## 项目信息', '## 项目\n', '## 项目 '];
+    for (const marker of markers) {
+      const idx = prompt.indexOf(marker);
+      if (idx >= 0) {
+        // 找到该段下一个 ## 标题的位置，插在它前面
+        const afterMarker = idx + marker.length;
+        const nextSection = prompt.indexOf('\n## ', afterMarker);
+        const insertPos = nextSection >= 0 ? nextSection : prompt.length;
+        return prompt.slice(0, insertPos) + '\n' + memoryContext + prompt.slice(insertPos);
+      }
+    }
+    return prompt + memoryContext;
+  };
+
   if (type === 'codereview') {
     if (!project?.sourcePath) throw new Error('请选择项目并配置源码路径');
     const skillFile = path.resolve(base, 'skills', 'tests', 'code-review', 'SKILL.md');
@@ -3479,7 +3553,7 @@ ${moduleParts}
 4. 用 Bash 注册报告到平台（使报告在测试页面可见）：
    curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
-      return { prompt, cwd: project.sourcePath };
+      return { prompt: withMemory(prompt), cwd: project.sourcePath };
     }
 
     // 全量审查
@@ -3515,7 +3589,7 @@ ${fullScopeText}
 3. 用 Bash 注册报告到平台（使报告在测试页面可见）：
    curl -s -X POST "${registerUrl}" -H "Content-Type: application/json" -d "{\"type\":\"codereview\",\"projectId\":\"${projectId}\",\"reportFile\":\"${htmlReportName}\"}"`;
 
-    return { prompt, cwd: project.sourcePath };
+    return { prompt: withMemory(prompt), cwd: project.sourcePath };
   }
 
   if (type === 'e2e') {
@@ -3597,7 +3671,7 @@ ${pageListSections}
 
 现在开始执行测试。`;
 
-    return { prompt, cwd: project.sourcePath || base };
+    return { prompt: withMemory(prompt), cwd: project.sourcePath || base };
   }
 
   if (type === 'frontend') {
@@ -3665,7 +3739,7 @@ ${skillContent}
 3. 用 Write 将测试文件写入对应的输出目录
 4. 确保每个源码文件都有对应的 .test.ts 文件`;
 
-    return { prompt, cwd: project.sourcePath };
+    return { prompt: withMemory(prompt), cwd: project.sourcePath };
   }
 
   throw new Error(`类型 ${type} 暂不支持生成提示词`);

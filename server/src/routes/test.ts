@@ -104,7 +104,23 @@ testRouter.get('/codereview/report-files', (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   if (!projectId) return res.status(400).json({ error: 'projectId is required' });
   try {
-    const result = listReportFiles(projectId);
+    const result = listReportFiles(projectId, 'codereview');
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 泛化版：按测试类型扫描报告（codereview/frontend/e2e 共用入口）
+testRouter.get('/report-files', (req: Request, res: Response) => {
+  const projectId = req.query.projectId as string;
+  const type = (req.query.type as string) || 'codereview';
+  if (!projectId) return res.status(400).json({ error: 'projectId is required' });
+  if (!['codereview', 'frontend', 'e2e'].includes(type)) {
+    return res.status(400).json({ error: 'type 仅支持 codereview/frontend/e2e' });
+  }
+  try {
+    const result = listReportFiles(projectId, type as 'codereview' | 'frontend' | 'e2e');
     res.json(result);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
