@@ -10,7 +10,7 @@
       </div>
       <div class="hero-actions">
         <button class="primary hero-main-btn" :disabled="fullUpdating" @click="doFullUpdate">
-          {{ fullUpdating ? '更新中...' : '一键更新冷库' }}
+          {{ fullUpdating ? fullUpdatePhase : '一键更新冷库' }}
         </button>
       </div>
     </header>
@@ -708,6 +708,38 @@ const showRecallSim = ref(false)
 // 一键全自动更新
 const fullUpdating = ref(false)
 const fullUpdateResult = ref<FullMemoryUpdateResult | null>(null)
+/** 按钮进度文案，随时间推进，给用户"在跑"的体感 */
+const fullUpdatePhase = ref('')
+let fullUpdateTimer: ReturnType<typeof setInterval> | null = null
+
+const FULL_UPDATE_PHASES = [
+  { after: 0, text: '扫描会话中...' },
+  { after: 4000, text: '生成候选中...' },
+  { after: 8000, text: 'AI 策展中（最耗时，请耐心）...' },
+  { after: 40000, text: '仍在策展，即将完成...' },
+  { after: 60000, text: '智能筛选与激活中...' },
+]
+
+function startFullUpdatePhase() {
+  fullUpdatePhase.value = FULL_UPDATE_PHASES[0].text
+  const startedAt = Date.now()
+  fullUpdateTimer = setInterval(() => {
+    const elapsed = Date.now() - startedAt
+    // 取最后一个已超过阈值的文案
+    let phase = FULL_UPDATE_PHASES[0].text
+    for (const p of FULL_UPDATE_PHASES) {
+      if (elapsed >= p.after) phase = p.text
+    }
+    fullUpdatePhase.value = phase
+  }, 1000)
+}
+
+function stopFullUpdatePhase() {
+  if (fullUpdateTimer) {
+    clearInterval(fullUpdateTimer)
+    fullUpdateTimer = null
+  }
+}
 
 // 详情弹窗 / 编辑弹窗
 const showDetailModal = ref(false)
@@ -871,6 +903,8 @@ async function doRunAutomation() {
 
 async function doFullUpdate() {
   fullUpdating.value = true
+  fullUpdateResult.value = null
+  startFullUpdatePhase()
   try {
     const res = await runFullUpdate(true)
     fullUpdateResult.value = res
@@ -878,8 +912,15 @@ async function doFullUpdate() {
     await Promise.all([loadConversations(), loadMemoryData(), loadOverviewData(), loadAutomationLogsData(), loadVectorStatus()])
     toast.success(`冷库更新完成：激活 ${res.summary.autoActivated} 条，拒绝 ${res.summary.autoRejected} 条`)
   } catch (e: any) {
-    toast.error('更新失败: ' + (e?.message || e))
+    // 后端可能仍在跑（链路最长约90s），提示用户稍后看结果而非"失败"
+    const msg = e?.message || ''
+    if (msg.includes('timeout') || msg.includes('超时')) {
+      toast.info('更新仍在后台进行，请稍后刷新页面查看结果')
+    } else {
+      toast.error('更新失败: ' + msg)
+    }
   } finally {
+    stopFullUpdatePhase()
     fullUpdating.value = false
   }
 }
@@ -2417,9 +2458,19 @@ ol.rank-list li::before {
   font-weight: 700 !important;
   letter-spacing: 0.3px;
   box-shadow: 0 4px 14px rgba(31, 111, 91, 0.28) !important;
+  min-width: 200px;
 }
 .hero-main-btn:not(:disabled):hover {
   box-shadow: 0 6px 20px rgba(31, 111, 91, 0.34) !important;
+}
+/* 更新中的呼吸动画 */
+.hero-main-btn:disabled {
+  animation: pulse 1.8s ease-in-out infinite;
+  opacity: 0.85;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 4px 14px rgba(31, 111, 91, 0.28); }
+  50% { box-shadow: 0 4px 20px rgba(31, 111, 91, 0.45); }
 }
 
 /* ========== 一键更新：结果展示 ========== */

@@ -151,7 +151,7 @@ export function applyFilterSuggestions(items: Array<{ id: string; action: 'appro
 }
 
 // ========== 一键全自动更新 ==========
-
+// 一键更新链路较长（含 DeepSeek 策展），单独放宽超时到 180s，不受全局 30s 限制
 export function runFullUpdate(useLLM = true) {
-  return api.post<FullMemoryUpdateResult>('/memory/full-update', { useLLM }).then(r => r.data)
+  return api.post<FullMemoryUpdateResult>('/memory/full-update', { useLLM }, { timeout: 180000 }).then(r => r.data)
 }
