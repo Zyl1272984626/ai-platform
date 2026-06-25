@@ -107,12 +107,14 @@
                 <strong>{{ group.items.length }} 条</strong>
               </div>
               <ul class="knowledge-list">
-                <li v-for="item in group.items.slice(0, 5)" :key="item.id" @click="openDetail(item)">
+                <li v-for="item in (expandedGroups.has(group.type) ? group.items : group.items.slice(0, 5))" :key="item.id" @click="openDetail(item)">
                   <span class="knowledge-title">{{ item.title }}</span>
                   <span v-if="item.usageCount" class="knowledge-usage">用过 {{ item.usageCount }} 次</span>
                 </li>
               </ul>
-              <p v-if="group.items.length > 5" class="knowledge-more">还有 {{ group.items.length - 5 }} 条…</p>
+              <button v-if="group.items.length > 5" class="knowledge-toggle" @click.stop="toggleGroup(group.type)">
+                {{ expandedGroups.has(group.type) ? '收起' : `展开全部（还有 ${group.items.length - 5} 条）` }}
+              </button>
             </div>
           </div>
           <div v-else class="empty compact">还没有活跃记忆。去「冷库」把候选设为活跃。</div>
@@ -699,6 +701,9 @@ const config = ref<MemoryConfig>({ autoInject: true, startupAutomation: true, re
 const vectorStatus = ref<MemoryVectorStatus>({ documentCount: 0, builtAt: '', hasIndex: false })
 const overview = ref<MemoryOverview | null>(null)
 
+// 概览：知识库分组展开状态
+const expandedGroups = ref<Set<string>>(new Set())
+
 // 智能筛选
 const smartFilter = ref<SmartFilterResult | null>(null)
 const filtering = ref(false)
@@ -1270,6 +1275,14 @@ function overviewTypeEntries(): Array<{ type: MemoryItemType; items: MemoryItem[
   return overviewTypeOrder
     .filter(t => overview.value!.knowledgeByType[t]?.length)
     .map(t => ({ type: t, items: overview.value!.knowledgeByType[t] }))
+}
+
+/** 切换某个类型分组的展开/收起 */
+function toggleGroup(type: string) {
+  const next = new Set(expandedGroups.value)
+  if (next.has(type)) next.delete(type)
+  else next.add(type)
+  expandedGroups.value = next
 }
 
 function shortProject(path?: string) {
@@ -2195,10 +2208,20 @@ label {
   flex-shrink: 0;
 }
 
-.knowledge-more {
+.knowledge-toggle {
   margin: 8px 0 0;
-  color: var(--text-3);
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
   font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.knowledge-toggle:hover {
+  text-decoration: underline;
 }
 
 /* 活力榜 */
