@@ -1,5 +1,5 @@
 import api from './client'
-import type { ConversationSummary, ConversationDetail, MemoryInsight, GeneratedArtifact, MemoryItem, MemoryRecallResultWithReasons, MemoryRecallTarget, MemoryAutomationLog, MemoryConfig, MemoryInjectionLog, MemoryVectorStatus, CurateBatchResult, MemoryOverview, SmartFilterResult, FilterSuggestion } from './types'
+import type { ConversationSummary, ConversationDetail, MemoryInsight, GeneratedArtifact, MemoryItem, MemoryRecallResultWithReasons, MemoryRecallTarget, MemoryAutomationLog, MemoryConfig, MemoryInjectionLog, MemoryVectorStatus, CurateBatchResult, MemoryOverview, SmartFilterResult, FilterSuggestion, FullMemoryUpdateResult } from './types'
 
 export function listConversations(params?: { source?: string; project?: string; from?: string; to?: string }) {
   return api.get<ConversationSummary[]>('/memory', { params }).then(r => r.data)
@@ -148,4 +148,10 @@ export function smartFilterCandidates(mode: 'rule' | 'llm' = 'rule') {
 
 export function applyFilterSuggestions(items: Array<{ id: string; action: 'approve' | 'reject' }>) {
   return api.post<{ applied: number; results: MemoryItem[] }>('/memory/candidates/apply-suggestions', { items }).then(r => r.data)
+}
+
+// ========== 一键全自动更新 ==========
+
+export function runFullUpdate(useLLM = true) {
+  return api.post<FullMemoryUpdateResult>('/memory/full-update', { useLLM }).then(r => r.data)
 }

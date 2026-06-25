@@ -39,6 +39,7 @@ import {
   exportProjectMemory,
   recallMemory,
   runMemoryAutomation,
+  runFullMemoryUpdate,
   transitionMemoryItem,
   editMemoryItem,
   curateConversation,
@@ -282,6 +283,16 @@ memoryRouter.get('/automation/status', (_req: Request, res: Response) => {
 memoryRouter.post('/automation/run', async (req: Request, res: Response) => {
   try {
     const result = await runMemoryAutomation({ ...(req.body || {}), trigger: 'manual' });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 一键全自动更新（新人/日常唯一需要的入口）
+memoryRouter.post('/full-update', async (req: Request, res: Response) => {
+  try {
+    const result = await runFullMemoryUpdate({ useLLM: req.body?.useLLM !== false });
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

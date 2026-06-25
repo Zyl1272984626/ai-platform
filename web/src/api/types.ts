@@ -578,6 +578,27 @@ export interface SmartFilterResult {
   mode: 'rule' | 'llm'
 }
 
+// ========== 一键全自动更新 ==========
+export interface FullMemoryUpdateStep {
+  key: string
+  label: string
+  status: 'success' | 'skipped' | 'failed'
+  detail?: string
+}
+
+export interface FullMemoryUpdateResult {
+  steps: FullMemoryUpdateStep[]
+  summary: {
+    scanned: number
+    newCandidates: number
+    curated: number
+    autoApproved: number
+    autoRejected: number
+    autoActivated: number
+  }
+  durationMs: number
+}
+
 export interface MemoryAutomationLog {
   id: string
   startedAt: string

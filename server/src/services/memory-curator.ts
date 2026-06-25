@@ -179,6 +179,129 @@ export async function runMemoryAutomation(
   }
 }
 
+// ========== 一键全自动更新 ==========
+
+export interface FullMemoryUpdateResult {
+  /** 每一步的执行情况和统计，用于前端展示进度 */
+  steps: Array<{ key: string; label: string; status: 'success' | 'skipped' | 'failed'; detail?: string }>;
+  summary: {
+    scanned: number;
+    newCandidates: number;
+    curated: number;        // DeepSeek 策展提取的新候选
+    autoApproved: number;   // 智能筛选举荐通过
+    autoRejected: number;   // 智能筛选举荐拒绝
+    autoActivated: number;  // 自动设为活跃（高质记忆）
+  };
+  durationMs: number;
+}
+
+/**
+ * 一键全自动更新冷库：新人/日常唯一需要点的按钮。
+ * 链路：扫描会话 → 规则生成候选 → (DeepSeek 策展) → 重建索引 → 智能筛选 → 自动应用 → 自动激活高质记忆
+ * 每一步失败都降级跳过，绝不中断整体流程。
+ */
+export async function runFullMemoryUpdate(options: { useLLM?: boolean } = {}): Promise<FullMemoryUpdateResult> {
+  const startedAt = Date.now();
+  const steps: FullMemoryUpdateResult['steps'] = [];
+  const summary = { scanned: 0, newCandidates: 0, curated: 0, autoApproved: 0, autoRejected: 0, autoActivated: 0 };
+  const useLLM = options.useLLM !== false; // 默认尝试用 LLM
+
+  // 1. 扫描会话
+  try {
+    const scan = await scanAllConversations();
+    summary.scanned = scan.scanned;
+    steps.push({ key: 'scan', label: '扫描会话', status: 'success', detail: `${scan.scanned} 个会话` });
+  } catch (err: any) {
+    steps.push({ key: 'scan', label: '扫描会话', status: 'failed', detail: err?.message });
+  }
+
+  // 2. 规则生成候选
+  try {
+    const result = generateMemoryCandidates({ limit: 120 });
+    summary.newCandidates = result.created;
+    steps.push({ key: 'candidates', label: '生成候选', status: 'success', detail: `新增 ${result.created} / 更新 ${result.updated}` });
+  } catch (err: any) {
+    steps.push({ key: 'candidates', label: '生成候选', status: 'failed', detail: err?.message });
+  }
+
+  // 3. LLM 深度策展（可选，无 DeepSeek 时跳过）
+  if (useLLM && isDeepSeekAvailable()) {
+    try {
+      const curate = await curateBatch({ limit: 6 });
+      summary.curated = curate.draftsCreated;
+      steps.push({ key: 'curate', label: 'AI 深度策展', status: 'success', detail: `策展 ${curate.curated}/${curate.total} 会话，提取 ${curate.draftsCreated} 条` });
+    } catch (err: any) {
+      steps.push({ key: 'curate', label: 'AI 深度策展', status: 'failed', detail: err?.message });
+    }
+  } else {
+    steps.push({ key: 'curate', label: 'AI 深度策展', status: 'skipped', detail: '未配置 DeepSeek，跳过' });
+  }
+
+  // 4. 重建向量索引（策展后可能有新候选）
+  try {
+    const v = rebuildVectorIndex();
+    steps.push({ key: 'reindex', label: '重建语义索引', status: 'success', detail: `${v.documentCount} 篇文档` });
+  } catch (err: any) {
+    steps.push({ key: 'reindex', label: '重建语义索引', status: 'failed', detail: err?.message });
+  }
+
+  // 5. 智能筛选候选 + 自动应用（砍掉"需确认"，直接二分）
+  try {
+    const filter = await smartFilterCandidates(useLLM && isDeepSeekAvailable() ? 'llm' : 'rule');
+    const approveIds = filter.items.filter(i => i.suggestion === 'approve').map(i => i.id);
+    const rejectIds = filter.items.filter(i => i.suggestion === 'reject').map(i => i.id);
+
+    if (approveIds.length) {
+      const res = applyFilterSuggestions(approveIds.map(id => ({ id, action: 'approve' })));
+      summary.autoApproved = res.applied;
+    }
+    if (rejectIds.length) {
+      const res = applyFilterSuggestions(rejectIds.map(id => ({ id, action: 'reject' })));
+      summary.autoRejected = res.applied;
+    }
+    // "需确认"的候选：保守处理为 approved（安全，已通过不注入，用户后续可激活或删）
+    const reviewIds = filter.items.filter(i => i.suggestion === 'review').map(i => i.id);
+    if (reviewIds.length) {
+      const res = applyFilterSuggestions(reviewIds.map(id => ({ id, action: 'approve' })));
+      summary.autoApproved += res.applied;
+    }
+
+    steps.push({
+      key: 'filter',
+      label: 'AI 智能筛选',
+      status: 'success',
+      detail: `通过 ${summary.autoApproved} / 拒绝 ${summary.autoRejected}（${filter.mode === 'llm' ? 'LLM' : '规则'}）`,
+    });
+  } catch (err: any) {
+    steps.push({ key: 'filter', label: 'AI 智能筛选', status: 'failed', detail: err?.message });
+  }
+
+  // 6. 自动激活高质记忆（置信度≥0.85 且 证据≥1 的 approved → active）
+  try {
+    const approvedItems = loadMemoryItems().filter(i => i.status === 'approved' && i.confidence >= 0.85 && i.evidenceCount >= 1);
+    for (const item of approvedItems) {
+      transitionMemoryItem(item.id, 'active');
+    }
+    summary.autoActivated = approvedItems.length;
+    steps.push({ key: 'activate', label: '自动激活高质记忆', status: 'success', detail: `${summary.autoActivated} 条设为活跃` });
+  } catch (err: any) {
+    steps.push({ key: 'activate', label: '自动激活高质记忆', status: 'failed', detail: err?.message });
+  }
+
+  // 写一条自动化日志
+  addAutomationLog({
+    id: `full_${Date.now().toString(36)}`,
+    startedAt: new Date(startedAt).toISOString(),
+    finishedAt: new Date().toISOString(),
+    status: 'success',
+    trigger: 'manual',
+    scan: { scanned: summary.scanned, newCount: summary.newCandidates, updated: 0 },
+    candidates: { created: summary.newCandidates + summary.curated, updated: 0, skipped: 0 },
+  });
+
+  return { steps, summary, durationMs: Date.now() - startedAt };
+}
+
 /** 不同注入目标偏好的记忆类型权重 */
 const TARGET_TYPE_WEIGHT: Record<MemoryInjectionLog['target'], Partial<Record<MemoryItemType, number>>> = {
   chat: { term: 1.3, preference: 1.2, project_rule: 1.1, source: 0.9 },

@@ -9,12 +9,34 @@
         </p>
       </div>
       <div class="hero-actions">
-        <button class="secondary" :disabled="scanning" @click="doScan">{{ scanning ? '扫描中...' : '扫描会话' }}</button>
-        <button class="primary" :disabled="automationRunning" @click="doRunAutomation">
-          {{ automationRunning ? '自动化中...' : '扫描 + 生成候选' }}
+        <button class="primary hero-main-btn" :disabled="fullUpdating" @click="doFullUpdate">
+          {{ fullUpdating ? '更新中...' : '一键更新冷库' }}
         </button>
       </div>
     </header>
+
+    <!-- 一键更新结果展示 -->
+    <section v-if="fullUpdateResult" class="full-update-result">
+      <div class="fur-head">
+        <h3>✓ 冷库更新完成（{{ Math.round(fullUpdateResult.durationMs / 100) / 10 }}s）</h3>
+        <button class="secondary small" @click="fullUpdateResult = null">关闭</button>
+      </div>
+      <div class="fur-summary">
+        <span>扫描 {{ fullUpdateResult.summary.scanned }} 个会话</span>
+        <span>新增候选 {{ fullUpdateResult.summary.newCandidates }}</span>
+        <span v-if="fullUpdateResult.summary.curated">AI 策展 +{{ fullUpdateResult.summary.curated }}</span>
+        <span>通过 {{ fullUpdateResult.summary.autoApproved }}</span>
+        <span>拒绝 {{ fullUpdateResult.summary.autoRejected }}</span>
+        <span class="fur-activate">激活 {{ fullUpdateResult.summary.autoActivated }} 条</span>
+      </div>
+      <div class="fur-steps">
+        <div v-for="step in fullUpdateResult.steps" :key="step.key" class="fur-step" :class="`fur-${step.status}`">
+          <span class="fur-icon">{{ step.status === 'success' ? '✓' : step.status === 'skipped' ? '–' : '✗' }}</span>
+          <span class="fur-label">{{ step.label }}</span>
+          <span class="fur-detail">{{ step.detail }}</span>
+        </div>
+      </div>
+    </section>
 
     <section class="metrics">
       <article>
@@ -191,19 +213,12 @@
             <option value="rejected">已拒绝</option>
             <option value="archived">已归档</option>
           </select>
-          <button class="secondary" :disabled="generating" @click="doGenerateCandidates">
-            {{ generating ? '生成中...' : '生成候选' }}
-          </button>
-          <button class="secondary" :disabled="filtering" @click="doSmartFilter('rule')" title="按置信度快速分组，无 API 成本">
+          <button class="primary" :disabled="filtering" @click="doSmartFilter('rule')" title="AI 批量评估候选，自动分组">
             {{ filtering ? '筛选中...' : 'AI 智能筛选' }}
           </button>
-          <button class="secondary small" :disabled="filtering" @click="doSmartFilter('llm')" title="用 DeepSeek 语义判断，识别临时性内容更准（需配置 DeepSeek）">
+          <button class="secondary small" :disabled="filtering" @click="doSmartFilter('llm')" title="DeepSeek 语义判断，更准">
             深度(LLM)
           </button>
-          <button class="secondary" :disabled="curating" @click="doCurateBatch" :title="'用 DeepSeek 深度理解会话，提取规则策展捕捉不到的偏好/决策'">
-            {{ curating ? 'LLM 策展中...' : 'LLM 深度策展' }}
-          </button>
-          <button class="secondary" @click="copyColdPack">复制冷库包</button>
           <template v-if="selectedIds.size > 0">
             <button class="primary small" @click="doBatchTransition('approve')">批量通过 ({{ selectedIds.size }})</button>
             <button class="secondary small" @click="doBatchTransition('reject')">批量拒绝</button>
@@ -211,6 +226,23 @@
           </template>
         </div>
       </div>
+
+      <!-- 高级操作（默认折叠，新人不用管） -->
+      <details class="advanced-ops">
+        <summary>高级操作</summary>
+        <div class="advanced-ops-body">
+          <button class="secondary small" :disabled="generating" @click="doGenerateCandidates">
+            {{ generating ? '生成中...' : '单独生成候选' }}
+          </button>
+          <button class="secondary small" :disabled="curating" @click="doCurateBatch" title="DeepSeek 深度策展，提取偏好/决策">
+            {{ curating ? '策展中...' : 'LLM 深度策展' }}
+          </button>
+          <button class="secondary small" @click="copyColdPack">复制冷库包</button>
+          <button class="secondary small" :disabled="automationRunning" @click="doRunAutomation">
+            {{ automationRunning ? '运行中...' : '旧版流水线' }}
+          </button>
+        </div>
+      </details>
 
       <!-- 智能筛选结果：分组一键操作 -->
       <div v-if="smartFilter && smartFilter.summary.total > 0" class="filter-summary">
@@ -621,6 +653,7 @@ import {
   getMemoryOverview,
   smartFilterCandidates,
   applyFilterSuggestions,
+  runFullUpdate,
 } from '../api/memory'
 import { toast } from '../composables/useToast'
 import type {
@@ -640,6 +673,7 @@ import type {
   MemoryOverview,
   SmartFilterResult,
   FilterSuggestion,
+  FullMemoryUpdateResult,
 } from '../api/types'
 
 type Tab = 'overview' | 'cold' | 'conversations' | 'recall-injection' | 'automation'
@@ -670,6 +704,10 @@ const smartFilter = ref<SmartFilterResult | null>(null)
 const filtering = ref(false)
 /** 召回实验折叠区（已并入召回与注入 tab） */
 const showRecallSim = ref(false)
+
+// 一键全自动更新
+const fullUpdating = ref(false)
+const fullUpdateResult = ref<FullMemoryUpdateResult | null>(null)
 
 // 详情弹窗 / 编辑弹窗
 const showDetailModal = ref(false)
@@ -826,6 +864,23 @@ async function doRunAutomation() {
     toast.error('流水线失败: ' + (e?.message || e))
   } finally {
     automationRunning.value = false
+  }
+}
+
+// ========== 一键全自动更新 ==========
+
+async function doFullUpdate() {
+  fullUpdating.value = true
+  try {
+    const res = await runFullUpdate(true)
+    fullUpdateResult.value = res
+    // 刷新所有相关数据
+    await Promise.all([loadConversations(), loadMemoryData(), loadOverviewData(), loadAutomationLogsData(), loadVectorStatus()])
+    toast.success(`冷库更新完成：激活 ${res.summary.autoActivated} 条，拒绝 ${res.summary.autoRejected} 条`)
+  } catch (e: any) {
+    toast.error('更新失败: ' + (e?.message || e))
+  } finally {
+    fullUpdating.value = false
   }
 }
 
@@ -2353,5 +2408,125 @@ ol.rank-list li::before {
   .dist-bar-row {
     grid-template-columns: 70px 1fr 28px;
   }
+}
+
+/* ========== 一键更新：主按钮 ========== */
+.hero-main-btn {
+  padding: 14px 28px !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 14px rgba(31, 111, 91, 0.28) !important;
+}
+.hero-main-btn:not(:disabled):hover {
+  box-shadow: 0 6px 20px rgba(31, 111, 91, 0.34) !important;
+}
+
+/* ========== 一键更新：结果展示 ========== */
+.full-update-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  animation: slideDown 0.3s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fur-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.fur-head h3 {
+  font-size: 15px;
+  color: var(--brand);
+}
+
+.fur-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.fur-activate {
+  color: var(--brand);
+}
+
+.fur-steps {
+  display: grid;
+  gap: 6px;
+}
+
+.fur-step {
+  display: grid;
+  grid-template-columns: 20px 130px 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.fur-icon {
+  font-weight: 700;
+  text-align: center;
+}
+.fur-success .fur-icon { color: var(--brand); }
+.fur-skipped .fur-icon { color: var(--text-3); }
+.fur-failed .fur-icon { color: #c0463a; }
+
+.fur-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fur-detail {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ========== 高级操作折叠区 ========== */
+.advanced-ops {
+  margin-bottom: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.advanced-ops summary {
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+  list-style: none;
+}
+.advanced-ops summary::-webkit-details-marker { display: none; }
+.advanced-ops summary::before {
+  content: '▸';
+  margin-right: 8px;
+}
+.advanced-ops[open] summary::before {
+  transform: rotate(90deg);
+  display: inline-block;
+}
+
+.advanced-ops-body {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 16px 14px;
 }
 </style>
