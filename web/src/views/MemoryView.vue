@@ -194,8 +194,11 @@
           <button class="secondary" :disabled="generating" @click="doGenerateCandidates">
             {{ generating ? '生成中...' : '生成候选' }}
           </button>
-          <button class="secondary" :disabled="filtering" @click="doSmartFilter('rule')" title="AI 按置信度批量评估候选，分组成建议通过/拒绝/需确认">
+          <button class="secondary" :disabled="filtering" @click="doSmartFilter('rule')" title="按置信度快速分组，无 API 成本">
             {{ filtering ? '筛选中...' : 'AI 智能筛选' }}
+          </button>
+          <button class="secondary small" :disabled="filtering" @click="doSmartFilter('llm')" title="用 DeepSeek 语义判断，识别临时性内容更准（需配置 DeepSeek）">
+            深度(LLM)
           </button>
           <button class="secondary" :disabled="curating" @click="doCurateBatch" :title="'用 DeepSeek 深度理解会话，提取规则策展捕捉不到的偏好/决策'">
             {{ curating ? 'LLM 策展中...' : 'LLM 深度策展' }}
@@ -276,7 +279,7 @@
       <div class="toolbar">
         <div>
           <h2>会话原料</h2>
-          <p>原始会话仍然保留，用作证据和回溯入口。</p>
+          <p>这里是被采集的原始会话，作为记忆的证据来源。记忆质量取决于这里的内容——来源越丰富，冷库越懂你。</p>
         </div>
         <div class="toolbar-actions">
           <input v-model="search" placeholder="搜索标题、项目、摘要" />
@@ -829,6 +832,8 @@ async function doRunAutomation() {
 async function doExportProjectMemory() {
   try {
     exportResult.value = await exportProjectMemory(recallProject.value)
+    // 导出后刷新概览，让产物预览同步更新
+    await loadOverviewData()
     toast.success(`已导出 ${exportResult.value.itemCount} 条记忆`)
   } catch (e: any) {
     toast.error('导出失败: ' + (e?.message || e))
