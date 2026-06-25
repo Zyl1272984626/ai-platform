@@ -11,6 +11,8 @@ import { v4 as uuid } from 'uuid';
 import { AI_PLATFORM_ROOT, getConfig } from './config.js';
 import { executeStep } from './claude-client.js';
 import { chatWithDeepSeek, isDeepSeekAvailable, initFromPlatformConfig as initDeepSeek } from './deepseek-client.js';
+import { tracePromptGenerated, traceStageMarkChanged, traceFinalDecision, traceArtifactDependency } from './pipeline-trace.js';
+import { buildWorkflowMemoryContext } from './memory-curator.js';
 
 // ========== 类型 ==========
 
@@ -23,9 +25,10 @@ interface PipelineStageConfig {
   gate?: { requireConfirmation?: boolean };
 }
 
-type BaseEngine = 'codex' | 'claudecode';
+export type BaseEngine = 'codex' | 'claudecode' | 'zcode';
+type RelayStageMark = 'working' | 'rework' | 'accepted' | 'skipped';
 
-interface PipelineRelayStage {
+export interface PipelineRelayStage {
   id: string;
   name: string;
   owner: 'codex' | 'claudecode-glm' | 'deepseek' | 'human';
@@ -249,9 +252,9 @@ const RELAY_STAGES_CLAUDECODE: PipelineRelayStage[] = [
   },
 ];
 
-/** 根据底座类型获取对应的接力阶段数组 */
-function getRelayStages(baseEngine?: BaseEngine): PipelineRelayStage[] {
-  return baseEngine === 'claudecode' ? RELAY_STAGES_CLAUDECODE : RELAY_STAGES;
+/** 根据底座类型获取对应的接力阶段数组。zcode 复用 claudecode 的 9 阶段路线。 */
+export function getRelayStages(baseEngine?: BaseEngine): PipelineRelayStage[] {
+  return (baseEngine === 'claudecode' || baseEngine === 'zcode') ? RELAY_STAGES_CLAUDECODE : RELAY_STAGES;
 }
 
 // ========== 持久化 ==========
@@ -272,7 +275,7 @@ function getPipelineArtifactRoot(): string {
   return path.resolve(config.pipelineArtifactRoot || path.join(config.testDataDir || config.e2eDataDir || DATA_ROOT, 'pipeline-artifacts'));
 }
 
-function sanitizeRunId(input: string): string {
+export function sanitizeRunId(input: string): string {
   return input
     .trim()
     .replace(/[^\w.-]+/g, '-')
@@ -294,7 +297,7 @@ export function createPipelineRelayRunId(requirement: string): string {
   return `${stamp}-${slug}`;
 }
 
-function getRelayRunDir(runId: string): string {
+export function getRelayRunDir(runId: string): string {
   return path.join(getPipelineArtifactRoot(), sanitizeRunId(runId) || 'pipeline-run');
 }
 
@@ -311,13 +314,13 @@ export function registerPipelineRelayRun(runId: string, requirement?: string, pr
     runId: id,
     requirement: requirement || existing.requirement || '',
     projectId: projectId || existing.projectId || '',
-    baseEngine: baseEngine || existing.baseEngine || 'codex',
+    baseEngine: baseEngine || existing.baseEngine || 'zcode',
     createdAt: existing.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }, null, 2), 'utf-8');
 }
 
-function loadRelayManifest(runId: string): { requirement?: string; projectId?: string; baseEngine?: BaseEngine } {
+function loadRelayManifest(runId: string): { requirement?: string; projectId?: string; baseEngine?: BaseEngine; stageMarks?: Record<string, RelayStageMark> } {
   const manifestPath = path.join(getRelayRunDir(runId), '.manifest.json');
   if (!fs.existsSync(manifestPath)) return {};
   try {
@@ -327,22 +330,129 @@ function loadRelayManifest(runId: string): { requirement?: string; projectId?: s
   }
 }
 
-function validateArtifactQuality(stage: PipelineRelayStage, content?: string): {
+export function updateRelayStageMark(runId: string, stageId: string, mark: RelayStageMark): {
+  runId: string;
+  stageId: string;
+  mark: RelayStageMark;
+} {
+  const id = sanitizeRunId(runId);
+  const manifest = loadRelayManifest(id);
+  const stages = getRelayStages(manifest.baseEngine || 'zcode');
+  if (!stages.some(stage => stage.id === stageId)) {
+    throw new Error(`Unknown relay stage: ${stageId}`);
+  }
+  registerPipelineRelayRun(id, manifest.requirement, manifest.projectId, manifest.baseEngine);
+  const manifestPath = path.join(getRelayRunDir(id), '.manifest.json');
+  const current = fs.existsSync(manifestPath)
+    ? JSON.parse(fs.readFileSync(manifestPath, 'utf-8'))
+    : {};
+  const stageMarks = {
+    ...(current.stageMarks || {}),
+    [stageId]: mark,
+  };
+  fs.writeFileSync(manifestPath, JSON.stringify({
+    ...current,
+    stageMarks,
+    updatedAt: new Date().toISOString(),
+  }, null, 2), 'utf-8');
+
+  // trace：阶段标记变更
+  const stage = stages.find(item => item.id === stageId);
+  traceStageMarkChanged(id, `阶段「${stage?.name || stageId}」标记为 ${mark}`, {
+    stageId,
+    stageName: stage?.name,
+    mark,
+    artifactFile: stage?.artifactFile,
+  });
+
+  // trace：通过质量门视为该阶段的最终决策；打回则是返工决策；跳过则记录跳过决策
+  if (mark === 'accepted') {
+    traceFinalDecision(id, `阶段「${stage?.name || stageId}」通过质量门（人工确认）`, {
+      stageId,
+      stageName: stage?.name,
+      decision: 'accepted',
+      artifactFile: stage?.artifactFile,
+    });
+  } else if (mark === 'rework') {
+    traceFinalDecision(id, `阶段「${stage?.name || stageId}」被打回补齐`, {
+      stageId,
+      stageName: stage?.name,
+      decision: 'rework',
+    });
+  } else if (mark === 'skipped') {
+    traceFinalDecision(id, `阶段「${stage?.name || stageId}」被跳过`, {
+      stageId,
+      stageName: stage?.name,
+      decision: 'skipped',
+    });
+  }
+
+  return { runId: id, stageId, mark };
+}
+
+/**
+ * 各阶段应读取的前序产物（按依赖顺序）。
+ * orchestrator 是第一段，没有前序依赖。
+ * 用于提示词生成和质量门检查，让产物之间形成可追溯的证据链。
+ */
+function getStageDependencies(stage: PipelineRelayStage, allStages: PipelineRelayStage[]): PipelineRelayStage[] {
+  switch (stage.promptKind) {
+    case 'orchestrator':
+      return [];
+    case 'discovery':
+      return allStages.filter(item => item.promptKind === 'orchestrator');
+    case 'design':
+      // design 类（初版/审阅/定稿）都基于需求澄清 + 代码发现
+      return allStages.filter(item => item.promptKind === 'orchestrator' || item.promptKind === 'discovery');
+    case 'implementation':
+      return allStages.filter(item => item.id.includes('final-design') || item.promptKind === 'design');
+    case 'verification':
+      return allStages.filter(item => item.promptKind === 'implementation' || item.id.includes('final-design'));
+    case 'review':
+      return allStages.filter(item =>
+        item.id.includes('final-design') || item.promptKind === 'implementation' || item.promptKind === 'verification');
+    case 'handoff':
+      // 交付裁判读取全部已有产物
+      return allStages.filter(item => item.id !== stage.id);
+    default:
+      return [];
+  }
+}
+
+function validateArtifactQuality(stage: PipelineRelayStage, content?: string, allStages?: PipelineRelayStage[]): {
   quality: 'missing' | 'weak' | 'ok';
   issues: string[];
 } {
   if (!content?.trim()) return { quality: 'missing', issues: ['未检测到产物文件'] };
 
   const issues: string[] = [];
-  const normalized = content.toLowerCase();
   const hasHeading = /^#{1,4}\s+/m.test(content);
   const hasFilePath = /([A-Za-z]:[\\/][^\s`'"]+|[\w.-]+[\\/][\w./-]+\.(ts|tsx|vue|java|js|json|md|xml|yml|yaml))/i.test(content);
   const hasRisk = /(风险|阻塞|block|risk|问题|不确定)/i.test(content);
-  const hasNext = /(下一步|建议|后续|next)/i.test(content);
+  const hasNext = /(下一步|建议|后续|next|待办|todo|action)/i.test(content);
 
   if (!hasHeading) issues.push('缺少 Markdown 章节标题');
   if (!hasRisk) issues.push('缺少风险/阻塞说明');
   if (!hasNext) issues.push('缺少下一步建议');
+
+  // 输入依据检查：非 orchestrator 阶段应说明基于什么输入做的工作
+  if (stage.promptKind !== 'orchestrator') {
+    const hasInputBasis = /(输入|依据|参考|based on|基于|读取|前提|前序|背景|上下文)/i.test(content);
+    if (!hasInputBasis) issues.push('缺少输入依据说明（应说明基于哪些前序产物或需求）');
+  }
+
+  // 前序产物引用检查：设计/实现/验证/审查/交付阶段应引用前序产物文件名
+  const deps = allStages ? getStageDependencies(stage, allStages) : [];
+  if (deps.length > 0 && ['design', 'implementation', 'verification', 'review', 'handoff'].includes(stage.promptKind)) {
+    const referencedArtifact = deps.some(dep => {
+      // 检测正文是否提及前序产物文件名（去掉扩展名也认）或完整路径
+      const bareName = dep.artifactFile.replace(/\.md$/i, '');
+      return content.includes(dep.artifactFile) || content.includes(bareName) || content.includes(dep.id);
+    });
+    if (!referencedArtifact) {
+      issues.push(`缺少对前序产物的引用（应读取并引用 ${deps.map(d => d.artifactFile).slice(0, 2).join('、')} 等）`);
+    }
+  }
 
   if (stage.promptKind === 'discovery') {
     if (!hasFilePath) issues.push('代码发现阶段缺少真实文件路径证据');
@@ -369,7 +479,7 @@ function validateArtifactQuality(stage: PipelineRelayStage, content?: string): {
   }
 
   return {
-    quality: issues.length === 0 ? 'ok' : issues.length <= 2 ? 'weak' : 'weak',
+    quality: issues.length === 0 ? 'ok' : 'weak',
     issues,
   };
 }
@@ -428,6 +538,10 @@ export function buildStagePrompt(
   }
   const contextStr = contextParts.length > 0 ? contextParts.join('\n\n') : '（无，这是第一个阶段）';
 
+  // 跨工作流记忆注入：按阶段类型选择 target 策略
+  const stageTarget = stageToMemoryTarget(stage.id);
+  const memoryContext = buildWorkflowMemoryContext(stageTarget, run.requirement, projectSourcePath);
+
   return [
     `你是一个自动化开发流水线执行引擎。请严格按照以下指令执行任务。`,
     ``,
@@ -437,7 +551,7 @@ export function buildStagePrompt(
     ``,
     `## 原始需求`,
     run.requirement,
-    ``,
+    memoryContext,
     `## 项目源码路径`,
     projectSourcePath,
     ``,
@@ -468,6 +582,13 @@ export function buildStagePrompt(
     '```',
     `<!-- /RESULT -->`,
   ].join('\n');
+}
+
+/** 流水线阶段 id → 记忆召回 target */
+function stageToMemoryTarget(stageId: string): 'pipeline' | 'test' | 'review' {
+  if (stageId.includes('test') || stageId.includes('verification')) return 'test';
+  if (stageId.includes('review')) return 'review';
+  return 'pipeline';
 }
 
 // ========== 知识图谱 ==========
@@ -752,12 +873,13 @@ export function scanPipelineArtifacts(runId: string): {
     preview?: string;
     quality: 'missing' | 'weak' | 'ok';
     qualityIssues: string[];
+    stageMark?: RelayStageMark;
   }>;
 } {
   const id = sanitizeRunId(runId);
   const runDir = getRelayRunDir(id);
   const manifest = loadRelayManifest(id);
-  const baseEngine: BaseEngine = manifest.baseEngine || 'codex';
+  const baseEngine: BaseEngine = manifest.baseEngine || 'zcode';
   const relayStages = getRelayStages(baseEngine);
   const stages = relayStages.map(stage => {
     const filePath = path.join(runDir, stage.artifactFile);
@@ -765,7 +887,7 @@ export function scanPipelineArtifacts(runId: string): {
     const stat = exists ? fs.statSync(filePath) : undefined;
     const content = exists ? fs.readFileSync(filePath, 'utf-8') : undefined;
     const preview = content?.slice(0, 1200);
-    const quality = validateArtifactQuality(stage, content);
+    const quality = validateArtifactQuality(stage, content, relayStages);
     return {
       ...stage,
       path: filePath.replace(/\\/g, '/'),
@@ -775,6 +897,7 @@ export function scanPipelineArtifacts(runId: string): {
       preview,
       quality: quality.quality,
       qualityIssues: quality.issues,
+      stageMark: manifest.stageMarks?.[stage.id],
     };
   });
   return {
@@ -795,6 +918,9 @@ export function listPipelineArtifactRuns(): Array<{
   updatedAt?: string;
   completedStages: number;
   qualifiedStages: number;
+  workingStages: number;
+  reworkStages: number;
+  acceptedStages: number;
   totalStages: number;
 }> {
   const root = getPipelineArtifactRoot();
@@ -823,10 +949,195 @@ export function listPipelineArtifactRuns(): Array<{
         updatedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : (manifest.updatedAt || dirStat.mtime.toISOString()),
         completedStages: scan.stages.filter(stage => stage.exists).length,
         qualifiedStages: scan.stages.filter(stage => stage.quality === 'ok').length,
+        workingStages: scan.stages.filter(stage => stage.stageMark === 'working').length,
+        reworkStages: scan.stages.filter(stage => stage.stageMark === 'rework').length,
+        acceptedStages: scan.stages.filter(stage => stage.stageMark === 'accepted').length,
         totalStages: scan.stages.length,
       };
     })
     .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+}
+
+/** 删除单个阶段的产物文件（保留其余产物和 manifest）。幂等：文件不存在返回 false。 */
+export function deleteRelayArtifact(runId: string, stageId: string): boolean {
+  const id = sanitizeRunId(runId);
+  const manifest = loadRelayManifest(id);
+  const stages = getRelayStages(manifest.baseEngine || 'zcode');
+  const stage = stages.find(item => item.id === stageId);
+  if (!stage) {
+    throw new Error(`Unknown relay stage: ${stageId}`);
+  }
+  const filePath = path.join(getRelayRunDir(id), stage.artifactFile);
+  if (!fs.existsSync(filePath)) return false;
+  fs.unlinkSync(filePath);
+  return true;
+}
+
+/**
+ * 删除整条接力 run：删除目录下所有阶段产物 *.md + .manifest.json。
+ * 仅当删除后目录为空时移除空目录，保留用户手动放进目录的其他文件。
+ * 不删除引擎状态 json（那是 deletePipelineRun 的职责，保持互斥）。
+ */
+export function deleteRelayRun(runId: string): { ok: boolean; removedFiles: string[] } {
+  const id = sanitizeRunId(runId);
+  const manifest = loadRelayManifest(id);
+  const stages = getRelayStages(manifest.baseEngine || 'zcode');
+  const runDir = getRelayRunDir(id);
+  const removedFiles: string[] = [];
+
+  if (!fs.existsSync(runDir)) return { ok: true, removedFiles };
+
+  // 删除已知的阶段产物
+  for (const stage of stages) {
+    const filePath = path.join(runDir, stage.artifactFile);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      removedFiles.push(stage.artifactFile);
+    }
+  }
+
+  // 删除 manifest
+  const manifestPath = path.join(runDir, '.manifest.json');
+  if (fs.existsSync(manifestPath)) {
+    fs.unlinkSync(manifestPath);
+    removedFiles.push('.manifest.json');
+  }
+
+  // 仅当目录为空时移除，保留用户其他文件
+  try {
+    const remaining = fs.readdirSync(runDir);
+    if (remaining.length === 0) {
+      fs.rmdirSync(runDir);
+    }
+  } catch {
+    // 目录读取失败不阻断删除流程
+  }
+
+  return { ok: true, removedFiles };
+}
+
+/** 读取单个阶段产物的完整内容（用于前端 Markdown 预览）。文件不存在抛错由路由转 404。 */
+export function readRelayStageContent(runId: string, stageId: string): {
+  runId: string;
+  stageId: string;
+  path: string;
+  exists: boolean;
+  content: string;
+} {
+  const id = sanitizeRunId(runId);
+  const manifest = loadRelayManifest(id);
+  const stages = getRelayStages(manifest.baseEngine || 'zcode');
+  const stage = stages.find(item => item.id === stageId);
+  if (!stage) {
+    throw new Error(`Unknown relay stage: ${stageId}`);
+  }
+  const filePath = path.join(getRelayRunDir(id), stage.artifactFile);
+  const exists = fs.existsSync(filePath);
+  return {
+    runId: id,
+    stageId,
+    path: filePath.replace(/\\/g, '/'),
+    exists,
+    content: exists ? fs.readFileSync(filePath, 'utf-8') : '',
+  };
+}
+
+/** promptKind 到记忆召回 target 的映射：测试类→test，审查/交付→review，其余→pipeline */
+function promptKindToMemoryTarget(promptKind: PipelineRelayStage['promptKind']): 'pipeline' | 'test' | 'review' {
+  switch (promptKind) {
+    case 'verification':
+      return 'test';
+    case 'review':
+    case 'handoff':
+      return 'review';
+    default:
+      return 'pipeline';
+  }
+}
+
+/** promptKind 到 SKILL.md allowed-tools 的映射，参考 getStageTools 的能力分级。 */
+function promptKindToAllowedTools(promptKind: PipelineRelayStage['promptKind']): string[] {
+  switch (promptKind) {
+    case 'orchestrator':
+    case 'design':
+      return ['Read', 'Glob', 'Grep'];
+    case 'discovery':
+      return ['Read', 'Glob', 'Grep'];
+    case 'implementation':
+      return ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
+    case 'verification':
+      return ['Bash', 'Read', 'Glob', 'Grep'];
+    case 'review':
+    case 'handoff':
+      return ['Read', 'Glob', 'Grep'];
+    default:
+      return ['Read', 'Glob', 'Grep'];
+  }
+}
+
+/**
+ * 把单个 relay 阶段导出为 SKILL.md 内容字符串（不写本地文件，满足平台独立于本地 Skill 路径）。
+ * 用于让单阶段可被外部平台作为 Skill 加载。
+ */
+export function exportRelayStageAsSkill(stageId: string, baseEngine?: BaseEngine): { filename: string; content: string } {
+  const stages = getRelayStages(baseEngine);
+  const stage = stages.find(item => item.id === stageId);
+  if (!stage) {
+    throw new Error(`Unknown relay stage: ${stageId}`);
+  }
+
+  const allowedTools = promptKindToAllowedTools(stage.promptKind);
+  const dependencies = getStageDependencies(stage, stages)
+    .map(dep => dep.id)
+    .filter(depId => depId !== stage.id);
+  const tags = ['pipeline', 'relay', baseEngine || 'zcode', stage.promptKind];
+
+  const depSection = dependencies.length
+    ? [
+        '## 前序依赖',
+        '执行本阶段前应先读取以下阶段产物作为输入依据：',
+        ...dependencies.map(depId => {
+          const dep = stages.find(item => item.id === depId);
+          return `- ${dep?.name || depId} (${depId})`;
+        }),
+        '',
+      ].join('\n')
+    : '## 前序依赖\n本阶段为流程起点，无前序依赖。\n';
+
+  const content = [
+    '---',
+    `name: ${stage.id}`,
+    `description: ${stage.purpose}`,
+    `allowed-tools: ["${allowedTools.join('", "')}"]`,
+    `tags: ["${tags.join('", "')}"]`,
+    dependencies.length ? `dependencies: ["${dependencies.join('", "')}"]` : '',
+    '---',
+    '',
+    `# ${stage.name}`,
+    '',
+    `## 角色`,
+    `阶段类型：${stage.promptKind}；推荐执行者：${stage.ownerLabel}。`,
+    '',
+    `## 目的`,
+    stage.purpose,
+    '',
+    depSection,
+    '## 产物输出要求',
+    '- 产物文件：`{{relayRunDir}}/' + stage.artifactFile + '`（relayRunDir 由接力平台在运行时注入）。',
+    '- 使用 Markdown，至少包含：结论摘要、输入依据、关键决策、风险/阻塞、下一步建议。',
+    '- 完整结果以产物文件为准，回复正文只给简短摘要。',
+    '',
+    '## 约束',
+    '- 后端 HTTP 接口只使用 GET 或 POST，写操作使用 POST。',
+    '- 不要提交、推送、部署或执行破坏性操作，除非用户明确授权。',
+    '- 平台只负责提示词和产物扫描，不调用模型；本 Skill 由外部执行平台加载。',
+    '',
+  ].filter(line => line !== '').join('\n');
+
+  return {
+    filename: `${stage.id}.SKILL.md`,
+    content,
+  };
 }
 
 function buildArtifactContract(runId: string, stage: PipelineRelayStage): string[] {
@@ -864,9 +1175,17 @@ export function generateRelayStagePrompt(stageId: string, requirement: string, p
   registerPipelineRelayRun(id, requirement, projectId, baseEngine);
   const { project, projectSourcePath, runDir } = buildRelayContext(requirement, projectId, id);
   const artifactPath = path.join(getRelayRunDir(id), stage.artifactFile).replace(/\\/g, '/');
-  const previousArtifacts = stages
-    .filter(item => item.id !== stage.id)
-    .map(item => `- ${item.name}: ${path.join(getRelayRunDir(id), item.artifactFile).replace(/\\/g, '/')}`);
+
+  // 按依赖顺序列出本阶段应读取的前序产物（区分强依赖 vs 全部可读产物）
+  const dependencies = getStageDependencies(stage, stages);
+  const requiredArtifactLines = dependencies.map(dep => {
+    const depPath = path.join(getRelayRunDir(id), dep.artifactFile).replace(/\\/g, '/');
+    return `- [必读] ${dep.name} (${dep.id}): ${depPath}`;
+  });
+  const optionalArtifactLines = stages
+    .filter(item => item.id !== stage.id && !dependencies.some(dep => dep.id === item.id))
+    .map(item => `- [可选] ${item.name}: ${path.join(getRelayRunDir(id), item.artifactFile).replace(/\\/g, '/')}`);
+  const hasDependencies = requiredArtifactLines.length > 0;
 
   const roleLines: Record<PipelineRelayStage['promptKind'], string[]> = {
     orchestrator: [
@@ -913,6 +1232,10 @@ export function generateRelayStagePrompt(stageId: string, requirement: string, p
     ],
   };
 
+  // 跨工作流记忆注入：按 promptKind 选择 target 策略
+  const memoryTarget = promptKindToMemoryTarget(stage.promptKind);
+  const memoryContext = buildWorkflowMemoryContext(memoryTarget, requirement, projectSourcePath);
+
   const prompt = [
     ...roleLines[stage.promptKind],
     ``,
@@ -923,17 +1246,25 @@ export function generateRelayStagePrompt(stageId: string, requirement: string, p
     ``,
     `## 原始需求`,
     requirement,
-    ``,
+    memoryContext,
     `## 项目`,
     `- 项目名称: ${project?.name || 'AI Platform'}`,
     `- 源码路径: ${projectSourcePath}`,
     `- 接力运行 ID: ${id}`,
     `- 接力产物目录: ${runDir}`,
     ``,
-    `## 可读取的前后阶段产物路径`,
-    ...previousArtifacts,
+    `## 本阶段应读取的前序产物（按依赖顺序，必读项缺失时先说明）`,
+    ...(hasDependencies ? requiredArtifactLines : ['- 本阶段是流程起点，没有必读的前序产物。']),
+    ``,
+    `## 其他可参考的产物路径`,
+    ...(optionalArtifactLines.length ? optionalArtifactLines : ['- 无']),
     ``,
     ...buildArtifactContract(id, stage),
+    ``,
+    `## 输入依据要求`,
+    hasDependencies
+      ? `- 回复开头或对应章节必须写明读取了哪些前序产物（文件名），作为本次工作的输入依据。`
+      : `- 本阶段是流程起点，可基于原始需求直接开始，但需要在产物中记录已澄清的需求要点。`,
     ``,
     `## 项目约束`,
     `- 平台本身不调用模型，本提示词由用户复制到对应平台执行。`,
@@ -942,6 +1273,24 @@ export function generateRelayStagePrompt(stageId: string, requirement: string, p
     `- 保留用户已有改动，不要回退未确认的变更。`,
     `- 提交、推送、部署、删除文件等动作必须得到用户明确授权。`,
   ].join('\n');
+
+  // trace：提示词生成
+  tracePromptGenerated(id, `生成阶段提示词：${stage.name} (${stageId})`, {
+    stageId,
+    stageName: stage.name,
+    promptKind: stage.promptKind,
+    artifactPath,
+    baseEngine: baseEngine || 'zcode',
+  });
+
+  // trace：产物依赖（本阶段应读取哪些前序产物）
+  if (dependencies.length > 0) {
+    traceArtifactDependency(id, `阶段「${stage.name}」依赖前序产物`, {
+      stageId,
+      dependencies: dependencies.map(dep => dep.artifactFile),
+      promptKind: stage.promptKind,
+    });
+  }
 
   return { runId: id, stageId, artifactPath, prompt };
 }
@@ -955,7 +1304,7 @@ export function generateRelayContinuationPrompt(runId: string, stageIds: string[
   const manifest = loadRelayManifest(id);
   const req = requirement || manifest.requirement || '请先读取已有产物，恢复本次需求上下文。';
   const pid = projectId || manifest.projectId || undefined;
-  const baseEngine: BaseEngine = manifest.baseEngine || 'codex';
+  const baseEngine: BaseEngine = manifest.baseEngine || 'zcode';
   const relayStages = getRelayStages(baseEngine);
   registerPipelineRelayRun(id, req, pid, baseEngine);
 
@@ -998,16 +1347,24 @@ export function generateRelayContinuationPrompt(runId: string, stageIds: string[
     ``,
     `## 执行规则`,
     `1. 先读取已有产物，恢复上下文；不要重复已经完成且不在本次选中列表里的阶段。`,
-    `2. 严格按“本次选中阶段”的顺序执行。`,
-    `3. 如果某个选中阶段依赖的前序产物缺失，请先说明缺失项；能补足则补足，不能补足则写入阻塞说明。`,
-    `4. 每完成一个阶段，都必须写入对应 Markdown 产物文件。`,
-    `5. 如果当前环境不能写文件，请输出完整 Markdown 产物内容，并标明应保存到哪个路径。`,
-    `6. 不要提交、推送、部署或执行破坏性操作，除非用户明确授权。`,
-    `7. 后端 HTTP 接口只使用 GET 或 POST，写操作使用 POST。`,
+    `2. 每个选中阶段开始前，先读取它的前序产物（设计阶段读需求澄清+代码发现；实现读最终设计；验证读实现+最终设计；审查读最终设计+实现+验证；交付读全部），在回复里写明读取了哪些产物文件名作为输入依据。`,
+    `3. 严格按“本次选中阶段”的顺序执行。`,
+    `4. 如果某个选中阶段依赖的前序产物缺失，请先说明缺失项；能补足则补足，不能补足则写入阻塞说明。`,
+    `5. 每完成一个阶段，都必须写入对应 Markdown 产物文件。`,
+    `6. 如果当前环境不能写文件，请输出完整 Markdown 产物内容，并标明应保存到哪个路径。`,
+    `7. 不要提交、推送、部署或执行破坏性操作，除非用户明确授权。`,
+    `8. 后端 HTTP 接口只使用 GET 或 POST，写操作使用 POST。`,
     ``,
     `## 结束输出`,
     `最后用简短列表说明：已完成哪些阶段、写入了哪些文件、哪些阶段仍阻塞或待继续。`,
   ].join('\n');
+
+  // trace：续跑提示词生成
+  tracePromptGenerated(id, `生成续跑提示词：${selected.length} 个阶段`, {
+    mode: 'continuation',
+    stageIds: selected.map(stage => stage.id),
+    baseEngine,
+  });
 
   return { runId: id, stageIds: selected.map(stage => stage.id), prompt };
 }
@@ -1021,12 +1378,6 @@ export function generateCodexHandoffPrompt(requirement: string, projectId?: stri
   const runId = relayRunId ? sanitizeRunId(relayRunId) : createPipelineRelayRunId(requirement);
   const relayPlan = getPipelineRelayPlan(runId);
   const projectSourcePath = project?.sourcePath || config.aiPlatformRoot || config.projectRoot || '';
-  const codexSkillPath = path.resolve(config.aiPlatformRoot, 'skills', 'codex', 'development-pipeline', 'SKILL.md');
-  const preferredCodexPath = path.resolve(config.aiPlatformRoot, '.codex', 'skills', 'development-pipeline', 'SKILL.md');
-  const stageSkillPaths = PIPELINE_STAGES.map(stage => ({
-    ...stage,
-    path: path.resolve(config.aiPlatformRoot, 'skills', 'pipeline', stage.skill, 'SKILL.md'),
-  }));
 
   return [
     `你将接手一个新的多平台接力开发需求。请先不要直接写代码。`,
@@ -1040,14 +1391,9 @@ export function generateCodexHandoffPrompt(requirement: string, projectId?: stri
     `- 接力运行 ID: ${runId}`,
     `- 产物目录: ${relayPlan.runDir}`,
     ``,
-    `## 请先读取这些流程文件`,
-    `1. 总流程 Skill（Codex 优先使用）`,
-    `   - 项目级位置: ${preferredCodexPath.replace(/\\/g, '/')}`,
-    `   - 仓库备份位置: ${codexSkillPath.replace(/\\/g, '/')}`,
-    `2. 阶段 Skill（用于阶段产物规范和输出要求）`,
-    ...stageSkillPaths.map((stage, index) => `   - ${index + 1}. ${stage.name} (${stage.id}): ${stage.path.replace(/\\/g, '/')}`),
-    ``,
-    `如果当前会话不能自动触发 Skill，请手动读取上述 SKILL.md，把它们当作本次工作的流程规范。`,
+    `## 上下文读取`,
+    `启动后请先读项目根的 AGENTS.md（接力上下文已自动写入其中），里面记录了当前阶段、产物路径和冷库记忆。`,
+    `如果 AGENTS.md 没有接力上下文区块，以本提示词为准。`,
     ``,
     `## 工作方式`,
     `1. 先进入“需求澄清模式”：根据我的原始需求，连续提出必要问题。`,
@@ -1089,10 +1435,6 @@ export function generateClaudeCodeHandoffPrompt(requirement: string, projectId?:
   registerPipelineRelayRun(runId, requirement, projectId, 'claudecode');
   const relayPlan = getPipelineRelayPlan(runId, 'claudecode');
   const projectSourcePath = project?.sourcePath || config.aiPlatformRoot || config.projectRoot || '';
-  const stageSkillPaths = PIPELINE_STAGES.map(stage => ({
-    ...stage,
-    path: path.resolve(config.aiPlatformRoot, 'skills', 'pipeline', stage.skill, 'SKILL.md'),
-  }));
 
   return [
     `你将接手一个新的 ClaudeCode/GLM 接力开发需求。请先不要直接写代码。`,
@@ -1107,11 +1449,9 @@ export function generateClaudeCodeHandoffPrompt(requirement: string, projectId?:
     `- 产物目录: ${relayPlan.runDir}`,
     `- 底座引擎: ClaudeCode (GLM)`,
     ``,
-    `## 请先读取这些流程文件`,
-    `1. 阶段 Skill（用于阶段产物规范和输出要求）`,
-    ...stageSkillPaths.map((stage, index) => `   - ${index + 1}. ${stage.name} (${stage.id}): ${stage.path.replace(/\\/g, '/')}`),
-    ``,
-    `如果当前会话不能自动触发 Skill，请手动读取上述 SKILL.md，把它们当作本次工作的流程规范。`,
+    `## 上下文读取`,
+    `启动后请先读项目根的 AGENTS.md（接力上下文已自动写入其中），里面记录了当前阶段、产物路径和冷库记忆。`,
+    `如果 AGENTS.md 没有接力上下文区块，以本提示词为准。`,
     ``,
     `## 工作方式`,
     `1. 先进入"需求澄清模式"：根据我的原始需求，连续提出必要问题。`,
@@ -1292,4 +1632,88 @@ export function listKnowledgeEntries(): Array<{ runId: string; requirement: stri
     } catch { /* skip */ }
   }
   return entries;
+}
+
+/**
+ * 生成交付报告：汇总需求、阶段完成情况、变更文件、风险、验收标准。
+ * 读所有阶段产物 + trace + 质量门状态，输出一份 Markdown。
+ * 同时写入产物目录 DELIVERY-REPORT.md。
+ */
+export function generateDeliveryReport(runId: string): { reportPath: string; content: string } {
+  const id = sanitizeRunId(runId);
+  const scan = scanPipelineArtifacts(id);
+  const manifest = loadRelayManifest(id);
+  const runDir = getRelayRunDir(id);
+
+  const lines: string[] = [
+    `# 交付报告 · ${id}`,
+    '',
+    `> 生成时间：${new Date().toISOString()}`,
+    `> 底座引擎：${scan.baseEngine}`,
+    `> 产物目录：${scan.runDir}`,
+    '',
+    '## 需求',
+    '',
+    manifest.requirement || '（未填写）',
+    '',
+    '## 阶段完成情况',
+    '',
+    '| # | 阶段 | 执行者 | 状态 | 质量 | 标记 |',
+    '|---|---|---|---|---|---|',
+  ];
+
+  let doneCount = 0;
+  let skippedCount = 0;
+  scan.stages.forEach((stage: any, i: number) => {
+    const status = stage.exists ? '✅ 已生成' : '⬜ 未生成';
+    const mark = stage.stageMark || '-';
+    if (stage.quality === 'ok' || stage.stageMark === 'accepted') doneCount++;
+    if (!stage.exists) skippedCount++;
+    lines.push(`| ${i + 1} | ${stage.name} | ${stage.ownerLabel} | ${status} | ${stage.quality} | ${mark} |`);
+  });
+
+  lines.push('', '## 质量门摘要', '');
+  lines.push(`- 合格阶段：${scan.stages.filter(s => s.quality === 'ok').length} / ${scan.stages.length}`);
+  lines.push(`- 通过/跳过：${doneCount} 通过，${skippedCount} 跳过`);
+  lines.push(`- 待补齐：${scan.stages.filter(s => s.quality !== 'ok' && s.stageMark !== 'accepted' && s.stageMark !== 'skipped').length}`);
+
+  // 从实现阶段产物提取变更文件
+  const implStage = scan.stages.find(s => s.promptKind === 'implementation');
+  if (implStage?.exists) {
+    const content = fs.readFileSync(path.join(runDir, implStage.artifactFile), 'utf-8');
+    const fileMatches = content.match(/[\w./\\-]+\.(ts|tsx|vue|java|js|json|xml|sql|md)/gi);
+    if (fileMatches && fileMatches.length > 0) {
+      const unique = [...new Set(fileMatches)].slice(0, 20);
+      lines.push('', '## 涉及文件', '');
+      unique.forEach(f => lines.push(`- \`${f}\``));
+    }
+  }
+
+  // 风险收集（从各阶段产物提取风险关键词）
+  const risks: string[] = [];
+  for (const stage of scan.stages) {
+    if (!stage.exists) continue;
+    const content = fs.readFileSync(path.join(runDir, stage.artifactFile), 'utf-8');
+    const riskMatches = content.match(/(风险|阻塞|block|注意|待确认|TODO)[^\n]{0,80}/gi);
+    if (riskMatches) risks.push(...riskMatches.slice(0, 3));
+  }
+  if (risks.length > 0) {
+    lines.push('', '## 风险与待办', '');
+    [...new Set(risks)].slice(0, 10).forEach(r => lines.push(`- ${r}`));
+  }
+
+  lines.push('', '## 验收建议', '');
+  lines.push('- [ ] 编译/构建通过');
+  lines.push('- [ ] 核心功能验证');
+  lines.push('- [ ] 边界条件检查');
+  lines.push('- [ ] 无破坏性变更（不影响现有功能）');
+
+  const content = lines.join('\n');
+
+  // 写入产物目录
+  if (!fs.existsSync(runDir)) fs.mkdirSync(runDir, { recursive: true });
+  const reportPath = path.join(runDir, 'DELIVERY-REPORT.md');
+  fs.writeFileSync(reportPath, content, 'utf-8');
+
+  return { reportPath: reportPath.replace(/\\/g, '/'), content };
 }
