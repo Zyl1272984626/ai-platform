@@ -36,6 +36,12 @@
           <span class="fur-detail">{{ step.detail }}</span>
         </div>
       </div>
+      <!-- 未配置 DeepSeek 时的质量警告 -->
+      <div v-if="fullUpdateResult.steps.some(s => s.key === 'curate' && s.status === 'skipped')" class="fur-warning">
+        <strong>⚠ AI 策展被跳过，冷库质量受限</strong>
+        <p>未配置 DeepSeek，深度策展、语义筛选等 AI 能力无法使用。本次只做了规则生成，记忆提取的深度和准确度都会打折。</p>
+        <router-link to="/settings" class="fur-warning-btn">→ 去「设置」配置 DeepSeek</router-link>
+      </div>
     </section>
 
     <section class="metrics">
@@ -2568,6 +2574,37 @@ ol.rank-list li::before {
 .fur-detail {
   color: var(--text-3);
   font-size: 12px;
+}
+
+/* 质量警告（未配置 DeepSeek） */
+.fur-warning {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #fef6e7;
+  border: 1px solid #f5d98a;
+  border-radius: var(--radius-sm);
+}
+.fur-warning strong {
+  display: block;
+  color: #9a6a12;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.fur-warning p {
+  color: #8a6d3b;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.fur-warning-btn {
+  display: inline-block;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+.fur-warning-btn:hover {
+  text-decoration: underline;
 }
 
 /* ========== 高级操作折叠区 ========== */

@@ -19,6 +19,12 @@ export interface CodexConfig {
   model: string
 }
 
+export interface DeepseekConfig {
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
 export interface PlatformConfig {
   aiPlatformRoot: string
   e2eDataDir: string
@@ -53,6 +59,10 @@ export function testClaude(claudeConfig: ClaudeConfig) {
 
 export function testCodex(codexConfig: CodexConfig) {
   return api.post<CheckResult>('/settings/test-codex', { codexConfig })
+}
+
+export function testDeepseek(deepseekConfig: DeepseekConfig) {
+  return api.post<CheckResult>('/settings/test-deepseek', { deepseekConfig })
 }
 
 /** 生成发现提示词（供复制到 Claude Code 手动执行） */

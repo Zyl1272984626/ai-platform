@@ -120,3 +120,54 @@ settingsRouter.post('/test-codex', async (req: Request, res: Response) => {
     res.json({ ok: false, msg: '连接失败: ' + (e.message || String(e)) });
   }
 });
+
+/** 测试 DeepSeek 连接（先保存再测试） */
+settingsRouter.post('/test-deepseek', async (req: Request, res: Response) => {
+  try {
+    if (req.body.deepseekConfig) {
+      updateConfig({ deepseekConfig: req.body.deepseekConfig });
+      // 同步更新运行时配置（deepseek-client 有独立内存缓存）
+      const { updateDeepSeekConfig } = await import('../services/deepseek-client.js');
+      updateDeepSeekConfig(req.body.deepseekConfig);
+    }
+
+    const config = getConfig();
+    const dsCfg = config.deepseekConfig;
+    if (!dsCfg?.apiKey) {
+      res.json({ ok: false, msg: '未配置 API Key' });
+      return;
+    }
+
+    const baseUrl = (dsCfg.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
+    const model = dsCfg.model || 'deepseek-v4-flash';
+
+    // 用一个最小 chat 请求验证
+    const resp = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${dsCfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const data: any = await resp.json().catch(() => null);
+
+    if (resp.ok && data?.choices) {
+      res.json({
+        ok: true,
+        msg: `连接成功 (model=${model}, response=${(data.choices[0]?.message?.content || '').slice(0, 30)})`,
+      });
+    } else {
+      const errMsg = data?.error?.message || data?.message || JSON.stringify(data).slice(0, 150);
+      res.json({ ok: false, msg: `${resp.status} ${errMsg}`.slice(0, 200) });
+    }
+  } catch (e: any) {
+    res.json({ ok: false, msg: '连接失败: ' + (e.message || String(e)) });
+  }
+});

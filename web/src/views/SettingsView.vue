@@ -297,6 +297,46 @@
         </div>
       </section>
 
+      <!-- DeepSeek 配置 -->
+      <section class="setting-section">
+        <h2 class="section-title">DeepSeek 配置（记忆策展 / 代码审查）</h2>
+        <p class="field-desc" style="margin-top: -8px; margin-bottom: 16px;">
+          会话冷库的 AI 深度策展、智能筛选和代码审查依赖 DeepSeek。未配置时这些 AI 能力会跳过，冷库质量受限。
+          在 <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color: var(--brand);">platform.deepseek.com</a> 申请 API Key。
+        </p>
+        <div class="form-group">
+          <label>API Key</label>
+          <div class="input-row token-row">
+            <input
+              v-model="form.deepseekConfig.apiKey"
+              :type="showDeepseekToken ? 'text' : 'password'"
+              placeholder="粘贴 DeepSeek API Key（sk-开头）"
+            />
+            <button class="btn-toggle-pw" @click="showDeepseekToken = !showDeepseekToken">
+              {{ showDeepseekToken ? '隐藏' : '显示' }}
+            </button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>API 地址</label>
+          <p class="field-desc">默认官方接口</p>
+          <input v-model="form.deepseekConfig.baseUrl" placeholder="https://api.deepseek.com/v1" />
+        </div>
+        <div class="form-group">
+          <label>模型</label>
+          <p class="field-desc">推荐 deepseek-v4-flash（注意：deepseek-flash 已下线，需用 v4 版本）</p>
+          <input v-model="form.deepseekConfig.model" placeholder="deepseek-v4-flash" />
+        </div>
+        <div class="form-group" style="margin-top: 12px;">
+          <button class="btn-test-claude" :disabled="testingDeepseek || !form.deepseekConfig.apiKey" @click="doTestDeepseek">
+            {{ testingDeepseek ? '测试中...' : '测试连接' }}
+          </button>
+          <span v-if="deepseekTestResult" class="check-badge" :class="deepseekTestResult.ok ? 'ok' : 'err'" style="margin-left: 10px;">
+            {{ deepseekTestResult.msg }}
+          </span>
+        </div>
+      </section>
+
       <!-- 环境检测 -->
       <section class="setting-section">
         <h2 class="section-title">环境检测</h2>
@@ -931,7 +971,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, type Ref } from 'vue'
 import { marked } from 'marked'
-import { getSettings, updateSettings, checkSettings, testClaude, testCodex, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
+import { getSettings, updateSettings, checkSettings, testClaude, testCodex, testDeepseek, generateDiscoveryPrompt, type PlatformConfig, type CheckResult } from '../api/settings'
 import ToolCallBlock from '../components/chat/ToolCallBlock.vue'
 import PasswordInput from '../components/common/PasswordInput.vue'
 import PageHeader from '../components/layout/PageHeader.vue'
@@ -982,10 +1022,13 @@ const checking = ref(false)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 const showToken = ref(false)
 const showCodexToken = ref(false)
+const showDeepseekToken = ref(false)
 const testingClaude = ref(false)
 const testingCodex = ref(false)
+const testingDeepseek = ref(false)
 const claudeTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 const codexTestResult = ref<{ ok: boolean; msg: string } | null>(null)
+const deepseekTestResult = ref<{ ok: boolean; msg: string } | null>(null)
 
 // 基础配置表单
 const form = reactive<PlatformConfig>({
@@ -1009,6 +1052,11 @@ const form = reactive<PlatformConfig>({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-5-codex',
+  },
+  deepseekConfig: {
+    apiKey: '',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-v4-flash',
   },
 })
 
@@ -1294,6 +1342,9 @@ onMounted(async () => {
     }
     if ((settingsRes.data as any).codexConfig) {
       form.codexConfig = { ...form.codexConfig, ...(settingsRes.data as any).codexConfig }
+    }
+    if ((settingsRes.data as any).deepseekConfig) {
+      form.deepseekConfig = { ...form.deepseekConfig, ...(settingsRes.data as any).deepseekConfig }
     }
     config.defaultProjectId = (settingsRes.data as any).defaultProjectId || ''
 
@@ -1716,6 +1767,19 @@ async function doTestCodex() {
     codexTestResult.value = { ok: false, msg: '请求失败: ' + e.message }
   } finally {
     testingCodex.value = false
+  }
+}
+
+async function doTestDeepseek() {
+  testingDeepseek.value = true
+  deepseekTestResult.value = null
+  try {
+    const res = await testDeepseek(form.deepseekConfig)
+    deepseekTestResult.value = res.data
+  } catch (e: any) {
+    deepseekTestResult.value = { ok: false, msg: '请求失败: ' + e.message }
+  } finally {
+    testingDeepseek.value = false
   }
 }
 
