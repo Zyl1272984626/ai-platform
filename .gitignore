@@ -36,6 +36,12 @@ nul
 # Vite cache
 web/.vite-cache/
 
+# Playwright MCP logs/screenshots
+.playwright-mcp/
+
+# Pipeline runtime traces (generated per-run)
+data/pipeline-traces/
+
 # Logs
 *.log
 npm-debug.log*
