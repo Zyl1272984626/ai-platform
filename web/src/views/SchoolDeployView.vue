@@ -91,6 +91,13 @@
               <span class="check-desc">应用启动并自动建表后，更新 fs_sys_config、ai_model_source 和 ai_file_storage</span>
             </div>
           </label>
+          <label class="check-item">
+            <input type="checkbox" v-model="options.installSandboxRuntime" />
+            <div class="check-content">
+              <span class="check-title">安装运行时环境依赖</span>
+              <span class="check-desc">在 02 脚本中检查并安装 Node/npm、Python/pip、文档组件、LibreOffice、Poppler 和中文字体（仅 Linux 应用服务器生效）</span>
+            </div>
+          </label>
         </div>
         <div class="step-summary">
           部署包将包含：01-db-create.sh → {{ appDeployScriptName }} → 03-system-config.sh；已选择：{{ activeSteps }}
@@ -138,6 +145,7 @@ const options = reactive({
   createOneapiDatabase: false,
   deployOneapi: true,
   initSql: true,
+  installSandboxRuntime: true,
 })
 
 const appDeployScriptName = computed(() => {
@@ -168,7 +176,7 @@ const warMissingFields = computed(() => {
   if (!s.database) missing.push('数据库名')
   if (!s.dbUser) missing.push('DB User')
   if (!s.dbPassword) missing.push('DB Password')
-  if (!s.cas?.casHost) missing.push('CAS Host')
+  if (!s.cas?.host) missing.push('CAS Host')
   return missing
 })
 
@@ -176,12 +184,15 @@ const effectiveOptions = computed(() => {
   const s = school.value
   const dc = s?.deployConfig
   const hasOneapiForInit = !!dc?.oneapiHost && !!dc?.oneapiKey
+  const serverOs = dc?.serverOs || s?.common?.serverOs
 
   return {
     createAgentDatabases: options.createAgentDatabases && !!dc?.dbRootPassword,
     createOneapiDatabase: options.createOneapiDatabase && !!dc?.dbRootPassword,
     deployOneapi: options.deployOneapi && !!dc?.dbRootPassword,
     initSql: options.initSql && hasOneapiForInit,
+    // 运行时环境安装脚本只生成 Linux 版，Windows 应用服务器跳过
+    installSandboxRuntime: options.installSandboxRuntime && serverOs !== 'windows',
   }
 })
 
@@ -191,6 +202,7 @@ const activeSteps = computed(() => {
   if (effective.createAgentDatabases) steps.push('创建 Agent 数据库')
   if (effective.createOneapiDatabase) steps.push('创建 OneApi 数据库')
   if (effective.deployOneapi) steps.push('部署 OneApi')
+  if (effective.installSandboxRuntime) steps.push('安装运行时环境')
   if (effective.initSql) steps.push('启动后系统配置')
   return steps.length ? steps.join(' → ') : '（无额外步骤）'
 })
@@ -202,6 +214,7 @@ const skippedSteps = computed(() => {
   if (options.createOneapiDatabase && !effective.createOneapiDatabase) skipped.push('创建 OneApi 数据库（缺数据库 Root 密码）')
   if (options.deployOneapi && !effective.deployOneapi) skipped.push('部署 OneApi（缺数据库 Root 密码）')
   if (options.initSql && !effective.initSql) skipped.push('启动后系统配置（缺 OneApi 地址或 OneApi Key）')
+  if (options.installSandboxRuntime && !effective.installSandboxRuntime) skipped.push('安装运行时环境（仅 Linux 应用服务器支持）')
   return skipped
 })
 
@@ -240,6 +253,7 @@ async function doDeploy() {
       oneapiDatabase: 'oneapi',
       deployOneapi: effective.deployOneapi,
       initSql: effective.initSql,
+      installSandboxRuntime: effective.installSandboxRuntime,
     })
     toast.success('部署包已生成并下载')
   } catch (e: any) {

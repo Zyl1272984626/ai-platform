@@ -5,7 +5,6 @@
       <template #badge>
         <StatusBadge v-if="school" :status="school.status" />
       </template>
-      <BaseButton variant="primary" :loading="saving" @click="doSave">保存配置</BaseButton>
     </PageHeader>
 
     <div v-if="loading" class="loading">加载中...</div>
@@ -19,378 +18,135 @@
         <div class="info-grid">
           <div class="info-item"><span class="label">编码</span><span class="value mono">{{ school.code }}</span></div>
           <div class="info-item"><span class="label">名称</span><span class="value">{{ school.name }}</span></div>
+          <div class="info-item">
+            <span class="label">项目数量</span>
+            <span class="value">{{ school.projects.length }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">最近部署</span>
+            <span class="value mono">{{ school.lastDeploy || '-' }}</span>
+          </div>
         </div>
       </section>
 
-      <!-- Database -->
+      <!-- 项目列表 -->
       <section class="setting-section">
-        <h2 class="section-title">数据库配置</h2>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>数据库类型</label>
-            <select v-model="form.type" @change="onDbTypeChange">
-              <option value="mysql">MySQL</option>
-              <option value="dameng">达梦</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>DB Host</label>
-            <input v-model="form.dbHost" placeholder="数据库主机地址" />
-          </div>
-          <div class="form-group">
-            <label>DB Port</label>
-            <input v-model.number="form.dbPort" type="number" placeholder="端口号" />
-          </div>
-          <div class="form-group">
-            <label>数据库名</label>
-            <input v-model="form.database" placeholder="例: agent_portal" />
-          </div>
-          <div class="form-group">
-            <label>DB User</label>
-            <input v-model="form.dbUser" placeholder="数据库用户名" />
-          </div>
-          <div class="form-group">
-            <label>DB Password</label>
-            <PasswordInput v-model="form.dbPassword" placeholder="数据库密码" />
-          </div>
-          <div class="form-group">
-            <label>MySQL Docker 容器名</label>
-            <input v-model="form.deployConfig.mysqlContainer" placeholder="可选；不填则使用宿主机 mysql 命令" />
+        <div class="section-title-row">
+          <h2 class="section-title no-border">部署项目</h2>
+          <BaseButton variant="primary" :icon="IconAction.add" @click="showAddProject = true">添加项目</BaseButton>
+        </div>
+        <p class="section-hint">每个项目是一个独立可部署的应用，拥有各自的数据库、端口和服务器配置。</p>
+
+        <div v-if="school.projects.length === 0" class="empty-projects">
+          <EmptyState title="暂无项目" description="点击右上角添加第一个项目（如 Agent 智能体平台、知识中心）">
+            <template #icon><Icon :icon="IconNav.school" :size="40" /></template>
+          </EmptyState>
+        </div>
+
+        <div v-else class="project-grid">
+          <div v-for="p in school.projects" :key="p.code" class="project-card">
+            <div class="proj-top">
+              <div class="proj-name-row">
+                <span class="proj-type-badge" :class="`type-${p.type}`">{{ typeLabel(p.type) }}</span>
+                <span class="proj-name" @click="goConfig(p.code)">{{ p.name }}</span>
+              </div>
+              <StatusBadge :status="p.status" />
+            </div>
+            <div class="proj-info">
+              <div class="info-row"><span class="info-label">服务器</span><span class="info-value mono">{{ p.deploy.host || '-' }}</span></div>
+              <div class="info-row"><span class="info-label">应用端口</span><span class="info-value mono">{{ p.deploy.appPort }}</span></div>
+              <div class="info-row"><span class="info-label">数据库</span><span class="info-value mono">{{ p.database }}</span></div>
+              <div class="info-row"><span class="info-label">最近部署</span><span class="info-value mono">{{ p.lastDeploy || '-' }}</span></div>
+            </div>
+            <div class="proj-actions">
+              <button class="act-btn act-config" @click="goConfig(p.code)">配置</button>
+              <button class="act-btn act-deploy" @click="goDeploy(p.code)">部署</button>
+              <button class="act-btn act-del" @click="confirmDeleteProject(p)">移除</button>
+            </div>
           </div>
         </div>
       </section>
-
-      <!-- CAS -->
-      <section class="setting-section">
-        <h2 class="section-title">CAS 配置</h2>
-        <div class="form-grid">
-          <div class="form-group toggle-group">
-            <label>启用 CAS</label>
-            <input type="checkbox" v-model="form.cas.enableCas" />
-          </div>
-          <div class="form-group toggle-group">
-            <label>启用移动端 CAS</label>
-            <input type="checkbox" v-model="form.cas.enableMobileCas" />
-          </div>
-          <div class="form-group">
-            <label>CAS Host</label>
-            <input v-model="form.cas.casHost" placeholder="例：http://192.168.73.136:8082/agent" />
-          </div>
-          <div class="form-group">
-            <label>用户名</label>
-            <input v-model="form.passwords.username" placeholder="登录用户名" />
-          </div>
-          <div class="form-group">
-            <label>密码</label>
-            <PasswordInput v-model="form.passwords.defaultPassword" placeholder="登录密码" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Deploy Config -->
-      <section class="setting-section">
-        <h2 class="section-title">部署配置</h2>
-        <div class="form-grid">
-          <div class="form-group">
-            <label>目标服务器</label>
-            <input v-model="form.deploy.host" placeholder="例: 192.168.1.100" />
-          </div>
-          <div class="form-group">
-            <label>应用服务器系统</label>
-            <select v-model="form.deployConfig.serverOs">
-              <option value="linux">Linux</option>
-              <option value="windows">Windows</option>
-            </select>
-          </div>
-          <div class="form-group" v-if="form.deployConfig.serverOs === 'windows'">
-            <label>Windows 盘符</label>
-            <select v-model="form.deployConfig.windowsDrive">
-              <option value="C:">C:</option>
-              <option value="D:">D:</option>
-              <option value="E:">E:</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>SSH 用户</label>
-            <input v-model="form.deploy.user" placeholder="默认 root" />
-          </div>
-          <div class="form-group">
-            <label>数据库 Root 密码</label>
-            <PasswordInput v-model="form.deployConfig.dbRootPassword" placeholder="目标服务器数据库 root 密码" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Security & Passwords (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.security = !collapsed.security">
-          <span>安全 & 密码</span>
-          <Icon :icon="collapsed.security ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
-        </h2>
-        <div v-show="!collapsed.security" class="form-grid">
-          <div class="form-group">
-            <label>Security Mode</label>
-            <input v-model="form.security.mode" placeholder="安全模式" />
-          </div>
-          <div class="form-group">
-            <label>超级密码</label>
-            <PasswordInput v-model="form.passwords.superPassword" placeholder="超级用户密码" />
-          </div>
-          <div class="form-group">
-            <label>密码 Salt</label>
-            <input v-model="form.passwords.salt" placeholder="加密盐值" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Common (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.common = !collapsed.common">
-          <span>高级配置</span>
-          <Icon :icon="collapsed.common ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
-        </h2>
-        <div v-show="!collapsed.common" class="form-grid">
-          <div class="form-group">
-            <label>高德地图 Key</label>
-            <input v-model="form.common.amapKey" placeholder="AMap Key" />
-          </div>
-          <div class="form-group">
-            <label>Druid 用户名</label>
-            <input v-model="form.common.druidUser" placeholder="Druid 监控用户名" />
-          </div>
-          <div class="form-group">
-            <label>Druid 密码</label>
-            <PasswordInput v-model="form.common.druidPassword" placeholder="Druid 监控密码" />
-          </div>
-        </div>
-      </section>
-
-      <!-- OneApi Config (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.oneapi = !collapsed.oneapi">
-          <span>OneApi 配置</span>
-          <Icon :icon="collapsed.oneapi ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
-        </h2>
-        <div v-show="!collapsed.oneapi" class="form-grid">
-          <div class="form-group">
-            <label>OneApi 地址</label>
-            <input v-model="form.deployConfig.oneapiHost" placeholder="例: 192.168.1.100" />
-          </div>
-          <div class="form-group">
-            <label>OneApi 端口</label>
-            <input v-model.number="form.deployConfig.oneapiPort" type="number" placeholder="3000" />
-          </div>
-          <div class="form-group">
-            <label>OneApi Key</label>
-            <PasswordInput v-model="form.deployConfig.oneapiKey" placeholder="sk-xxx" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Knowledge (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.knowledge = !collapsed.knowledge">
-          <span>知识中心配置</span>
-          <Icon :icon="collapsed.knowledge ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
-        </h2>
-        <div v-show="!collapsed.knowledge" class="form-grid">
-          <div class="form-group full">
-            <label>Base URL</label>
-            <input v-model="form.deployConfig.knowledgeBaseUrl" placeholder="例: http://192.168.1.100:9999" />
-          </div>
-          <div class="form-group">
-            <label>APP ID</label>
-            <input v-model="form.deployConfig.knowledgeAppId" placeholder="知识中心应用 ID" />
-          </div>
-          <div class="form-group">
-            <label>API Key</label>
-            <PasswordInput v-model="form.deployConfig.knowledgeApiKey" placeholder="知识中心 API Key" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Voice API (collapsible) -->
-      <section class="setting-section collapsible">
-        <h2 class="section-title clickable" @click="collapsed.voice = !collapsed.voice">
-          <span>语音配置</span>
-          <Icon :icon="collapsed.voice ? IconArrow.up : IconArrow.down" :size="16" class="collapse-icon" />
-        </h2>
-        <div v-show="!collapsed.voice" class="form-grid">
-          <div class="form-group full">
-            <label>语音识别 API 地址</label>
-            <input v-model="form.deployConfig.voiceApiUrl" placeholder="例: http://192.168.1.10/voice-api" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Actions -->
-      <div class="actions-bar">
-        <button class="btn btn-save" @click="doSave" :disabled="saving">
-          {{ saving ? '保存中...' : '保存配置' }}
-        </button>
-      </div>
     </div>
+
+    <!-- 添加项目 -->
+    <ProjectAddDialog
+      v-if="showAddProject"
+      :school-code="school?.code || ''"
+      @added="onProjectAdded"
+      @cancel="showAddProject = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import PasswordInput from '../components/common/PasswordInput.vue'
+import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/layout/PageHeader.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import Icon from '../components/ui/Icon.vue'
-import { IconArrow } from '../composables/icons'
+import ProjectAddDialog from '../components/project/ProjectAddDialog.vue'
+import { IconNav, IconAction } from '../composables/icons'
 import { useToast } from '../composables/useToast'
-import { getSchool, updateSchool } from '../api/schools'
-import type { School } from '../api/types'
+import { getSchool, deleteProject } from '../api/schools'
+import type { School, Project, ProjectType } from '../api/types'
 
 const router = useRouter()
 const route = useRoute()
 const code = route.params.code as string
-
-const loading = ref(true)
-const saving = ref(false)
-const school = ref<School | null>(null)
 const { toast } = useToast()
 
-// 三个区块默认折叠
-const collapsed = reactive({
-  security: true,
-  common: true,
-  oneapi: false,
-  knowledge: true,
-  voice: true,
-})
+const loading = ref(true)
+const school = ref<School | null>(null)
+const showAddProject = ref(false)
 
-// 默认值来自主系统当前配置文件
-const DEFAULTS = {
-  security: {
-    mode: 'dev',
-  },
-  passwords: {
-    username: '',
-    defaultPassword: '111111',
-    superPassword: 'fskj_dst_2023',
-    salt: 'system_salt',
-  },
-  common: {
-    amapKey: '3ef0e07e35a573719aba2f0d1f117e4f',
-    druidUser: 'druid',
-    druidPassword: '123456',
-  },
+const TYPE_LABELS: Record<ProjectType, string> = {
+  'agent': 'Agent',
+  'knowledge-center': '知识中心',
 }
 
-const form = reactive({
-  type: 'mysql' as 'mysql' | 'dameng',
-  dbHost: '',
-  dbPort: 5237,
-  database: '',
-  dbUser: '',
-  dbPassword: '',
-  deploy: {
-    host: '',
-    user: 'root',
-  },
-  cas: {
-    enableCas: false,
-    enableMobileCas: false,
-    casHost: '',
-    loginUrl: '',
-    loginSuccess: '',
-  },
-  security: { ...DEFAULTS.security },
-  passwords: { ...DEFAULTS.passwords },
-  common: { ...DEFAULTS.common },
-  deployConfig: {
-    serverOs: 'linux' as 'linux' | 'windows',
-    windowsDrive: 'D:',
-    dbRootPassword: '',
-    mysqlContainer: '',
-    oneapiHost: '',
-    oneapiPort: 3000,
-    oneapiKey: '',
-    knowledgeBaseUrl: '',
-    knowledgeAppId: '',
-    knowledgeApiKey: '',
-    voiceApiUrl: '',
-  },
-})
+function typeLabel(type: ProjectType): string {
+  return TYPE_LABELS[type] || type
+}
 
 onMounted(async () => {
+  await fetchSchool()
+})
+
+async function fetchSchool() {
+  loading.value = true
   try {
-    const data = await getSchool(code)
-    school.value = data
-    form.type = data.type || 'mysql'
-    form.dbHost = data.dbHost || ''
-    form.dbPort = data.dbPort ?? (data.type === 'mysql' ? 3306 : 5237)
-    form.database = data.database || ''
-    form.dbUser = data.dbUser || ''
-    form.dbPassword = data.dbPassword || ''
-    form.deploy.host = data.deploy?.host || ''
-    form.deploy.user = data.deploy?.user || 'root'
-    if (data.cas) Object.assign(form.cas, data.cas)
-    // 已保存的覆盖默认值，未保存的保持默认
-    if (data.security && hasContent(data.security as Record<string, unknown>)) Object.assign(form.security, data.security)
-    if (data.passwords && hasContent(data.passwords as Record<string, unknown>)) Object.assign(form.passwords, data.passwords)
-    if (data.common && hasContent(data.common as Record<string, unknown>)) Object.assign(form.common, data.common)
-    if (data.deployConfig && hasContent(data.deployConfig as Record<string, unknown>)) Object.assign(form.deployConfig, data.deployConfig)
-    if (!data.deployConfig?.serverOs && data.common?.serverOs) form.deployConfig.serverOs = data.common.serverOs
-    if (!data.deployConfig?.windowsDrive && data.common?.windowsDrive) form.deployConfig.windowsDrive = data.common.windowsDrive
+    school.value = await getSchool(code)
   } catch (e: any) {
     toast.error('加载失败: ' + e.message)
   } finally {
     loading.value = false
   }
-})
-
-/** 判断对象是否有非空值（用于区分从未配置过 vs 明确配置过） */
-function hasContent(obj: Record<string, unknown>): boolean {
-  return Object.values(obj).some(v => v !== undefined && v !== null && v !== '')
 }
 
-function collectFormData() {
-  return {
-    status: 'configured' as const,
-    type: form.type,
-    dbHost: form.dbHost,
-    dbPort: form.dbPort,
-    database: form.database,
-    dbUser: form.dbUser,
-    dbPassword: form.dbPassword,
-    deploy: {
-      ...(school.value?.deploy || {}),
-      host: form.deploy.host,
-      user: form.deploy.user || 'root',
-    },
-    cas: { ...form.cas },
-    security: { ...form.security },
-    passwords: { ...form.passwords },
-    common: { ...form.common },
-    deployConfig: { ...form.deployConfig },
-  }
+function goConfig(projectCode: string) {
+  router.push(`/schools/${code}/projects/${projectCode}`)
 }
 
-function onDbTypeChange() {
-  if (form.type === 'mysql' && (!form.dbPort || form.dbPort === 5237)) {
-    form.dbPort = 3306
-  }
-  if (form.type === 'dameng' && (!form.dbPort || form.dbPort === 3306)) {
-    form.dbPort = 5237
-  }
+function goDeploy(projectCode: string) {
+  router.push(`/schools/${code}/projects/${projectCode}/deploy`)
 }
 
-async function doSave() {
-  saving.value = true
+async function onProjectAdded() {
+  showAddProject.value = false
+  await fetchSchool()
+  toast.success('项目已添加')
+}
+
+async function confirmDeleteProject(p: Project) {
+  if (!confirm(`确认从该学校移除项目「${p.name}」？此操作不可撤销。`)) return
   try {
-    const updated = await updateSchool(code, collectFormData())
-    school.value = updated
-    toast.success('配置已保存')
+    await deleteProject(code, p.code)
+    await fetchSchool()
+    toast.success('项目已移除')
   } catch (e: any) {
-    toast.error('保存失败: ' + e.message)
-  } finally {
-    saving.value = false
+    toast.error('移除失败: ' + e.message)
   }
 }
 </script>
@@ -403,7 +159,6 @@ async function doSave() {
   font-size: 16px;
 }
 
-/* Sections */
 .setting-section {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
@@ -418,104 +173,98 @@ async function doSave() {
   margin-bottom: var(--space-4);
   padding-bottom: var(--space-2);
   border-bottom: 1px solid var(--border-light);
+}
+.section-title.no-border { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+.section-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-.section-title.clickable {
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 0;
-  border-bottom: none;
-  transition: background var(--duration-fast) var(--ease);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
-  margin: -8px -12px 0;
-}
-.section-title.clickable:hover {
-  background: var(--brand-soft);
-}
-.collapse-icon {
-  font-size: 14px;
+.section-hint {
+  font-size: 13px;
   color: var(--text-3);
+  margin: 8px 0 16px;
 }
 
-/* Info grid (read-only) */
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px 24px;
 }
-.info-item {
+.info-item { display: flex; flex-direction: column; gap: 2px; }
+.info-item .label { font-size: 12px; color: var(--text-3); }
+.info-item .value { font-size: 14px; color: var(--text-1); }
+.info-item .value.mono { font-family: var(--font-mono); font-size: 13px; }
+
+.empty-projects { padding: 24px 0; }
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.project-card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 12px;
+  transition: box-shadow var(--duration) var(--ease);
 }
-.info-item .label {
-  font-size: 12px;
-  color: var(--text-3);
+.project-card:hover { box-shadow: var(--shadow-md); }
+.proj-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-.info-item .value {
-  font-size: 14px;
+.proj-name-row { display: flex; align-items: center; gap: 8px; }
+.proj-type-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+.proj-type-badge.type-knowledge-center { background: #e6f7ee; color: #1a8a4e; }
+.proj-name {
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-1);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease);
 }
-.info-item .value.mono {
-  font-family: var(--font-mono);
+.proj-name:hover { color: var(--brand); }
+.proj-info { flex: 1; }
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
   font-size: 13px;
 }
+.info-label { color: var(--text-3); }
+.info-value { color: var(--text-1); }
+.info-value.mono { font-family: var(--font-mono); font-size: 12px; }
 
-/* Form grid */
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-4);
+.proj-actions {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border-light);
   padding-top: 12px;
 }
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.form-group label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-.form-group input[type="text"],
-.form-group input[type="password"],
-.form-group input[type="number"],
-.form-group select {
-  padding: 8px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  transition: border-color var(--duration) var(--ease);
-}
-.form-group input:focus,
-.form-group select:focus {
-  border-color: var(--brand);
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
-}
-.toggle-group {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-}
-.toggle-group label {
-  margin: 0;
-}
-.toggle-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+.act-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
   cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+  transition: all 0.15s;
 }
-
-/* Actions bar */
-.actions-bar {
-  display: flex;
-  gap: 12px;
-  margin: 24px 0;
-}
-
+.act-config:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.act-deploy:hover { border-color: var(--success); color: var(--success); background: var(--success-bg); }
+.act-del:hover { border-color: var(--error); color: var(--error); background: var(--error-bg); }
 </style>

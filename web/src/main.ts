@@ -13,7 +13,8 @@ const DashboardView = () => import('./views/DashboardView.vue')
 const ChatView = () => import('./views/ChatView.vue')
 const SchoolView = () => import('./views/SchoolView.vue')
 const SchoolDetailView = () => import('./views/SchoolDetailView.vue')
-const SchoolDeployView = () => import('./views/SchoolDeployView.vue')
+const ProjectConfigView = () => import('./views/ProjectConfigView.vue')
+const ProjectDeployView = () => import('./views/ProjectDeployView.vue')
 const WorkflowView = () => import('./views/WorkflowView.vue')
 const SkillView = () => import('./views/SkillView.vue')
 const TestView = () => import('./views/TestView.vue')
@@ -27,8 +28,12 @@ const router = createRouter({
     { path: '/', component: DashboardView },
     { path: '/chat', component: ChatView },
     { path: '/schools', component: SchoolView },
-    { path: '/schools/:code/deploy', component: SchoolDeployView },
     { path: '/schools/:code', component: SchoolDetailView },
+    // 项目级：配置 / 部署（必须放在 :code 之前，否则被通配匹配）
+    { path: '/schools/:code/projects/:pcode/deploy', component: ProjectDeployView },
+    { path: '/schools/:code/projects/:pcode', component: ProjectConfigView },
+    // 兼容旧书签：/schools/:code/deploy → 跳转到 agent 项目部署
+    { path: '/schools/:code/deploy', redirect: to => `/schools/${to.params.code}/projects/agent/deploy` },
     { path: '/workflows', component: WorkflowView },
     { path: '/skills', component: SkillView },
     { path: '/tests', component: TestView },

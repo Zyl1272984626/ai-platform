@@ -37,13 +37,23 @@ export interface CasConfig {
   enableCas?: boolean
   enableMobileCas?: boolean
   casHost?: string
+  host?: string
   loginUrl?: string
   loginSuccess?: string
 }
 
 export interface SandboxConfig {
   basePath?: string
+  /** 是否启用沙箱隔离（false 则使用 LocalStrategy，不做隔离） */
+  enabled?: boolean
+  /** 隔离策略：auto / bubblewrap / wsl / sandboxie / local */
   strategy?: string
+  /** Bubblewrap 二进制路径（Linux / WSL），默认 bwrap */
+  bubblewrapBinary?: string
+  /** 沙箱并发池大小（同时执行的并发数） */
+  poolSize?: number
+  /** 运行时路径列表（只读挂载到沙箱：python/node 等），写回 application-agent.yml 的 runtime-paths */
+  runtimePaths?: string[]
   sandboxieHome?: string
   sandboxieIniPath?: string
 }
@@ -83,20 +93,110 @@ export interface DeployConfig {
   voiceApiUrl?: string
 }
 
+// ========== 项目(Project)模型 ==========
+
+/** 项目类型：决定脚本模板、yml 模板、构建方式 */
+export type ProjectType = 'agent' | 'knowledge-center'
+
+/** knowledge-center 专属配置（Milvus/Neo4j/Redis/Embedding/Rerank） */
+export interface KnowledgeCenterConfig {
+  milvus?: {
+    url?: string
+    port?: number
+    userName?: string
+    userPassword?: string
+    dbName?: string
+    embeddingDimension?: number
+  }
+  neo4j?: {
+    uri?: string
+    username?: string
+    password?: string
+  }
+  redis?: {
+    host?: string
+    port?: number
+    password?: string
+    database?: number
+  }
+  embedding?: {
+    baseUrl?: string
+    apiKey?: string
+    modelName?: string
+    chatModelName?: string
+    graphModelName?: string
+    visionModelName?: string
+    audioTranscriptionModelName?: string
+  }
+  rerank?: {
+    url?: string
+    model?: string
+    minScore?: number
+  }
+  profile?: 'dev' | 'prod'
+}
+
+/** 一个项目 = 一个独立可部署应用（自带数据库/端口/服务器） */
+export interface Project {
+  code: string
+  name: string
+  type: ProjectType
+  status: 'pending' | 'configured' | 'deployed' | 'error'
+  lastDeploy: string | null
+
+  deploy: {
+    host: string
+    user: string
+    serverOs: 'linux' | 'windows'
+    windowsDrive?: string
+    dbRootPassword?: string
+    mysqlContainer?: string
+    appPort: number
+  }
+
+  dbType: 'mysql' | 'dameng'
+  dbHost: string
+  dbPort: number
+  dbUser: string
+  dbPassword: string
+  database: string
+  businessDatabase?: string
+
+  // agent 专属
+  cas?: CasConfig
+  sandbox?: SandboxConfig
+  security?: SecurityConfig
+  passwords?: PasswordConfig
+  common?: CommonConfig
+  deployConfig?: DeployConfig
+
+  // knowledge-center 专属
+  knowledgeCenter?: KnowledgeCenterConfig
+}
+
 export interface School {
   code: string
   name: string
-  type: 'mysql' | 'dameng'
-  port: number
-  database: string
-  deploy: {
+  status: 'pending' | 'configured' | 'deployed' | 'error'
+  lastDeploy: string | null
+
+  /** 项目列表：每个 project 是一个独立可部署应用 */
+  projects: Project[]
+
+  // ===== 以下为旧字段（@deprecated），仅兼容期使用 =====
+  /** @deprecated 迁移到 projects[0] (agent) */
+  type?: 'mysql' | 'dameng'
+  /** @deprecated 迁移到 projects[0].deploy.appPort */
+  port?: number
+  /** @deprecated 迁移到 projects[0].database */
+  database?: string
+  /** @deprecated 迁移到 projects[0].deploy */
+  deploy?: {
     host: string
     user: string
     ymlDir?: string
     sshKey?: string
   }
-  status: 'pending' | 'configured' | 'deployed' | 'error'
-  lastDeploy: string | null
   dbHost?: string
   dbPort?: number
   dbUser?: string

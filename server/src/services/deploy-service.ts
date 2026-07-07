@@ -1,30 +1,54 @@
 /**
- * 部署服务：将学校配置注入 WAR 包
+ * 部署服务：将 project 配置注入 WAR 包 / 打包部署脚本
+ * 按 ProjectType 分发：agent 走 WAR 配置注入；knowledge-center 走 Docker 镜像 + 外挂配置。
  */
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import AdmZip from 'adm-zip';
-import { getConfig, getDefaultProject } from './config.js';
-import { getSchool } from './school-manager.js';
-import { previewConfigs } from './config-generator.js';
+import { getConfig, getDefaultProject, getProjectById } from './config.js';
+import { getSchool, getProject } from './school-manager.js';
+import type { School, Project, ProjectType } from './school-manager.js';
+import { previewConfigs, previewProjectConfigs } from './config-generator.js';
 import { generateDeployScripts, type DeployScriptParams } from './deploy-script-generator.js';
 
-/** 获取主系统 backend 目录 */
-function getBackendDir(): string {
-  const projectRoot = getDefaultProject()?.sourcePath || getConfig().projectRoot;
-  return path.resolve(projectRoot, 'backend');
+/** 各项目类型的 WAR 产物文件名（来自对应项目 pom.xml 的 finalName 或 artifactId） */
+const WAR_FILE_NAMES: Record<ProjectType, string> = {
+  'agent': 'agent-1.0.war',
+  'knowledge-center': 'knowledge-center.war',
+};
+
+/**
+ * 按 project type 解析其源码根目录。
+ * agent 用平台默认项目；其它类型从 platform-config 的 projects 注册表查（按 type 对应的 id）。
+ */
+const PROJECT_TYPE_TO_CONFIG_ID: Record<ProjectType, string> = {
+  'agent': 'agent-main',
+  'knowledge-center': 'knowledge-center',
+};
+
+function getProjectSourceRoot(type: ProjectType): string {
+  // 复用 config-generator 的同名逻辑，避免重复实现
+  // 此处直接读 config 注册表
+  const registered = getProjectById(PROJECT_TYPE_TO_CONFIG_ID[type]);
+  if (registered?.sourcePath) return registered.sourcePath;
+  if (type === 'agent') return getDefaultProject()?.sourcePath || getConfig().projectRoot;
+  throw new Error(`项目类型 "${type}" 未在设置中注册源码路径（缺少 id=${PROJECT_TYPE_TO_CONFIG_ID[type]} 的项目）。`);
 }
 
-/** 获取主系统 frontend 目录 */
-function getFrontendDir(): string {
-  const projectRoot = getDefaultProject()?.sourcePath || getConfig().projectRoot;
-  return path.resolve(projectRoot, 'frontend');
+/** 获取某 project 的 backend 目录 */
+function getBackendDir(type: ProjectType): string {
+  return path.resolve(getProjectSourceRoot(type), 'backend');
 }
 
-/** 获取主系统 WAR 路径 */
-function getSourceWarPath(): string {
-  return path.resolve(getBackendDir(), 'target', 'agent-1.0.war');
+/** 获取某 project 的 frontend 目录 */
+function getFrontendDir(type: ProjectType): string {
+  return path.resolve(getProjectSourceRoot(type), 'frontend');
+}
+
+/** 获取某 project 的 WAR 路径 */
+function getSourceWarPath(type: ProjectType): string {
+  return path.resolve(getBackendDir(type), 'target', WAR_FILE_NAMES[type]);
 }
 
 /** 输出目录 */
@@ -317,24 +341,24 @@ function createFrontendBuildPlan(frontendDir: string): FrontendBuildPlan {
 }
 
 /**
- * 构建主项目前端，产物由 Vite 写入 backend/src/main/resources/static。
+ * 构建项目前端，产物由 Vite 写入 backend/src/main/resources/static。
  */
-async function buildFrontendAssets(): Promise<void> {
-  const frontendDir = getFrontendDir();
-  const backendDir = getBackendDir();
+async function buildFrontendAssets(type: ProjectType): Promise<void> {
+  const frontendDir = getFrontendDir(type);
+  const backendDir = getBackendDir(type);
   const staticDir = path.join(backendDir, 'src', 'main', 'resources', 'static');
 
   if (!fs.existsSync(frontendDir)) {
-    throw new Error(`主系统 frontend 目录不存在: ${frontendDir}。请在设置页把默认项目源码路径配置为实际 Agent 项目根目录。`);
+    throw new Error(`项目 ${type} 的 frontend 目录不存在: ${frontendDir}。请在设置页注册该项目的源码路径。`);
   }
   if (!fs.existsSync(path.join(frontendDir, 'package.json'))) {
-    throw new Error(`主系统 frontend 缺少 package.json: ${frontendDir}`);
+    throw new Error(`项目 ${type} 的 frontend 缺少 package.json: ${frontendDir}`);
   }
   if (!fs.existsSync(path.join(frontendDir, 'node_modules'))) {
-    throw new Error(`主系统 frontend 尚未安装依赖: ${frontendDir}\\node_modules。请先在 frontend 目录执行 npm install。`);
+    throw new Error(`项目 ${type} 的 frontend 尚未安装依赖: ${frontendDir}\\node_modules。请先在 frontend 目录执行 npm install。`);
   }
 
-  console.log('[Deploy] 构建前端静态资源...');
+  console.log(`[Deploy] 构建前端静态资源 (${type})...`);
   const buildPlan = createFrontendBuildPlan(frontendDir);
   try {
     const args = buildPlan.configPath
@@ -357,11 +381,11 @@ async function buildFrontendAssets(): Promise<void> {
 /**
  * 构建 WAR。平台先清理/隔离 target，再执行 package，避免 Maven clean 因 Windows 文件占用直接失败。
  */
-async function mvnPackage(): Promise<void> {
-  const backendDir = getBackendDir();
+async function mvnPackage(type: ProjectType): Promise<void> {
+  const backendDir = getBackendDir(type);
 
   if (!fs.existsSync(backendDir)) {
-    throw new Error(`主系统 backend 目录不存在: ${backendDir}。请在设置页把默认项目源码路径配置为实际 Agent 项目根目录。`);
+    throw new Error(`项目 ${type} 的 backend 目录不存在: ${backendDir}。请在设置页注册该项目的源码路径。`);
   }
 
   const mavenCommand = findMavenCommand(backendDir);
@@ -386,10 +410,11 @@ async function mvnPackage(): Promise<void> {
 
 /**
  * 清理已从源码中删除、但可能残留在 target 中的历史 class。
- * 重点处理 ai/agent 包迁移后的孤儿 class，避免 Spring 扫描到旧 Bean。
+ * 仅 agent 有此需求（ai/agent 包迁移留下的孤儿 class）。
  */
-function cleanupStaleClasses(): void {
-  const backendDir = getBackendDir();
+function cleanupStaleClasses(type: ProjectType): void {
+  if (type !== 'agent') return; // knowledge-center 无此历史包袱
+  const backendDir = getBackendDir(type);
   const sourceRoot = path.join(backendDir, 'src', 'main', 'java');
   const targetRoots = [
     path.join(backendDir, 'target', 'classes', 'cn', 'topspeeder', 'ai', 'agent'),
@@ -409,7 +434,7 @@ function cleanupStaleClasses(): void {
 }
 
 function cleanupWarEntries(zip: AdmZip): void {
-  const backendDir = getBackendDir();
+  const backendDir = getBackendDir('agent');
   const sourceRoot = path.join(backendDir, 'src', 'main', 'java');
   const classPrefix = 'WEB-INF/classes/cn/topspeeder/ai/agent/';
 
@@ -454,96 +479,127 @@ function hasSourceForWarEntry(entryName: string, classPrefix: string, sourceRoot
 }
 
 /**
- * 生成学校专属 WAR 包
- * 1. 检查已有 WAR，没有则自动 mvn package
- * 2. 替换 WAR 中的配置文件
- * 3. 输出到 data/deploy/{code}.war
+ * 生成项目专属 WAR 包（按 project 驱动）。
+ * agent：替换 WAR 内配置文件；knowledge-center：仅构建 WAR（配置走外挂）。
+ * 1. 前端构建 + Maven clean 构建
+ * 2. 注入学校专属配置（仅 agent）
+ * 3. 输出到 data/deploy/{schoolCode}-{projectCode}.war
  */
-export async function buildSchoolWar(code: string): Promise<string> {
+export async function buildProjectWar(code: string, projectCode: string): Promise<string> {
   const school = getSchool(code);
   if (!school) throw new Error(`School not found: ${code}`);
+  const project = school.projects.find((p) => p.code === projectCode);
+  if (!project) throw new Error(`Project not found: ${code}/${projectCode}`);
 
   // 1. 每次部署都先构建前端，再执行 Maven clean 构建，确保 WAR 内前后端都是最新。
-  await buildFrontendAssets();
-  console.log('[Deploy] 执行 Maven clean 构建...');
-  cleanupStaleClasses();
-  await mvnPackage();
+  await buildFrontendAssets(project.type);
+  console.log(`[Deploy] 执行 Maven clean 构建 (${project.type})...`);
+  cleanupStaleClasses(project.type);
+  await mvnPackage(project.type);
 
-  const sourceWar = getSourceWarPath();
+  const sourceWar = getSourceWarPath(project.type);
   if (!fs.existsSync(sourceWar)) {
     throw new Error(`Maven 构建完成但未找到 WAR: ${sourceWar}`);
   }
 
-  // 2. 生成学校专属配置
-  const configs = previewConfigs(code);
-
-  // 3. 替换 WAR 内配置文件
   const zip = new AdmZip(sourceWar);
-  cleanupWarEntries(zip);
 
-  const warPathMap: Record<string, string> = {
-    'application.yml': 'WEB-INF/classes/application.yml',
-    'application-mysql.yml': 'WEB-INF/classes/config/application-mysql.yml',
-    'application-dameng.yml': 'WEB-INF/classes/config/application-dameng.yml',
-    'application-agent.yml': 'WEB-INF/classes/config/application-agent.yml',
-    'application-security.yml': 'WEB-INF/classes/config/application-security.yml',
-    'application-common.yml': 'WEB-INF/classes/config/application-common.yml',
-  };
+  if (project.type === 'agent') {
+    // agent：生成配置并替换 WAR 内文件
+    cleanupWarEntries(zip);
+    const configs = previewProjectConfigs(school, project);
+    const warPathMap: Record<string, string> = {
+      'application.yml': 'WEB-INF/classes/application.yml',
+      'application-mysql.yml': 'WEB-INF/classes/config/application-mysql.yml',
+      'application-dameng.yml': 'WEB-INF/classes/config/application-dameng.yml',
+      'application-agent.yml': 'WEB-INF/classes/config/application-agent.yml',
+      'application-security.yml': 'WEB-INF/classes/config/application-security.yml',
+      'application-common.yml': 'WEB-INF/classes/config/application-common.yml',
+    };
 
-  for (const [configName, content] of Object.entries(configs)) {
-    const warPath = warPathMap[configName];
-    if (!warPath) continue;
-    const buffer = Buffer.from(content, 'utf-8');
-    if (zip.getEntry(warPath)) {
-      zip.updateFile(warPath, buffer);
-    } else {
-      zip.addFile(warPath, buffer);
-      console.warn(`[Deploy] WAR 中缺少配置文件，已新增: ${warPath}`);
+    for (const [configName, content] of Object.entries(configs)) {
+      const warPath = warPathMap[configName];
+      if (!warPath) continue;
+      const buffer = Buffer.from(content, 'utf-8');
+      if (zip.getEntry(warPath)) {
+        zip.updateFile(warPath, buffer);
+      } else {
+        zip.addFile(warPath, buffer);
+        console.warn(`[Deploy] WAR 中缺少配置文件，已新增: ${warPath}`);
+      }
+      console.log(`[Deploy] 已替换配置: ${configName} -> ${warPath}`);
     }
-    console.log(`[Deploy] 已替换配置: ${configName} -> ${warPath}`);
   }
+  // knowledge-center：配置不进 WAR，由 buildProjectDeployPackage 作为外挂文件下发
 
-  // 4. 输出
+  // 2. 输出
   const outputDir = getOutputDir();
-  const outputPath = path.join(outputDir, `${code}.war`);
+  const outputPath = path.join(outputDir, `${code}-${projectCode}.war`);
   zip.writeZip(outputPath);
 
   return outputPath;
 }
 
 /**
- * 生成完整部署包（ZIP 内含 WAR + 分阶段部署脚本）
+ * 兼容旧调用：默认构建 agent project。
  */
-export async function buildSchoolDeployPackage(
+export async function buildSchoolWar(code: string): Promise<string> {
+  const school = getSchool(code);
+  if (!school) throw new Error(`School not found: ${code}`);
+  const agent = school.projects.find((p) => p.type === 'agent') || school.projects[0];
+  if (!agent) throw new Error(`School ${code} 没有可部署的项目`);
+  return buildProjectWar(code, agent.code);
+}
+
+/**
+ * 生成完整部署包（ZIP 内含 WAR + 分阶段部署脚本 + 项目专属资源）。
+ */
+export async function buildProjectDeployPackage(
   code: string,
+  projectCode: string,
   params: DeployScriptParams,
 ): Promise<string> {
   const school = getSchool(code);
   if (!school) throw new Error(`School not found: ${code}`);
+  const project = school.projects.find((p) => p.code === projectCode);
+  if (!project) throw new Error(`Project not found: ${code}/${projectCode}`);
 
   // 1. 生成 WAR
-  const warPath = await buildSchoolWar(code);
+  const warPath = await buildProjectWar(code, projectCode);
   const warFileName = path.basename(warPath);
 
-  // 2. 生成分阶段部署脚本
-  const scripts = generateDeployScripts(school, params, warFileName);
+  // 2. 生成分阶段部署脚本（按 project.type 分发）
+  const scripts = generateDeployScripts(school, project, params, warFileName);
 
   // 3. 打包成 ZIP
   const outputDir = getOutputDir();
-  const zipPath = path.join(outputDir, `${code}-deploy.zip`);
-
+  const zipPath = path.join(outputDir, `${code}-${projectCode}-deploy.zip`);
   const zip = new AdmZip();
+
   zip.addLocalFile(warPath, '', warFileName);
 
-  const toolScriptZip = getToolScriptZipPath();
-  if (toolScriptZip) {
-    zip.addLocalFile(toolScriptZip, '', 'tool-script.zip');
-  }
-
-  for (const assetName of ['oneapi.tar', 'cache.zip']) {
-    const assetPath = getDeployAssetPath(assetName);
-    if (assetPath) {
-      zip.addLocalFile(assetPath, '', assetName);
+  // 项目专属资源
+  if (project.type === 'agent') {
+    const toolScriptZip = getToolScriptZipPath();
+    if (toolScriptZip) {
+      zip.addLocalFile(toolScriptZip, '', 'tool-script.zip');
+    }
+    for (const assetName of ['oneapi.tar', 'cache.zip']) {
+      const assetPath = getDeployAssetPath(assetName);
+      if (assetPath) {
+        zip.addLocalFile(assetPath, '', assetName);
+      }
+    }
+  } else if (project.type === 'knowledge-center') {
+    // kc：外挂配置文件（覆盖后）+ Dockerfile
+    const configs = previewProjectConfigs(school, project);
+    for (const [name, content] of Object.entries(configs)) {
+      zip.addFile(`config/${name}`, Buffer.from(content, 'utf-8'));
+    }
+    // 项目根的 Dockerfile（kc 需要它来 docker build）
+    const dockerfilePath = path.join(getProjectSourceRoot('knowledge-center'), 'Dockerfile');
+    if (fs.existsSync(dockerfilePath)) {
+      zip.addLocalFile(dockerfilePath, '', 'Dockerfile');
     }
   }
 
@@ -562,4 +618,18 @@ export async function buildSchoolDeployPackage(
   zip.writeZip(zipPath);
 
   return zipPath;
+}
+
+/**
+ * 兼容旧调用：默认构建 agent project 的完整部署包。
+ */
+export async function buildSchoolDeployPackage(
+  code: string,
+  params: DeployScriptParams,
+): Promise<string> {
+  const school = getSchool(code);
+  if (!school) throw new Error(`School not found: ${code}`);
+  const agent = school.projects.find((p) => p.type === 'agent') || school.projects[0];
+  if (!agent) throw new Error(`School ${code} 没有可部署的项目`);
+  return buildProjectDeployPackage(code, agent.code, params);
 }

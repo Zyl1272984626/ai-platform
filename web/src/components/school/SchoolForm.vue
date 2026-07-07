@@ -53,13 +53,10 @@ function handleSubmit() {
     code: form.code,
   }
   if (props.mode === 'add') {
-    data.type = 'mysql'
-    data.port = 9998
-    data.database = 'agent_portal'
-    data.deploy = { host: '', user: 'root' }
-    data.deployConfig = { serverOs: 'linux', windowsDrive: 'D:' }
+    // 新学校先建空壳，项目通过"添加项目"流程单独创建（支持 agent / knowledge-center 等多类型）
     data.status = 'pending'
     data.lastDeploy = null
+    data.projects = []
   }
   emit('save', data)
 }

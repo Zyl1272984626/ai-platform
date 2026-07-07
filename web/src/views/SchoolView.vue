@@ -19,37 +19,24 @@
         </div>
         <div class="card-info">
           <div class="info-row">
-            <span class="info-label">访问地址</span>
-            <span class="info-value">{{ getAccessUrl(s) }}</span>
+            <span class="info-label">编码</span>
+            <span class="info-value">{{ s.code }}</span>
           </div>
           <div class="info-row">
-            <span class="info-label">用户名</span>
-            <span class="info-value">{{ s.passwords?.username || '-' }}</span>
+            <span class="info-label">项目数量</span>
+            <span class="info-value">{{ s.projects?.length || 0 }}</span>
           </div>
           <div class="info-row">
-            <span class="info-label">密码</span>
-            <span class="info-value password-row">
-              <span v-if="visiblePasswords[s.code]">{{ s.passwords?.defaultPassword || '-' }}</span>
-              <span v-else>••••••</span>
-              <button
-                type="button"
-                class="pwd-toggle"
-                :title="visiblePasswords[s.code] ? '隐藏' : '显示'"
-                :aria-label="visiblePasswords[s.code] ? '隐藏' : '显示'"
-                @click.stop="togglePassword(s.code)"
-              >
-                <component :is="visiblePasswords[s.code] ? EyeOffOutline : EyeOutline" />
-              </button>
-            </span>
+            <span class="info-label">最近部署</span>
+            <span class="info-value">{{ s.lastDeploy || '-' }}</span>
+          </div>
+          <div v-if="(s.projects?.length || 0) > 0" class="project-tags">
+            <span v-for="p in s.projects" :key="p.code" class="proj-tag" :class="`tag-${p.type}`">{{ projectName(p) }}</span>
           </div>
         </div>
         <div class="card-actions">
-          <button class="act-btn act-config" @click="goDetail(s.code)">配置</button>
+          <button class="act-btn act-config" @click="goDetail(s.code)">管理项目</button>
           <button class="act-btn act-edit" @click="startEdit(s)">编辑</button>
-          <button class="act-btn act-deploy" @click="goDeploy(s.code)">部署配置</button>
-          <button class="act-btn act-war" @click="doDeploy(s)" :disabled="deployingCode === s.code">
-            {{ deployingCode === s.code ? '构建中...' : '生成WAR' }}
-          </button>
           <button class="act-btn act-del" @click="confirmDelete(s)">删除</button>
         </div>
       </div>
@@ -66,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import EmptyState from '../components/common/EmptyState.vue'
@@ -75,23 +62,16 @@ import PageHeader from '../components/layout/PageHeader.vue'
 import Icon from '../components/ui/Icon.vue'
 import BaseButton from '../components/ui/BaseButton.vue'
 import { IconNav, IconAction } from '../composables/icons'
-import { EyeOffOutline, EyeOutline } from '@vicons/ionicons5'
-import { listSchools, addSchool, updateSchool, deleteSchool, deploySchool } from '../api/schools'
-import type { School } from '../api/types'
+import { listSchools, addSchool, updateSchool, deleteSchool } from '../api/schools'
+import type { School, Project } from '../api/types'
 
 const schools = ref<School[]>([])
 const showAddForm = ref(false)
 const editingSchool = ref<School | null>(null)
-const deployingCode = ref('')
 const router = useRouter()
-const visiblePasswords = reactive<Record<string, boolean>>({})
 
-function getAccessUrl(s: School): string {
-  return s.cas?.casHost || '-'
-}
-
-function togglePassword(code: string) {
-  visiblePasswords[code] = !visiblePasswords[code]
+function projectName(p: Project): string {
+  return p.name || p.code
 }
 
 onMounted(fetchSchools)
@@ -128,28 +108,12 @@ async function handleSave(data: any) {
 }
 
 async function confirmDelete(s: School) {
-  if (!confirm(`确认删除学校「${s.name}」？此操作不可撤销。`)) return
+  if (!confirm(`确认删除学校「${s.name}」？该学校下所有项目配置将被一并删除，此操作不可撤销。`)) return
   try {
     await deleteSchool(s.code)
     await fetchSchools()
   } catch (e: any) {
     alert('删除失败: ' + e.message)
-  }
-}
-
-function goDeploy(code: string) {
-  router.push(`/schools/${code}/deploy`)
-}
-
-async function doDeploy(s: School) {
-  if (!confirm(`确认为「${s.name}」生成 WAR 包？\n将自动执行 Maven 构建并打包配置，请耐心等待。`)) return
-  deployingCode.value = s.code
-  try {
-    await deploySchool(s.code)
-  } catch (e: any) {
-    alert('部署失败: ' + e.message)
-  } finally {
-    deployingCode.value = ''
   }
 }
 </script>
@@ -198,34 +162,20 @@ async function doDeploy(s: School) {
 }
 .info-label { color: #999; }
 .info-value { color: #333; font-family: monospace; font-size: 12px; }
-.password-row {
+.project-tags {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  padding-top: 6px;
 }
-.pwd-toggle {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  line-height: 1;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  color: #8c8c8c;
-}
-.pwd-toggle:hover {
-  background: #f5f5f5;
+.proj-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #f0f0ff;
   color: #667eea;
 }
-.pwd-toggle svg {
-  width: 16px;
-  height: 16px;
-  display: block;
-}
+.proj-tag.tag-knowledge-center { background: #e6f7ee; color: #1a8a4e; }
 .card-actions {
   display: flex;
   gap: 8px;

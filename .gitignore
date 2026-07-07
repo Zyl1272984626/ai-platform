@@ -20,7 +20,12 @@ test-fix-*.png
 /data/schools.yaml
 /data/deploy/
 /data/test-runs/
-/server/data/
+# server/data 下的项目索引文件含本机绝对路径与 authToken，不入库；
+# schools.yaml 为学校部署数据，需随仓库提交以便多机共用。
+/server/data/platform-config.json
+/server/data/projects/
+/server/data/sessions/
+/server/data/memory/
 /e2e-test/data/
 .tmp/
 
