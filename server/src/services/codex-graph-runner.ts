@@ -105,6 +105,14 @@ function supervisorPrompt(projectId: string, taskId: string, workerId: string): 
   ].join('\n');
 }
 
+function threadDisplayName(taskTitle: string): string {
+  const normalized = taskTitle.replace(/\s+/g, ' ').trim() || '未命名研发任务';
+  const prefix = '[自动研发] ';
+  const maxTitleLength = 80;
+  const available = maxTitleLength - prefix.length;
+  return `${prefix}${normalized.length > available ? `${normalized.slice(0, available - 1)}…` : normalized}`;
+}
+
 function finishRunner(runner: ActiveRunner, status: 'completed' | 'failed' | 'stopped', message: string): void {
   if (runner.stopped && status !== 'stopped') return;
   if (status === 'stopped') runner.stopped = true;
@@ -244,6 +252,10 @@ export async function startCodexGraphRunner(projectId: string, taskId: string): 
     }, 60_000);
     const threadId = threadResult?.thread?.id;
     if (!threadId) throw new Error('Codex 未返回 threadId');
+    await request(runner, 'thread/name/set', {
+      threadId,
+      name: threadDisplayName(task.title),
+    });
     const turnResult = await request(runner, 'turn/start', {
       threadId,
       input: [{ type: 'text', text: supervisorPrompt(projectId, taskId, workerId) }],
