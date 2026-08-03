@@ -1,12 +1,12 @@
-# AI Engineering Platform
+# 证据驱动 AI 研发闭环平台
 
-基于 Claude Code 的 AI 辅助工程平台，为主系统提供智能化开发、测试、部署能力。
+把一个真实需求推进为有证据、可回退、可验收的系统增量。Codex、Claude Code、Skills、流水线、测试和记忆是执行能力，不是用户必须理解的主流程。
 
 ## 项目简介
 
-本平台通过 Skill 体系将常见的开发流程自动化，包括 Bug 修复、新功能开发、学校部署、数据库迁移、系统巡检等。同时提供 Web UI 界面，方便团队成员使用。
+平台的主入口是**研发任务**。每项任务包含原始需求、目标、范围、验收标准、人工决策、当前证据、动态门禁和验收结论。门禁失败会返回对应节点；门禁通过必须关联当前任务证据；删除采用软归档以保留审计链。
 
-平台还包含**多平台接力开发工作台**（`/pipelines` 页面），支持 ZCode / ClaudeCode / Codex 三种底座引擎，通过 MCP 协议让 AI 自动获取任务上下文、管理产物、推进质量门。详见下方[接力开发与 MCP 对接](#接力开发与-mcp-对接)。
+项目代码、Markdown、数据库和正式决策仍是业务事实来源。平台只保存项目基线索引、任务运行状态和证据，不复制一套新的业务设计事实库。
 
 ## 技术栈
 
@@ -35,9 +35,7 @@ cd server && npm run dev
 cd web && npm run dev
 ```
 
-启动后打开浏览器访问 http://localhost:3200/settings 完成路径和端口配置。
-
-访问 http://localhost:3200
+启动后打开 http://localhost:3200。首次使用先在 `/settings` 配置项目，再从 `/tasks` 建立研发任务。
 
 ### Docker 部署
 
@@ -51,30 +49,36 @@ docker-compose up -d
 ai-platform/
 ├── server/            ← API 服务 (Node.js + TypeScript)
 ├── web/               ← Web UI (Vue3 + Naive UI)
+├── .rd-loop/          ← 当前研发闭环的任务状态与证据清单
 ├── skills/            ← Skill 库
 │   ├── scenes/        ← 场景型 Skill（用户直接使用）
 │   ├── capabilities/  ← 能力型 Skill（被场景型调用）
 │   └── tests/         ← 测试型 Skill
 ├── e2e-test/          ← E2E 页面测试 (Playwright)
-├── data/              ← 配置数据（学校注册表、工作流定义）
+├── server/data/       ← 项目索引、任务、运行与证据数据
 ├── docker-compose.yml ← Docker 编排
 └── .env.example       ← 环境变量模板
 ```
 
-## 核心能力
+## 核心闭环
 
-| 命令 | 说明 |
-|------|------|
-| `/resolve-bug BUG-123` | Bug 全流程修复 |
-| `/deploy-school` | 新学校一键部署 |
-| `/new-feature 需求描述` | 新功能全流程开发 |
-| `/test-agent agentId userXgh` | Agent 自动化测试 |
-| `/daily-check` | 日常系统巡检 |
-| `/migrate-db dameng` | 数据库兼容性迁移 |
+1. 选择项目并保留用户原始需求。
+2. 明确本轮目标、范围、不做范围和可观察验收标准。
+3. 根据任务类型生成动态门禁，而不是套用固定阶段。
+4. 记录命令、测试、请求、查询、浏览器操作和人工决策等事实证据。
+5. 门禁失败进入 `rework`、`blocked` 或 `needs_confirmation`，修正后继续。
+6. 所有必需门禁通过后提交人工验收，验收通过形成独立证据。
+7. 已完成任务可软归档，数据和证据继续保留。
 
-## 接力开发与 MCP 对接
+核心研发导航包含研发任务、项目基线、证据与验收、系统设置；原有校园管理作为独立运营配置保留在 `/schools`，Pipeline、Test、Memory、Skills、Workflow 和工程对话收纳在 `/tools` 高级工具页。
 
-平台的 `/pipelines` 页面提供**多平台接力开发工作台**，把一个需求拆成多个阶段（需求澄清 → 代码发现 → 设计 → 实现 → 验证 → 交付），每个阶段有独立的产物文件和质量门。
+任务启动后可点击“启动自动研发”。平台会把任务契约编译为动态 Graph，通过 Codex app-server 启动主控线程，并在该线程中注入 `ai-platform-graph` MCP。Codex 领取可运行节点、按需创建子智能体并回写技术证据；平台根据依赖和门禁自动继续、返工或请求确认。人工验收不能由执行 Agent 代替。
+
+完整架构和协议见 [`doc/动态Graph自动研发架构.md`](doc/动态Graph自动研发架构.md)。旧 Pipeline 继续作为底层兼容能力和历史入口，不再作为新研发任务的控制模型。
+
+## 高级能力：接力开发与 MCP 对接
+
+平台保留 `/pipelines` 多平台接力工作台，供已有运行和底层执行使用。新的研发工作应先建立 `/tasks` 任务契约，再按任务需要调用接力、测试、记忆或 Skills，避免固定阶段替代真实门禁。
 
 ### 三种底座引擎
 

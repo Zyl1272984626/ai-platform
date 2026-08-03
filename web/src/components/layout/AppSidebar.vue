@@ -2,7 +2,7 @@
   <aside class="sidebar" :class="{ collapsed }">
     <div class="sidebar-brand" @click="$router.push('/')">
       <span class="brand-icon">AI</span>
-      <span v-if="!collapsed" class="brand-text">工程平台</span>
+      <span v-if="!collapsed" class="brand-text">闭环研发台</span>
     </div>
     <button
       class="collapse-btn"
@@ -15,41 +15,32 @@
     </button>
 
     <nav class="sidebar-nav">
-      <router-link to="/" class="nav-item" exact-active-class="active" title="总览">
-        <Icon :icon="IconNav.dashboard" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">总览</span>
+      <div v-if="!collapsed" class="nav-section-label">核心工作</div>
+      <router-link to="/tasks" class="nav-item" active-class="active" title="研发任务">
+        <Icon :icon="IconNav.task" class="nav-icon" />
+        <span v-if="!collapsed" class="nav-label">研发任务</span>
       </router-link>
-      <router-link to="/chat" class="nav-item" active-class="active" title="对话">
-        <Icon :icon="IconNav.chat" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">对话</span>
+      <router-link to="/projects" class="nav-item" active-class="active" title="项目基线">
+        <Icon :icon="IconNav.project" class="nav-icon" />
+        <span v-if="!collapsed" class="nav-label">项目基线</span>
       </router-link>
-      <router-link to="/schools" class="nav-item" active-class="active" title="学校">
-        <Icon :icon="IconNav.school" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">学校</span>
-      </router-link>
-      <router-link to="/workflows" class="nav-item" active-class="active" title="工作流">
-        <Icon :icon="IconNav.workflow" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">工作流</span>
-      </router-link>
-      <router-link to="/skills" class="nav-item" active-class="active" title="Skills">
-        <Icon :icon="IconNav.skill" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">Skills</span>
-      </router-link>
-      <router-link to="/tests" class="nav-item" active-class="active" title="测试">
-        <Icon :icon="IconNav.test" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">测试</span>
-      </router-link>
-      <router-link to="/pipelines" class="nav-item" active-class="active" title="流水线">
-        <Icon :icon="IconNav.pipeline" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">流水线</span>
-      </router-link>
-      <router-link to="/memory" class="nav-item" active-class="active" title="记忆">
-        <Icon :icon="IconNav.memory" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">记忆</span>
+      <router-link to="/evidence" class="nav-item" active-class="active" title="证据与验收">
+        <Icon :icon="IconNav.evidence" class="nav-icon" />
+        <span v-if="!collapsed" class="nav-label">证据与验收</span>
       </router-link>
       <router-link to="/settings" class="nav-item" active-class="active" title="设置">
         <Icon :icon="IconNav.settings" class="nav-icon" />
-        <span v-if="!collapsed" class="nav-label">设置</span>
+        <span v-if="!collapsed" class="nav-label">系统设置</span>
+      </router-link>
+      <div v-if="!collapsed" class="nav-section-label nav-section-secondary">运营配置</div>
+      <router-link to="/schools" class="nav-item" active-class="active" title="校园管理">
+        <Icon :icon="IconNav.school" class="nav-icon" />
+        <span v-if="!collapsed" class="nav-label">校园管理</span>
+      </router-link>
+      <div v-if="!collapsed" class="nav-section-label nav-section-secondary">底层能力</div>
+      <router-link to="/tools" class="nav-item" active-class="active" title="高级工具">
+        <Icon :icon="IconNav.tools" class="nav-icon" />
+        <span v-if="!collapsed" class="nav-label">高级工具</span>
       </router-link>
     </nav>
 
@@ -190,6 +181,19 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
+}
+.nav-section-label {
+  padding: 12px 12px 6px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.nav-section-secondary {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 18px;
 }
 .nav-item {
   position: relative;
