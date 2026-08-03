@@ -85,7 +85,8 @@ MCP 是 Codex 与平台之间的执行协议。平台启动 Codex 使用本机 `
 ## 6. 安全策略
 
 - `thread/start` 使用 `ephemeral: false` 创建可持久化线程。
-- 创建成功后必须调用 `thread/name/set`，统一命名为 `[自动研发] 任务标题`，确保线程进入 Codex 对应项目的侧边栏；命名失败视为启动失败，不静默产生不可见任务。
+- 平台使用项目依赖锁定的 Codex CLI，不依赖可能滞后的全局版本。
+- 创建成功后必须调用 `thread/name/set`，统一命名为 `[自动研发] 任务标题`；随后调用 `thread/metadata/update` 写入 `isPinned: true`，确保线程进入 Codex 对应项目的侧边栏可见集合。任一步失败都视为启动失败，不静默产生不可见任务。
 
 - 默认使用 `workspace-write`，不使用 `danger-full-access`。
 - 自动执行只在用户点击“启动自动研发”后发生。

@@ -36,6 +36,14 @@ function runnerKey(projectId: string, taskId: string): string {
 
 function resolveCodexBinary(): string {
   if (process.platform !== 'win32') return 'codex';
+  if (process.env.CODEX_CLI_PATH && fs.existsSync(process.env.CODEX_CLI_PATH)) return process.env.CODEX_CLI_PATH;
+  const vendorSuffix = path.join('vendor', 'x86_64-pc-windows-msvc', 'bin', 'codex.exe');
+  const projectBinaries = [
+    path.resolve(__dirname, '../../node_modules/@openai/codex-win32-x64', vendorSuffix),
+    path.resolve(__dirname, '../../node_modules/@openai/codex/node_modules/@openai/codex-win32-x64', vendorSuffix),
+  ];
+  const projectBinary = projectBinaries.find(candidate => fs.existsSync(candidate));
+  if (projectBinary) return projectBinary;
   try {
     const matches = execFileSync('where.exe', ['codex'], { encoding: 'utf-8', windowsHide: true })
       .split(/\r?\n/)
@@ -49,10 +57,8 @@ function resolveCodexBinary(): string {
       );
       if (fs.existsSync(vendorBinary)) return vendorBinary;
     }
-    if (process.env.CODEX_CLI_PATH && fs.existsSync(process.env.CODEX_CLI_PATH)) return process.env.CODEX_CLI_PATH;
     return matches.find(item => item.toLowerCase().endsWith('.exe')) || 'codex';
   } catch {
-    if (process.env.CODEX_CLI_PATH && fs.existsSync(process.env.CODEX_CLI_PATH)) return process.env.CODEX_CLI_PATH;
     return 'codex';
   }
 }
@@ -255,6 +261,10 @@ export async function startCodexGraphRunner(projectId: string, taskId: string): 
     await request(runner, 'thread/name/set', {
       threadId,
       name: threadDisplayName(task.title),
+    });
+    await request(runner, 'thread/metadata/update', {
+      threadId,
+      isPinned: true,
     });
     const turnResult = await request(runner, 'turn/start', {
       threadId,
