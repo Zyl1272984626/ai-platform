@@ -33,6 +33,7 @@ export interface PlatformConfig {
   apiTestBaseUrl: string
   claudeConfig: ClaudeConfig
   codexConfig: CodexConfig
+  deepseekConfig: DeepseekConfig
   mavenConfig: MavenConfig
 }
 

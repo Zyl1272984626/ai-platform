@@ -17,6 +17,10 @@ const statusMap: Record<string, { label: string; color: string }> = {
   error:       { label: '异常', color: 'error' },
   failed:      { label: '失败', color: 'error' },
   running:     { label: '运行中', color: 'running' },
+  planned:     { label: '已规划', color: 'info' },
+  starting:    { label: '启动中', color: 'running' },
+  waiting_human: { label: '等待人工', color: 'warning' },
+  stopped:     { label: '已停止', color: 'default' },
   completed:   { label: '已完成', color: 'success' },
   paused:      { label: '已暂停', color: 'warning' },
   aborted:     { label: '已中止', color: 'default' },
@@ -25,6 +29,16 @@ const statusMap: Record<string, { label: string; color: string }> = {
   success:     { label: '成功', color: 'success' },
   skipped:     { label: '已跳过', color: 'default' },
   waiting_confirm: { label: '等待确认', color: 'warning' },
+  draft:       { label: '契约草稿', color: 'default' },
+  needs_confirmation: { label: '待确认', color: 'warning' },
+  rework:      { label: '返工中', color: 'error' },
+  blocked:     { label: '已阻塞', color: 'error' },
+  awaiting_acceptance: { label: '待验收', color: 'info' },
+  accepted:    { label: '已验收', color: 'success' },
+  archived:    { label: '已归档', color: 'default' },
+  pass:        { label: '通过', color: 'success' },
+  fail:        { label: '失败', color: 'error' },
+  not_applicable: { label: '不适用', color: 'default' },
 }
 
 const label = computed(() => statusMap[props.status]?.label || props.status)

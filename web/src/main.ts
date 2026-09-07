@@ -9,7 +9,10 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 
 // 懒加载所有视图
-const DashboardView = () => import('./views/DashboardView.vue')
+const TaskView = () => import('./views/TaskView.vue')
+const ProjectBaselineView = () => import('./views/ProjectBaselineView.vue')
+const EvidenceView = () => import('./views/EvidenceView.vue')
+const ToolsView = () => import('./views/ToolsView.vue')
 const ChatView = () => import('./views/ChatView.vue')
 const SchoolView = () => import('./views/SchoolView.vue')
 const SchoolDetailView = () => import('./views/SchoolDetailView.vue')
@@ -25,7 +28,11 @@ const MemoryView = () => import('./views/MemoryView.vue')
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', component: DashboardView },
+    { path: '/', redirect: '/tasks' },
+    { path: '/tasks', component: TaskView },
+    { path: '/projects', component: ProjectBaselineView },
+    { path: '/evidence', component: EvidenceView },
+    { path: '/tools', component: ToolsView },
     { path: '/chat', component: ChatView },
     { path: '/schools', component: SchoolView },
     { path: '/schools/:code', component: SchoolDetailView },

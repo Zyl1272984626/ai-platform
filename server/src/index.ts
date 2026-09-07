@@ -12,6 +12,7 @@ import { settingsRouter } from './routes/settings.js';
 import { projectsRouter } from './routes/projects.js';
 import { pipelineRouter } from './routes/pipeline.js';
 import { memoryRouter } from './routes/memory.js';
+import { tasksRouter } from './routes/tasks.js';
 import { startWorkflow } from './services/workflow-engine.js';
 import { initScheduler } from './services/scheduler.js';
 import { getConfig } from './services/config.js';
@@ -45,6 +46,7 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/pipelines', pipelineRouter);
 app.use('/api/memory', memoryRouter);
+app.use('/api/tasks', tasksRouter);
 
 // 健康检查
 app.get('/api/health', (_req, res) => {

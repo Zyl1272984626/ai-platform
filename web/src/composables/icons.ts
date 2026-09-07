@@ -59,6 +59,10 @@ import {
 /** 侧边栏导航图标 */
 export const IconNav = {
   dashboard: GridOutline, // 总览
+  task: RocketOutline,
+  project: SchoolOutline,
+  evidence: ClipboardOutline,
+  tools: ExtensionPuzzleOutline,
   chat: ChatbubblesOutline, // 对话
   school: SchoolOutline, // 学校
   workflow: HardwareChipOutline, // 工作流
