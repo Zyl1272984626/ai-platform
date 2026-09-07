@@ -74,6 +74,8 @@ export interface CommonConfig {
   serverOs?: 'linux' | 'windows'
   /** @deprecated use deployConfig.windowsDrive */
   windowsDrive?: string
+  /** @deprecated use deployConfig.linuxDistro */
+  linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other'
   amapKey?: string
   druidUser?: string
   druidPassword?: string
@@ -82,6 +84,7 @@ export interface CommonConfig {
 export interface DeployConfig {
   serverOs?: 'linux' | 'windows'
   windowsDrive?: string
+  linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other'
   dbRootPassword?: string
   mysqlContainer?: string
   oneapiHost?: string
@@ -149,9 +152,12 @@ export interface Project {
     user: string
     serverOs: 'linux' | 'windows'
     windowsDrive?: string
+    linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other'
     dbRootPassword?: string
     mysqlContainer?: string
     appPort: number
+    tomcatRoot?: string
+    tomcatContext?: string
   }
 
   dbType: 'mysql' | 'dameng'

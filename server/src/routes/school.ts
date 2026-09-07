@@ -15,7 +15,12 @@ import {
   updateProject,
   removeProject,
 } from '../services/school-manager.js';
-import { buildSchoolWar, buildSchoolDeployPackage, buildProjectWar, buildProjectDeployPackage } from '../services/deploy-service.js';
+import {
+  buildSchoolWarDeployPackage,
+  buildSchoolDeployPackage,
+  buildProjectWarDeployPackage,
+  buildProjectDeployPackage,
+} from '../services/deploy-service.js';
 import type { DeployScriptParams } from '../services/deploy-script-generator.js';
 
 export const schoolRouter = Router();
@@ -102,13 +107,14 @@ schoolRouter.post('/:code/projects/:pcode/delete', (req: Request, res: Response)
   }
 });
 
-// 项目部署：生成项目专属 WAR 包并下载
+// 项目部署：生成项目专属 WAR + 一键应用服务器脚本
 schoolRouter.post('/:code/projects/:pcode/deploy', async (req: Request, res: Response) => {
   try {
+    const params = req.body as DeployScriptParams;
     markDeployed(req.params.code, req.params.pcode);
-    const warPath = await buildProjectWar(req.params.code, req.params.pcode);
-    const fileName = path.basename(warPath);
-    res.download(warPath, fileName);
+    const zipPath = await buildProjectWarDeployPackage(req.params.code, req.params.pcode, params);
+    const fileName = path.basename(zipPath);
+    res.download(zipPath, fileName);
   } catch (err: unknown) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -129,13 +135,14 @@ schoolRouter.post('/:code/projects/:pcode/deploy-full', async (req: Request, res
 
 // ========== 兼容旧端点（默认 agent project）==========
 
-// 旧：生成学校专属 WAR
+// 旧：生成默认 agent 的 WAR + 一键应用服务器脚本
 schoolRouter.post('/:code/deploy', async (req: Request, res: Response) => {
   try {
     markDeployed(req.params.code);
-    const warPath = await buildSchoolWar(req.params.code);
-    const fileName = path.basename(warPath);
-    res.download(warPath, fileName);
+    const params = req.body as DeployScriptParams;
+    const zipPath = await buildSchoolWarDeployPackage(req.params.code, params);
+    const fileName = path.basename(zipPath);
+    res.download(zipPath, fileName);
   } catch (err: unknown) {
     res.status(500).json({ error: (err as Error).message });
   }

@@ -79,6 +79,16 @@
           <option value="windows">Windows</option>
         </select>
       </div>
+      <div class="form-group" v-if="model.deploy.serverOs === 'linux'">
+        <label>Linux 发行版</label>
+        <select v-model="model.deploy.linuxDistro">
+          <option value="openeuler">openEuler 22.03</option>
+          <option value="ubuntu">Ubuntu / Debian</option>
+          <option value="rocky">Rocky / RHEL</option>
+          <option value="centos">CentOS</option>
+          <option value="other">其他 Linux</option>
+        </select>
+      </div>
       <div class="form-group" v-if="model.deploy.serverOs === 'windows'">
         <label>Windows 盘符</label>
         <select v-model="model.deploy.windowsDrive">
@@ -90,6 +100,14 @@
       <div class="form-group">
         <label>应用端口</label>
         <input v-model.number="model.deploy.appPort" type="number" placeholder="默认 9998" />
+      </div>
+      <div class="form-group full">
+        <label>Tomcat 根目录</label>
+        <input v-model="model.deploy.tomcatRoot" :placeholder="tomcatRootPlaceholder" />
+      </div>
+      <div class="form-group">
+        <label>项目名</label>
+        <input v-model="model.deploy.tomcatContext" placeholder="默认 agent，只更新 webapps 下这个项目" />
       </div>
       <div class="form-group">
         <label>SSH 用户</label>
@@ -231,6 +249,10 @@ import PasswordInput from '../common/PasswordInput.vue'
 import type { Project } from '../../api/types'
 
 const props = defineProps<{ model: Project }>()
+props.model.deploy.tomcatContext ||= 'agent'
+if (props.model.deploy.serverOs === 'linux') {
+  props.model.deploy.linuxDistro ||= 'openeuler'
+}
 
 // 子对象兜底：确保 cas/security/passwords/common/deployConfig/sandbox 存在
 const cas = props.model.cas || (props.model.cas = {})
@@ -238,7 +260,7 @@ const security = props.model.security || (props.model.security = { mode: 'dev' }
 const passwords = props.model.passwords || (props.model.passwords = { username: '', defaultPassword: '111111', superPassword: 'fskj_dst_2023', salt: 'system_salt' })
 const common = props.model.common || (props.model.common = {})
 const deployConfig = props.model.deployConfig || (props.model.deployConfig = {})
-const sandbox = props.model.sandbox || (props.model.sandbox = { enabled: true, strategy: 'bubblewrap', bubblewrapBinary: 'bwrap', poolSize: 5, runtimePaths: ['/usr/bin/python3', '/usr/bin/node'] })
+const sandbox = props.model.sandbox || (props.model.sandbox = { enabled: true, strategy: 'bubblewrap', bubblewrapBinary: 'bwrap', poolSize: 5, runtimePaths: ['/usr/local/bin/python3.10', '/usr/local/bin/node'] })
 
 const collapsed = reactive({
   security: true,
@@ -253,6 +275,12 @@ const runtimePathsText = computed({
     sandbox.runtimePaths = val.split('\n').map(l => l.trim()).filter(l => l.length > 0)
   },
 })
+
+const tomcatRootPlaceholder = computed(() =>
+  model.deploy.serverOs === 'windows'
+    ? '例: E:\\workSoft\\apache-tomcat-10.1.39'
+    : '例: /opt/apache-tomcat-10.1.39',
+)
 
 function onDbTypeChange() {
   if (model.dbType === 'mysql' && (!model.dbPort || model.dbPort === 5237)) model.dbPort = 3306

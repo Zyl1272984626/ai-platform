@@ -88,14 +88,14 @@ function buildAgentProject(): Project {
     type: 'agent',
     status: 'pending',
     lastDeploy: null,
-    deploy: { host: '', user: 'root', serverOs: 'linux', windowsDrive: 'D:', appPort: 9998 },
+    deploy: { host: '', user: 'root', serverOs: 'linux', linuxDistro: 'openeuler', windowsDrive: 'D:', appPort: 9998, tomcatRoot: '', tomcatContext: 'agent' },
     dbType: 'mysql',
     dbHost: '', dbPort: 3306, dbUser: '', dbPassword: '',
     database: 'agent_portal',
     businessDatabase: 'agent_portal_business',
     passwords: { username: '', defaultPassword: '111111', superPassword: 'fskj_dst_2023', salt: 'system_salt' },
     security: { mode: 'dev' },
-    sandbox: { enabled: true, strategy: 'bubblewrap', bubblewrapBinary: 'bwrap', poolSize: 5, runtimePaths: ['/usr/bin/python3', '/usr/bin/node'] },
+    sandbox: { enabled: true, strategy: 'bubblewrap', bubblewrapBinary: 'bwrap', poolSize: 5, runtimePaths: ['/usr/local/bin/python3.10', '/usr/local/bin/node'] },
   }
 }
 
@@ -107,7 +107,7 @@ function buildKcProject(): Project {
     type: 'knowledge-center',
     status: 'pending',
     lastDeploy: null,
-    deploy: { host: '', user: 'root', serverOs: 'linux', windowsDrive: 'D:', appPort: 9999 },
+    deploy: { host: '', user: 'root', serverOs: 'linux', linuxDistro: 'openeuler', windowsDrive: 'D:', appPort: 9999, tomcatRoot: '', tomcatContext: 'knowledge-center' },
     dbType: 'mysql',
     dbHost: '', dbPort: 3306, dbUser: '', dbPassword: '',
     database: 'knowledge_center',

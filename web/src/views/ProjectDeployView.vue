@@ -34,6 +34,14 @@
             <span class="label">应用端口</span>
             <span class="value mono">{{ project.deploy.appPort }}</span>
           </div>
+          <div v-if="isAgent" class="summary-item">
+            <span class="label">Tomcat 根目录</span>
+            <span class="value mono">{{ project.deploy.tomcatRoot || '未配置' }}</span>
+          </div>
+          <div v-if="isAgent" class="summary-item">
+            <span class="label">项目名</span>
+            <span class="value mono">{{ tomcatContextOf(project) }}</span>
+          </div>
           <div class="summary-item">
             <span class="label">数据库</span>
             <span class="value mono">{{ project.database }}</span>
@@ -78,6 +86,13 @@
           <p class="step-hint">建库脚本在应用启动前执行，系统配置脚本在应用启动并自动建表后执行</p>
           <div class="check-list">
             <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.encrypted" />
+              <div class="check-content">
+                <span class="check-title">启用接口加密</span>
+                <span class="check-desc">开启后后端 application-security.yml 使用 prod 模式，前端 security/constant.js 的 isProd 设为 true</span>
+              </div>
+            </label>
+            <label class="check-item">
               <input type="checkbox" v-model="agentOptions.createAgentDatabases" />
               <div class="check-content">
                 <span class="check-title">创建 Agent 数据库</span>
@@ -92,10 +107,45 @@
               </div>
             </label>
             <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.prepareAgentDirs" />
+              <div class="check-content">
+                <span class="check-title">创建/修复 Agent 目录</span>
+                <span class="check-desc">创建日志、文件仓库、对话文件、组件、沙箱、技能仓库等目录</span>
+              </div>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.updateHyperAgent" />
+              <div class="check-content">
+                <span class="check-title">安装/更新 onestop-runtime</span>
+                <span class="check-desc">部署独立 HTTPS runtime 服务，WAR 通过 remote 模式调用，不再由 Tomcat 启动 Node/Python/Chromium</span>
+              </div>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.updateToolScript" />
+              <div class="check-content">
+                <span class="check-title">更新 tool-script</span>
+                <span class="check-desc">随包携带并解压 tool-script.zip，覆盖更新外挂工具脚本</span>
+              </div>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.installTomcat" />
+              <div class="check-content">
+                <span class="check-title">安装/更新 Tomcat</span>
+                <span class="check-desc">目标 Tomcat 不存在或不完整时，从随包 apache-tomcat-*.zip 自动安装</span>
+              </div>
+            </label>
+            <label class="check-item">
               <input type="checkbox" v-model="agentOptions.deployOneapi" />
               <div class="check-content">
                 <span class="check-title">部署 OneApi 容器</span>
                 <span class="check-desc">使用 Docker 部署 OneApi 服务，端口 {{ project.deployConfig?.oneapiPort || 3000 }}</span>
+              </div>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.updateOneapiCache" />
+              <div class="check-content">
+                <span class="check-title">更新 OneApi cache</span>
+                <span class="check-desc">随包携带并解压 cache.zip 到 OneApi tiktoken 缓存目录</span>
               </div>
             </label>
             <label class="check-item">
@@ -108,8 +158,15 @@
             <label class="check-item">
               <input type="checkbox" v-model="agentOptions.installSandboxRuntime" />
               <div class="check-content">
-                <span class="check-title">安装运行时环境依赖</span>
-                <span class="check-desc">在 02 脚本中检查并安装 Node/npm、Python/pip、文档组件、LibreOffice、Poppler 和中文字体（仅 Linux 应用服务器生效）</span>
+                <span class="check-title">运行 runtime 环境检查</span>
+                <span class="check-desc">执行 runtime 包自带 check-environment.sh，检查 Linux/amd64、Docker Engine、Docker Compose v2、磁盘和内存</span>
+              </div>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" v-model="agentOptions.autoDeployTomcat" />
+              <div class="check-content">
+                <span class="check-title">自动更新 Tomcat</span>
+                <span class="check-desc">在 02 脚本中停止 Tomcat，只备份并替换 webapps/{{ tomcatContextOf(project) }}.war、清理对应展开目录后重新启动</span>
               </div>
             </label>
           </div>
@@ -154,11 +211,11 @@
       <div class="deploy-modes">
         <div class="mode-card mode-primary">
           <div class="mode-info">
-            <span class="mode-title">仅生成 WAR</span>
-            <span class="mode-desc">增量更新：只构建并替换 WAR 包，不含部署脚本/建库/系统配置。适用于已首次部署后的版本更新。</span>
+            <span class="mode-title">生成标准更新包</span>
+            <span class="mode-desc">增量更新：构建项目名 WAR，并按勾选组件生成一键更新脚本。适用于版本升级和补装缺失依赖。</span>
           </div>
           <button class="btn btn-war" :disabled="buildingWar || missingFields.length > 0" @click="doBuildWar">
-            {{ buildingWar ? '构建中...' : '生成 WAR' }}
+            {{ buildingWar ? '构建中...' : '生成标准更新包' }}
           </button>
         </div>
         <div class="mode-card">
@@ -207,11 +264,18 @@ const isAgent = computed(() => project.value?.type === 'agent')
 
 // agent 步骤勾选
 const agentOptions = reactive({
+  encrypted: false,
   createAgentDatabases: true,
   createOneapiDatabase: false,
+  prepareAgentDirs: true,
+  updateHyperAgent: true,
+  updateToolScript: true,
+  installTomcat: true,
   deployOneapi: true,
+  updateOneapiCache: true,
   initSql: true,
   installSandboxRuntime: true,
+  autoDeployTomcat: true,
 })
 
 // knowledge-center 步骤勾选（建库 / 依赖检查由后端脚本固定生成，前端仅作确认）
@@ -229,8 +293,19 @@ const appServerLabel = computed(() => {
   if (os === 'windows') {
     return `Windows ${project.value?.deploy.windowsDrive || 'D:'}`
   }
-  return 'Linux'
+  const distroMap: Record<string, string> = {
+    openeuler: 'openEuler 22.03',
+    ubuntu: 'Ubuntu / Debian',
+    rocky: 'Rocky / RHEL',
+    centos: 'CentOS',
+    other: '其他 Linux',
+  }
+  return `Linux（${distroMap[project.value?.deploy.linuxDistro || 'openeuler'] || '其他 Linux'}）`
 })
+
+function tomcatContextOf(p: Project): string {
+  return p.deploy.tomcatContext || (p.type === 'knowledge-center' ? 'knowledge-center' : 'agent')
+}
 
 const rootPasswordText = computed(() => {
   const pw = project.value?.deploy.dbRootPassword
@@ -259,8 +334,15 @@ const effectiveOptions = computed(() => {
       createAgentDatabases: false,
       createOneapiDatabase: false,
       deployOneapi: false,
+      updateOneapiCache: false,
       initSql: false,
+      prepareAgentDirs: false,
+      updateHyperAgent: false,
+      updateToolScript: false,
+      installTomcat: false,
       installSandboxRuntime: false,
+      autoDeployTomcat: false,
+      encrypted: false,
     }
   }
   const dc = p.deployConfig
@@ -270,20 +352,34 @@ const effectiveOptions = computed(() => {
   return {
     createAgentDatabases: agentOptions.createAgentDatabases && hasRoot,
     createOneapiDatabase: agentOptions.createOneapiDatabase && hasRoot,
+    prepareAgentDirs: agentOptions.prepareAgentDirs,
+    updateHyperAgent: agentOptions.updateHyperAgent && serverOs !== 'windows',
+    updateToolScript: agentOptions.updateToolScript,
+    installTomcat: agentOptions.installTomcat && !!p.deploy.tomcatRoot,
     deployOneapi: agentOptions.deployOneapi && hasRoot,
+    updateOneapiCache: agentOptions.updateOneapiCache,
     initSql: agentOptions.initSql && hasOneapiForInit,
-    // 运行时环境安装脚本只生成 Linux 版，Windows 应用服务器跳过
+    // onestop-runtime 独立服务只生成 Linux 版，Windows 应用服务器跳过
     installSandboxRuntime: agentOptions.installSandboxRuntime && serverOs !== 'windows',
+    autoDeployTomcat: agentOptions.autoDeployTomcat && !!p.deploy.tomcatRoot,
+    encrypted: agentOptions.encrypted,
   }
 })
 
 const activeSteps = computed(() => {
   const eff = effectiveOptions.value
   const steps: string[] = []
+  if (eff.encrypted) steps.push('接口加密')
   if (eff.createAgentDatabases) steps.push('创建 Agent 数据库')
   if (eff.createOneapiDatabase) steps.push('创建 OneApi 数据库')
+  if (eff.prepareAgentDirs) steps.push('Agent 目录')
+  if (eff.updateHyperAgent) steps.push('onestop-runtime')
+  if (eff.updateToolScript) steps.push('tool-script')
+  if (eff.installTomcat) steps.push('安装 Tomcat')
   if (eff.deployOneapi) steps.push('部署 OneApi')
-  if (eff.installSandboxRuntime) steps.push('安装运行时环境')
+  if (eff.updateOneapiCache) steps.push('OneApi cache')
+  if (eff.installSandboxRuntime) steps.push('runtime 环境检查')
+  if (eff.autoDeployTomcat) steps.push('自动更新 Tomcat')
   if (eff.initSql) steps.push('启动后系统配置')
   return steps.length ? steps.join(' → ') : '（无额外步骤）'
 })
@@ -293,9 +389,11 @@ const skippedSteps = computed(() => {
   const skipped: string[] = []
   if (agentOptions.createAgentDatabases && !eff.createAgentDatabases) skipped.push('创建 Agent 数据库（缺数据库 Root 密码）')
   if (agentOptions.createOneapiDatabase && !eff.createOneapiDatabase) skipped.push('创建 OneApi 数据库（缺数据库 Root 密码）')
+  if (agentOptions.installTomcat && !eff.installTomcat) skipped.push('安装/更新 Tomcat（缺 Tomcat 根目录）')
   if (agentOptions.deployOneapi && !eff.deployOneapi) skipped.push('部署 OneApi（缺数据库 Root 密码）')
   if (agentOptions.initSql && !eff.initSql) skipped.push('启动后系统配置（缺 OneApi 地址或 OneApi Key）')
-  if (agentOptions.installSandboxRuntime && !eff.installSandboxRuntime) skipped.push('安装运行时环境（仅 Linux 应用服务器支持）')
+  if (agentOptions.installSandboxRuntime && !eff.installSandboxRuntime) skipped.push('runtime 环境检查（仅 Linux 应用服务器支持）')
+  if (agentOptions.autoDeployTomcat && !eff.autoDeployTomcat) skipped.push('自动更新 Tomcat（缺 Tomcat 根目录）')
   return skipped
 })
 
@@ -319,11 +417,22 @@ async function doDeploy() {
       const eff = effectiveOptions.value
       const dc = p.deployConfig
       await deployProjectFull(code, pcode, {
+        encrypted: eff.encrypted,
         createAgentDatabases: eff.createAgentDatabases,
         createOneapiDatabase: eff.createOneapiDatabase,
         deployOneapi: eff.deployOneapi,
+        updateOneapiCache: eff.updateOneapiCache,
         initSql: eff.initSql,
+        prepareAgentDirs: eff.prepareAgentDirs,
+        updateHyperAgent: eff.updateHyperAgent,
+        installOnestopRuntime: eff.updateHyperAgent,
+        linuxDistro: p.deploy.linuxDistro || 'openeuler',
+        updateToolScript: eff.updateToolScript,
+        installTomcat: eff.installTomcat,
         installSandboxRuntime: eff.installSandboxRuntime,
+        autoDeployTomcat: eff.autoDeployTomcat,
+        tomcatRoot: p.deploy.tomcatRoot || '',
+        tomcatContext: tomcatContextOf(p),
         dbRootPassword: p.deploy.dbRootPassword || '',
         oneapiHost: dc?.oneapiHost || '',
         oneapiPort: dc?.oneapiPort || 3000,
@@ -348,14 +457,42 @@ async function doDeploy() {
   }
 }
 
-/** 仅生成 WAR（增量更新，不含脚本/配置初始化） */
+/** 生成 WAR 更新包（增量更新，含一键应用服务器脚本，不含建库/系统配置初始化） */
 async function doBuildWar() {
-  if (!project.value) return
-  if (!confirm(`仅为「${project.value.name}」生成 WAR 包？\n将执行 Maven 构建并替换配置，不含部署脚本。`)) return
+  const p = project.value
+  if (!p) return
+  if (!confirm(`为「${p.name}」生成标准更新包？\n将执行 Maven 构建，并按当前勾选组件输出一键更新脚本。`)) return
   buildingWar.value = true
   try {
-    await deployProject(code, pcode)
-    toast.success('WAR 已生成并下载')
+    if (isAgent.value) {
+      const eff = effectiveOptions.value
+      const dc = p.deployConfig
+      await deployProject(code, pcode, {
+        encrypted: eff.encrypted,
+        createAgentDatabases: false,
+        createOneapiDatabase: false,
+        initSql: false,
+        prepareAgentDirs: eff.prepareAgentDirs,
+        updateHyperAgent: eff.updateHyperAgent,
+        installOnestopRuntime: eff.updateHyperAgent,
+        linuxDistro: p.deploy.linuxDistro || 'openeuler',
+        updateToolScript: eff.updateToolScript,
+        installTomcat: eff.installTomcat,
+        autoDeployTomcat: eff.autoDeployTomcat,
+        installSandboxRuntime: eff.installSandboxRuntime,
+        deployOneapi: eff.deployOneapi,
+        updateOneapiCache: eff.updateOneapiCache,
+        tomcatRoot: p.deploy.tomcatRoot || '',
+        tomcatContext: tomcatContextOf(p),
+        dbRootPassword: p.deploy.dbRootPassword || '',
+        mysqlContainer: p.deploy.mysqlContainer || '',
+        oneapiHost: dc?.oneapiHost || '',
+        oneapiPort: dc?.oneapiPort || 3000,
+      })
+    } else {
+      await deployProject(code, pcode)
+    }
+    toast.success('标准更新包已生成并下载')
   } catch (e: any) {
     toast.error('构建失败: ' + e.message)
   } finally {

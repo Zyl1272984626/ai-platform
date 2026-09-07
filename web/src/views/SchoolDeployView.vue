@@ -55,6 +55,14 @@
             <span class="label">应用端口</span>
             <span class="value mono">{{ school.port }}</span>
           </div>
+          <div class="summary-item">
+            <span class="label">Tomcat 根目录</span>
+            <span class="value mono">{{ agentProject?.deploy.tomcatRoot || '未配置' }}</span>
+          </div>
+          <div class="summary-item">
+            <span class="label">项目名</span>
+            <span class="value mono">{{ agentProject ? tomcatContextOf(agentProject) : 'agent' }}</span>
+          </div>
         </div>
       </section>
 
@@ -94,8 +102,15 @@
           <label class="check-item">
             <input type="checkbox" v-model="options.installSandboxRuntime" />
             <div class="check-content">
-              <span class="check-title">安装运行时环境依赖</span>
-              <span class="check-desc">在 02 脚本中检查并安装 Node/npm、Python/pip、文档组件、LibreOffice、Poppler 和中文字体（仅 Linux 应用服务器生效）</span>
+              <span class="check-title">安装/更新 onestop-runtime</span>
+              <span class="check-desc">部署独立 HTTPS runtime 服务，并执行 check-environment.sh 检查 Docker Engine、Docker Compose v2 和 linux/amd64</span>
+            </div>
+          </label>
+          <label class="check-item">
+            <input type="checkbox" v-model="options.autoDeployTomcat" />
+            <div class="check-content">
+              <span class="check-title">自动更新 Tomcat</span>
+              <span class="check-desc">在 02 脚本中停止 Tomcat，只备份并替换 webapps/{{ agentProject ? tomcatContextOf(agentProject) : 'agent' }}.war、清理对应展开目录后重新启动</span>
             </div>
           </label>
         </div>
@@ -146,7 +161,16 @@ const options = reactive({
   deployOneapi: true,
   initSql: true,
   installSandboxRuntime: true,
+  autoDeployTomcat: true,
 })
+
+const agentProject = computed(() =>
+  school.value?.projects.find(p => p.type === 'agent') || school.value?.projects[0],
+)
+
+function tomcatContextOf(project: { type?: string; deploy: { tomcatContext?: string } }): string {
+  return project.deploy.tomcatContext || (project.type === 'knowledge-center' ? 'knowledge-center' : 'agent')
+}
 
 const appDeployScriptName = computed(() => {
   const serverOs = school.value?.deployConfig?.serverOs || school.value?.common?.serverOs
@@ -158,7 +182,15 @@ const appServerLabel = computed(() => {
   if (serverOs === 'windows') {
     return `Windows ${school.value?.deployConfig?.windowsDrive || school.value?.common?.windowsDrive || 'D:'}`
   }
-  return 'Linux'
+  const distro = school.value?.deployConfig?.linuxDistro || school.value?.common?.linuxDistro || agentProject.value?.deploy.linuxDistro || 'openeuler'
+  const distroMap: Record<string, string> = {
+    openeuler: 'openEuler 22.03',
+    ubuntu: 'Ubuntu / Debian',
+    rocky: 'Rocky / RHEL',
+    centos: 'CentOS',
+    other: '其他 Linux',
+  }
+  return `Linux（${distroMap[distro] || '其他 Linux'}）`
 })
 
 const rootPasswordText = computed(() => {
@@ -191,8 +223,9 @@ const effectiveOptions = computed(() => {
     createOneapiDatabase: options.createOneapiDatabase && !!dc?.dbRootPassword,
     deployOneapi: options.deployOneapi && !!dc?.dbRootPassword,
     initSql: options.initSql && hasOneapiForInit,
-    // 运行时环境安装脚本只生成 Linux 版，Windows 应用服务器跳过
+    // onestop-runtime 独立服务只生成 Linux 版，Windows 应用服务器跳过
     installSandboxRuntime: options.installSandboxRuntime && serverOs !== 'windows',
+    autoDeployTomcat: options.autoDeployTomcat && !!agentProject.value?.deploy.tomcatRoot,
   }
 })
 
@@ -202,7 +235,8 @@ const activeSteps = computed(() => {
   if (effective.createAgentDatabases) steps.push('创建 Agent 数据库')
   if (effective.createOneapiDatabase) steps.push('创建 OneApi 数据库')
   if (effective.deployOneapi) steps.push('部署 OneApi')
-  if (effective.installSandboxRuntime) steps.push('安装运行时环境')
+  if (effective.installSandboxRuntime) steps.push('onestop-runtime')
+  if (effective.autoDeployTomcat) steps.push('自动更新 Tomcat')
   if (effective.initSql) steps.push('启动后系统配置')
   return steps.length ? steps.join(' → ') : '（无额外步骤）'
 })
@@ -214,7 +248,8 @@ const skippedSteps = computed(() => {
   if (options.createOneapiDatabase && !effective.createOneapiDatabase) skipped.push('创建 OneApi 数据库（缺数据库 Root 密码）')
   if (options.deployOneapi && !effective.deployOneapi) skipped.push('部署 OneApi（缺数据库 Root 密码）')
   if (options.initSql && !effective.initSql) skipped.push('启动后系统配置（缺 OneApi 地址或 OneApi Key）')
-  if (options.installSandboxRuntime && !effective.installSandboxRuntime) skipped.push('安装运行时环境（仅 Linux 应用服务器支持）')
+  if (options.installSandboxRuntime && !effective.installSandboxRuntime) skipped.push('onestop-runtime（仅 Linux 应用服务器支持）')
+  if (options.autoDeployTomcat && !effective.autoDeployTomcat) skipped.push('自动更新 Tomcat（缺 Tomcat 根目录）')
   return skipped
 })
 
@@ -254,6 +289,11 @@ async function doDeploy() {
       deployOneapi: effective.deployOneapi,
       initSql: effective.initSql,
       installSandboxRuntime: effective.installSandboxRuntime,
+      installOnestopRuntime: effective.installSandboxRuntime,
+      linuxDistro: dc?.linuxDistro || s.common?.linuxDistro || agentProject.value?.deploy.linuxDistro || 'openeuler',
+      autoDeployTomcat: effective.autoDeployTomcat,
+      tomcatRoot: agentProject.value?.deploy.tomcatRoot || '',
+      tomcatContext: agentProject.value ? tomcatContextOf(agentProject.value) : 'agent',
     })
     toast.success('部署包已生成并下载')
   } catch (e: any) {

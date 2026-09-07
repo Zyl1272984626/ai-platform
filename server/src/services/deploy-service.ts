@@ -58,6 +58,47 @@ function getOutputDir(): string {
   return dir;
 }
 
+function getProjectDeployName(project: Project): string {
+  const fallback = project.type === 'knowledge-center' ? 'knowledge-center' : 'agent';
+  const raw = project.deploy.tomcatContext || project.code || fallback;
+  const normalized = raw.trim().replace(/^\/+|\/+$/g, '') || fallback;
+  return normalized.replace(/[\\/:*?"<>|\s]+/g, '-');
+}
+
+function getProjectWarFileName(project: Project): string {
+  return `${getProjectDeployName(project)}.war`;
+}
+
+function createStandardUpdateParams(project: Project): DeployScriptParams {
+  return {
+    autoDeployTomcat: !!project.deploy.tomcatRoot,
+    installTomcat: !!project.deploy.tomcatRoot,
+    tomcatRoot: project.deploy.tomcatRoot || '',
+    tomcatContext: project.deploy.tomcatContext || getProjectDeployName(project),
+    linuxDistro: project.deploy.linuxDistro || 'openeuler',
+    prepareAgentDirs: project.type === 'agent',
+    updateHyperAgent: project.type === 'agent',
+    installOnestopRuntime: project.type === 'agent' && project.deploy.serverOs !== 'windows',
+    updateToolScript: project.type === 'agent',
+    installSandboxRuntime: project.type === 'agent' && project.deploy.serverOs !== 'windows',
+    updateOneapiCache: project.type === 'agent',
+    createAgentDatabases: false,
+    createOneapiDatabase: false,
+    deployOneapi: false,
+    initSql: false,
+    runDatabaseUpgrade: false,
+    dbRootPassword: project.deploy.dbRootPassword || '',
+    mysqlContainer: project.deploy.mysqlContainer || '',
+  };
+}
+
+function pickAppDeployScriptName(project: Project, scripts: Record<string, string>): string {
+  if (project.type === 'knowledge-center' && scripts['02-kc-app-deploy.sh']) return '02-kc-app-deploy.sh';
+  const osScript = project.deploy.serverOs === 'windows' ? '02-app-deploy.ps1' : '02-app-deploy.sh';
+  if (scripts[osScript]) return osScript;
+  return Object.keys(scripts).find((name) => /^02-.*\.(sh|ps1)$/.test(name)) || osScript;
+}
+
 /** 可选部署资源：企微工具脚本包 */
 function getToolScriptZipPath(): string | null {
   const filePath = path.resolve(getConfig().aiPlatformRoot, 'assets', 'deploy', 'tool-script.zip');
@@ -67,6 +108,104 @@ function getToolScriptZipPath(): string | null {
 function getDeployAssetPath(fileName: string): string | null {
   const filePath = path.resolve(getConfig().aiPlatformRoot, 'assets', 'deploy', fileName);
   return fs.existsSync(filePath) ? filePath : null;
+}
+
+function getDeployAssetPaths(pattern: RegExp): string[] {
+  const dir = path.resolve(getConfig().aiPlatformRoot, 'assets', 'deploy');
+  if (!fs.existsSync(dir)) return [];
+
+  return fs.readdirSync(dir)
+    .filter((fileName) => pattern.test(fileName))
+    .map((fileName) => path.join(dir, fileName))
+    .filter((filePath) => fs.statSync(filePath).isFile());
+}
+
+/**
+ * 修改未被 XML 注释包裹的 HTTP Connector。
+ * Tomcat 模板可能使用 HTTP/1.1，也可能使用 Http11Nio/Http11Nio2 实现类。
+ */
+function configureTomcatServerXml(serverXml: string, appPort: number): string {
+  const withoutComments = serverXml.replace(/<!--[\s\S]*?-->/g, comment => ' '.repeat(comment.length));
+  const connectorPattern = /<Connector\b[^>]*>/gi;
+
+  for (const match of withoutComments.matchAll(connectorPattern)) {
+    const index = match.index;
+    if (index === undefined) continue;
+
+    const tag = serverXml.slice(index, index + match[0].length);
+    const protocol = tag.match(/\bprotocol\s*=\s*["']([^"']+)["']/i)?.[1];
+    const isHttpConnector = !protocol
+      || /^HTTP\/1\.1$/i.test(protocol)
+      || /(?:^|\.)http11(?:\.|$)/i.test(protocol);
+    if (!isHttpConnector || !/\bport\s*=\s*["']\d+["']/i.test(tag)) continue;
+
+    const updatedTag = tag.replace(
+      /(\bport\s*=\s*["'])\d+(["'])/i,
+      `$1${appPort}$2`,
+    );
+    return serverXml.slice(0, index) + updatedTag + serverXml.slice(index + tag.length);
+  }
+
+  throw new Error('Tomcat 模板中未找到启用的 HTTP Connector，无法写入项目端口。');
+}
+
+function addConfiguredTomcatAsset(zip: AdmZip, tomcatPath: string, appPort: number): void {
+  const tomcatZip = new AdmZip(tomcatPath);
+  const serverXmlEntry = tomcatZip.getEntries().find(entry =>
+    /(^|\/)conf\/server\.xml$/i.test(entry.entryName),
+  );
+  if (!serverXmlEntry) {
+    throw new Error(`Tomcat 压缩包中缺少 conf/server.xml: ${tomcatPath}`);
+  }
+
+  const serverXml = serverXmlEntry.getData().toString('utf-8');
+  const configured = configureTomcatServerXml(serverXml, appPort);
+  tomcatZip.updateFile(serverXmlEntry, Buffer.from(configured, 'utf-8'));
+  zip.addFile(path.basename(tomcatPath), tomcatZip.toBuffer());
+}
+
+function addCommonDeployAssets(zip: AdmZip, project: Project, params: DeployScriptParams): void {
+  if (enabled(params.installTomcat, !!params.autoDeployTomcat)) {
+    for (const tomcatPath of getDeployAssetPaths(/^apache-tomcat-.*\.zip$/)) {
+      addConfiguredTomcatAsset(zip, tomcatPath, project.deploy.appPort || 8080);
+    }
+  }
+
+  if (params.installOnestopRuntime || params.installSandboxRuntime || params.autoDeployTomcat) {
+    for (const jdkPath of getDeployAssetPaths(/^jdk-.*linux.*x64.*\.tar\.gz$/i)) {
+      zip.addLocalFile(jdkPath, '', path.basename(jdkPath));
+    }
+  }
+}
+
+function enabled(value: boolean | undefined, defaultValue: boolean): boolean {
+  return value ?? defaultValue;
+}
+
+function addAgentDeployAssets(zip: AdmZip, params: DeployScriptParams): void {
+  if (enabled(params.updateToolScript, true)) {
+    const toolScriptZip = getToolScriptZipPath();
+    if (toolScriptZip) {
+      zip.addLocalFile(toolScriptZip, '', 'tool-script.zip');
+    }
+  }
+
+  const includeOneApiImage = !!params.deployOneapi;
+  const includeOneApiCache = !!params.deployOneapi || !!params.updateOneapiCache;
+  for (const assetName of ['oneapi.tar', 'cache.zip']) {
+    if (assetName === 'oneapi.tar' && !includeOneApiImage) continue;
+    if (assetName === 'cache.zip' && !includeOneApiCache) continue;
+    const assetPath = getDeployAssetPath(assetName);
+    if (assetPath) {
+      zip.addLocalFile(assetPath, '', assetName);
+    }
+  }
+
+  if (params.installOnestopRuntime || params.installSandboxRuntime) {
+    for (const runtimePath of getDeployAssetPaths(/^onestop-runtime-.*\.tar\.gz(?:\.sha256)?$/)) {
+      zip.addLocalFile(runtimePath, '', path.basename(runtimePath));
+    }
+  }
 }
 
 interface FrontendBuildPlan {
@@ -267,7 +406,7 @@ async function releaseWindowsBuildResources(backendDir: string): Promise<void> {
     '  Write-Output ("Stopping process {0} {1}" -f $p.ProcessId, $p.Name)',
     '  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue',
     '}',
-  ].join('; ');
+  ].join('\n');
 
   try {
     const result = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
@@ -340,10 +479,20 @@ function createFrontendBuildPlan(frontendDir: string): FrontendBuildPlan {
   return { configPath, entryNames: entryNames.length ? entryNames : defaultEntries };
 }
 
+function cleanFrontendBuildOutput(staticDir: string, buildPlan: FrontendBuildPlan): void {
+  const generatedDirs = ['assets', ...buildPlan.entryNames];
+  for (const dirName of generatedDirs) {
+    const targetDir = path.join(staticDir, dirName);
+    if (!fs.existsSync(targetDir)) continue;
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    console.log(`[Deploy] 已清理前端历史产物: ${targetDir}`);
+  }
+}
+
 /**
  * 构建项目前端，产物由 Vite 写入 backend/src/main/resources/static。
  */
-async function buildFrontendAssets(type: ProjectType): Promise<void> {
+async function buildFrontendAssets(type: ProjectType, encrypted = false): Promise<void> {
   const frontendDir = getFrontendDir(type);
   const backendDir = getBackendDir(type);
   const staticDir = path.join(backendDir, 'src', 'main', 'resources', 'static');
@@ -360,12 +509,35 @@ async function buildFrontendAssets(type: ProjectType): Promise<void> {
 
   console.log(`[Deploy] 构建前端静态资源 (${type})...`);
   const buildPlan = createFrontendBuildPlan(frontendDir);
+  const securityConstantPath = path.join(frontendDir, 'src', 'api', 'axios', 'security', 'constant.js');
+  let originalSecurityConstant: string | null = null;
+  if (type === 'agent') {
+    if (!fs.existsSync(securityConstantPath)) {
+      throw new Error(`Agent 前端加密配置文件不存在: ${securityConstantPath}`);
+    }
+    originalSecurityConstant = fs.readFileSync(securityConstantPath, 'utf-8');
+    const isProdPattern = /(export\s+const\s+isProd\s*=\s*)(true|false)(\s*;?)/;
+    if (!isProdPattern.test(originalSecurityConstant)) {
+      throw new Error(`Agent 前端加密配置中未找到 isProd 布尔常量: ${securityConstantPath}`);
+    }
+    const buildSecurityConstant = originalSecurityConstant.replace(
+      isProdPattern,
+      (_match, prefix: string, _currentValue: string, suffix: string) =>
+        `${prefix}${encrypted ? 'true' : 'false'}${suffix}`,
+    );
+    fs.writeFileSync(securityConstantPath, buildSecurityConstant, 'utf-8');
+    console.log(`[Deploy] 前端接口加密: isProd=${encrypted}`);
+  }
   try {
+    cleanFrontendBuildOutput(staticDir, buildPlan);
     const args = buildPlan.configPath
       ? ['run', 'build-only', '--', '--config', buildPlan.configPath]
       : ['run', 'build-only'];
     await runCommand(findNpmCommand(), args, frontendDir, '前端构建', 50 * 1024 * 1024);
   } finally {
+    if (originalSecurityConstant !== null) {
+      fs.writeFileSync(securityConstantPath, originalSecurityConstant, 'utf-8');
+    }
     if (buildPlan.configPath && fs.existsSync(buildPlan.configPath)) {
       fs.unlinkSync(buildPlan.configPath);
     }
@@ -436,7 +608,8 @@ function cleanupStaleClasses(type: ProjectType): void {
 function cleanupWarEntries(zip: AdmZip): void {
   const backendDir = getBackendDir('agent');
   const sourceRoot = path.join(backendDir, 'src', 'main', 'java');
-  const classPrefix = 'WEB-INF/classes/cn/topspeeder/ai/agent/';
+  // 覆盖整个 ai 包树，兼容类从 cn.topspeeder.ai.* 迁入/迁出 agent 子包的场景。
+  const classPrefix = 'WEB-INF/classes/cn/topspeeder/ai/';
 
   for (const entry of zip.getEntries()) {
     const entryName = entry.entryName;
@@ -475,7 +648,10 @@ function hasSourceForClass(classPath: string, classRoot: string, sourceRoot: str
 
 function hasSourceForWarEntry(entryName: string, classPrefix: string, sourceRoot: string): boolean {
   const relativeClassPath = entryName.slice(classPrefix.length).replace(/\//g, path.sep);
-  return fs.existsSync(sourcePathForClass(relativeClassPath, sourceRoot));
+  const withoutExt = relativeClassPath.replace(/\.class$/, '');
+  const outerClass = withoutExt.replace(/\$.*$/, '');
+  const sourcePath = path.join(sourceRoot, 'cn', 'topspeeder', 'ai', `${outerClass}.java`);
+  return fs.existsSync(sourcePath);
 }
 
 /**
@@ -483,16 +659,21 @@ function hasSourceForWarEntry(entryName: string, classPrefix: string, sourceRoot
  * agent：替换 WAR 内配置文件；knowledge-center：仅构建 WAR（配置走外挂）。
  * 1. 前端构建 + Maven clean 构建
  * 2. 注入学校专属配置（仅 agent）
- * 3. 输出到 data/deploy/{schoolCode}-{projectCode}.war
+ * 3. 输出到 data/deploy/{projectName}.war
  */
-export async function buildProjectWar(code: string, projectCode: string): Promise<string> {
+export async function buildProjectWar(
+  code: string,
+  projectCode: string,
+  params: Pick<DeployScriptParams, 'encrypted'> = {},
+): Promise<string> {
   const school = getSchool(code);
   if (!school) throw new Error(`School not found: ${code}`);
   const project = school.projects.find((p) => p.code === projectCode);
   if (!project) throw new Error(`Project not found: ${code}/${projectCode}`);
 
   // 1. 每次部署都先构建前端，再执行 Maven clean 构建，确保 WAR 内前后端都是最新。
-  await buildFrontendAssets(project.type);
+  const encrypted = project.type === 'agent' && params.encrypted === true;
+  await buildFrontendAssets(project.type, encrypted);
   console.log(`[Deploy] 执行 Maven clean 构建 (${project.type})...`);
   cleanupStaleClasses(project.type);
   await mvnPackage(project.type);
@@ -507,7 +688,14 @@ export async function buildProjectWar(code: string, projectCode: string): Promis
   if (project.type === 'agent') {
     // agent：生成配置并替换 WAR 内文件
     cleanupWarEntries(zip);
-    const configs = previewProjectConfigs(school, project);
+    const deployProject: Project = {
+      ...project,
+      security: {
+        ...project.security,
+        mode: encrypted ? 'prod' : 'dev',
+      },
+    };
+    const configs = previewProjectConfigs(school, deployProject);
     const warPathMap: Record<string, string> = {
       'application.yml': 'WEB-INF/classes/application.yml',
       'application-mysql.yml': 'WEB-INF/classes/config/application-mysql.yml',
@@ -534,10 +722,55 @@ export async function buildProjectWar(code: string, projectCode: string): Promis
 
   // 2. 输出
   const outputDir = getOutputDir();
-  const outputPath = path.join(outputDir, `${code}-${projectCode}.war`);
+  const outputPath = path.join(outputDir, getProjectWarFileName(project));
   zip.writeZip(outputPath);
 
   return outputPath;
+}
+
+/**
+ * 仅生成 WAR 的轻量部署包：WAR + 一键应用服务器脚本。
+ * 适合已有数据库/OneApi/运行时环境，只做 Tomcat 自动更新。
+ */
+export async function buildProjectWarDeployPackage(
+  code: string,
+  projectCode: string,
+  params: DeployScriptParams = {},
+): Promise<string> {
+  const school = getSchool(code);
+  if (!school) throw new Error(`School not found: ${code}`);
+  const project = school.projects.find((p) => p.code === projectCode);
+  if (!project) throw new Error(`Project not found: ${code}/${projectCode}`);
+
+  const warPath = await buildProjectWar(code, projectCode, params);
+  const warFileName = path.basename(warPath);
+  const finalParams = { ...createStandardUpdateParams(project), ...params };
+  const scripts = generateDeployScripts(school, project, finalParams, warFileName);
+  const appScriptName = pickAppDeployScriptName(project, scripts);
+
+  const outputDir = getOutputDir();
+  const zipPath = path.join(outputDir, `${getProjectDeployName(project)}-war-deploy.zip`);
+  const zip = new AdmZip();
+
+  zip.addLocalFile(warPath, '', warFileName);
+  addCommonDeployAssets(zip, project, finalParams);
+  if (project.type === 'agent') {
+    addAgentDeployAssets(zip, finalParams);
+  }
+  if (scripts[appScriptName]) {
+    zip.addFile(appScriptName, Buffer.from(scripts[appScriptName], 'utf-8'));
+  }
+  if (scripts['deploy.sh']) {
+    zip.addFile('deploy.sh', Buffer.from(scripts['deploy.sh'], 'utf-8'));
+  }
+
+  for (const fileName of [appScriptName, 'deploy.sh']) {
+    const entry = zip.getEntry(fileName);
+    if (entry) entry.attr = 0o755;
+  }
+
+  zip.writeZip(zipPath);
+  return zipPath;
 }
 
 /**
@@ -549,6 +782,17 @@ export async function buildSchoolWar(code: string): Promise<string> {
   const agent = school.projects.find((p) => p.type === 'agent') || school.projects[0];
   if (!agent) throw new Error(`School ${code} 没有可部署的项目`);
   return buildProjectWar(code, agent.code);
+}
+
+export async function buildSchoolWarDeployPackage(
+  code: string,
+  params: DeployScriptParams = {},
+): Promise<string> {
+  const school = getSchool(code);
+  if (!school) throw new Error(`School not found: ${code}`);
+  const agent = school.projects.find((p) => p.type === 'agent') || school.projects[0];
+  if (!agent) throw new Error(`School ${code} 没有可部署的项目`);
+  return buildProjectWarDeployPackage(code, agent.code, params);
 }
 
 /**
@@ -565,7 +809,7 @@ export async function buildProjectDeployPackage(
   if (!project) throw new Error(`Project not found: ${code}/${projectCode}`);
 
   // 1. 生成 WAR
-  const warPath = await buildProjectWar(code, projectCode);
+  const warPath = await buildProjectWar(code, projectCode, params);
   const warFileName = path.basename(warPath);
 
   // 2. 生成分阶段部署脚本（按 project.type 分发）
@@ -573,23 +817,15 @@ export async function buildProjectDeployPackage(
 
   // 3. 打包成 ZIP
   const outputDir = getOutputDir();
-  const zipPath = path.join(outputDir, `${code}-${projectCode}-deploy.zip`);
+  const zipPath = path.join(outputDir, `${getProjectDeployName(project)}-deploy.zip`);
   const zip = new AdmZip();
 
   zip.addLocalFile(warPath, '', warFileName);
+  addCommonDeployAssets(zip, project, params);
 
   // 项目专属资源
   if (project.type === 'agent') {
-    const toolScriptZip = getToolScriptZipPath();
-    if (toolScriptZip) {
-      zip.addLocalFile(toolScriptZip, '', 'tool-script.zip');
-    }
-    for (const assetName of ['oneapi.tar', 'cache.zip']) {
-      const assetPath = getDeployAssetPath(assetName);
-      if (assetPath) {
-        zip.addLocalFile(assetPath, '', assetName);
-      }
-    }
+    addAgentDeployAssets(zip, params);
   } else if (project.type === 'knowledge-center') {
     // kc：外挂配置文件（覆盖后）+ Dockerfile
     const configs = previewProjectConfigs(school, project);

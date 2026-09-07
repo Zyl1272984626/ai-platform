@@ -54,6 +54,8 @@ export interface CommonConfig {
   serverOs?: 'linux' | 'windows';
   /** @deprecated use deployConfig.windowsDrive */
   windowsDrive?: string;
+  /** @deprecated use deployConfig.linuxDistro */
+  linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other';
   amapKey?: string;
   druidUser?: string;
   druidPassword?: string;
@@ -62,6 +64,7 @@ export interface CommonConfig {
 export interface DeployConfig {
   serverOs?: 'linux' | 'windows';
   windowsDrive?: string;
+  linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other';
   dbRootPassword?: string;
   mysqlContainer?: string;
   oneapiHost?: string;
@@ -141,12 +144,18 @@ export interface Project {
     user: string;
     serverOs: 'linux' | 'windows';
     windowsDrive?: string;
+    /** Linux 发行版（用于部署脚本生成 Docker/Compose 前置提示） */
+    linuxDistro?: 'openeuler' | 'ubuntu' | 'rocky' | 'centos' | 'other';
     /** MySQL root 密码（建库用） */
     dbRootPassword?: string;
     /** Docker MySQL 容器名（可选，不填用宿主机 mysql 命令） */
     mysqlContainer?: string;
     /** 应用端口（agent 9998 / kc 9999） */
     appPort: number;
+    /** Tomcat 根目录（可选；填写后部署脚本可自动替换项目 WAR 并启停 Tomcat） */
+    tomcatRoot?: string;
+    /** Tomcat 项目名；agent 默认 agent，knowledge-center 默认 knowledge-center */
+    tomcatContext?: string;
   };
 
   /** 数据库配置 */
@@ -220,6 +229,7 @@ function legacySchoolToAgentProject(raw: any): Project {
   const common = raw.common || {};
   const serverOs = deployCfg.serverOs || common.serverOs || 'linux';
   const windowsDrive = deployCfg.windowsDrive || common.windowsDrive || 'D:';
+  const linuxDistro = deployCfg.linuxDistro || common.linuxDistro || 'openeuler';
   const deploy = raw.deploy || { host: '', user: 'root' };
 
   return {
@@ -233,9 +243,12 @@ function legacySchoolToAgentProject(raw: any): Project {
       user: deploy.user || 'root',
       serverOs: serverOs === 'windows' ? 'windows' : 'linux',
       windowsDrive,
+      linuxDistro,
       dbRootPassword: deployCfg.dbRootPassword,
       mysqlContainer: deployCfg.mysqlContainer,
       appPort: raw.port ?? 9998,
+      tomcatRoot: deployCfg.tomcatRoot,
+      tomcatContext: deployCfg.tomcatContext || 'agent',
     },
     dbType: raw.type === 'dameng' ? 'dameng' : 'mysql',
     dbHost: raw.dbHost || '',
@@ -271,7 +284,7 @@ function normalizeSchool(raw: any): School {
       name: raw.name,
       status: raw.status || 'pending',
       lastDeploy: raw.lastDeploy ?? null,
-      projects: raw.projects,
+      projects: raw.projects.map(normalizeProject),
     };
   }
 
@@ -283,6 +296,18 @@ function normalizeSchool(raw: any): School {
     status: raw.status || 'pending',
     lastDeploy: raw.lastDeploy ?? null,
     projects: [project],
+  };
+}
+
+function normalizeProject(raw: Project): Project {
+  const defaultTomcatContext = raw.type === 'knowledge-center' ? 'knowledge-center' : 'agent';
+  return {
+    ...raw,
+    deploy: {
+      ...raw.deploy,
+      linuxDistro: raw.deploy?.linuxDistro || (raw.deploy?.serverOs === 'linux' ? 'openeuler' : undefined),
+      tomcatContext: raw.deploy?.tomcatContext || defaultTomcatContext,
+    },
   };
 }
 

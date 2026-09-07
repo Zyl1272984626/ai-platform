@@ -17,10 +17,24 @@
           <input v-model.number="model.deploy.appPort" type="number" placeholder="9999" />
         </div>
         <div class="form-group">
+          <label>项目名</label>
+          <input v-model="model.deploy.tomcatContext" placeholder="默认 knowledge-center" />
+        </div>
+        <div class="form-group">
           <label>应用服务器系统</label>
           <select v-model="model.deploy.serverOs">
             <option value="linux">Linux</option>
             <option value="windows">Windows</option>
+          </select>
+        </div>
+        <div class="form-group" v-if="model.deploy.serverOs === 'linux'">
+          <label>Linux 发行版</label>
+          <select v-model="model.deploy.linuxDistro">
+            <option value="openeuler">openEuler 22.03</option>
+            <option value="ubuntu">Ubuntu / Debian</option>
+            <option value="rocky">Rocky / RHEL</option>
+            <option value="centos">CentOS</option>
+            <option value="other">其他 Linux</option>
           </select>
         </div>
         <div class="form-group" v-if="model.deploy.serverOs === 'windows'">
@@ -259,6 +273,10 @@ import PasswordInput from '../common/PasswordInput.vue'
 import type { Project } from '../../api/types'
 
 const props = defineProps<{ model: Project }>()
+props.model.deploy.tomcatContext ||= 'knowledge-center'
+if (props.model.deploy.serverOs === 'linux') {
+  props.model.deploy.linuxDistro ||= 'openeuler'
+}
 
 // 确保 model.knowledgeCenter 及其子对象存在，避免 v-model 报错
 const kc = props.model.knowledgeCenter || (props.model.knowledgeCenter = {})
